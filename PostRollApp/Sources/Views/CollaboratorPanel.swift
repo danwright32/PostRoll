@@ -177,9 +177,11 @@ struct AccountNumbersSheet: View {
             ProfileHandleText(handle: handle,
                               font: .system(size: 16, weight: .semibold))
 
+            // The requirement BEFORE the fields, not after the save (#977).
+            // Drawn from the record rather than spelled here, so this sentence
+            // and the label a row shows cannot come to disagree about the rule.
             Text("Open their profile and read these off a few recent posts. "
-                 + "Leave a field empty if you do not know it: empty means not counted, "
-                 + "which is different from zero.")
+                 + AccountStats.numbersFormRequirement)
                 .font(.system(size: 11))
                 .foregroundStyle(PaintedSurfaces.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)

@@ -174,4 +174,128 @@ final class AccountFreshnessTests: XCTestCase {
         XCTAssertNil(AccountStats.mixNote(before: before,
                                           after: stats(likes: 300, reels: 10, feed: 0)))
     }
+
+    // MARK: - Followers only is its own state (#977)
+
+    /// Dan entered 12,700 followers for an account, left likes and comments
+    /// empty, and saved. The row still read "Not counted yet", and so did the
+    /// foot of the dialog with 12,700 sitting in the field above it.
+    ///
+    /// The number saved. The rule that a follower count alone cannot produce an
+    /// engagement rate is correct and is not what changes. What was wrong is
+    /// that one label served two states with different remedies: nobody has
+    /// ever opened this account, and this one needs one more figure. Reporting
+    /// that nothing was entered immediately after something was is the state
+    /// most likely to make somebody enter it again.
+
+    private var followersOnly: AccountStats {
+        AccountStats(followers: 12_700, recordedOn: Date(timeIntervalSince1970: 1_775_000_000),
+                     followersSource: .typed)
+    }
+
+    func testAnAccountNobodyHasOpenedIsCountedNever() {
+        XCTAssertEqual(AccountStats().countedness, .neverCounted)
+    }
+
+    func testAFollowerCountAloneIsItsOwnState() {
+        XCTAssertEqual(followersOnly.countedness, .followersOnly)
+    }
+
+    func testEnoughToRankIsCounted() {
+        XCTAssertEqual(AccountStats(followers: 1_000, likes: 50, comments: 5,
+                                    recordedOn: Date()).countedness, .counted)
+    }
+
+    func testTheThreeStatesDoNotShareALabel() {
+        // The defect itself. Two of these were the same string, so the surface
+        // reported that nothing was entered immediately after something was.
+        let now = Date(timeIntervalSince1970: 1_775_000_000)
+        let labels = [
+            AccountStats().freshnessLabel(asOf: now),
+            followersOnly.freshnessLabel(asOf: now),
+            AccountStats(followers: 1_000, likes: 50, comments: 5,
+                         recordedOn: now).freshnessLabel(asOf: now),
+        ]
+
+        XCTAssertEqual(Set(labels).count, 3, "two states share a label: \(labels)")
+    }
+
+    func testTheFollowersOnlyLabelNamesWhatIsMissing() {
+        // A label saying only that something is wrong leaves the person to
+        // guess which of three fields to go back for (L111).
+        let label = followersOnly.freshnessLabel(asOf: Date(timeIntervalSince1970: 1_775_000_000))
+
+        XCTAssertTrue(label.lowercased().contains("likes"), label)
+        XCTAssertTrue(label.lowercased().contains("comments"), label)
+        XCTAssertFalse(label.lowercased().contains("not counted yet"),
+                       "a record holding a follower count and a date still reports "
+                       + "that nothing was entered: \(label)")
+    }
+
+    func testAnAccountScoredOnAnAssumptionIsNotCalledFollowersOnly() {
+        // The positive control (L159). An account Meta refused also has a
+        // follower count and no engagement figures, and it IS ranked, so
+        // telling it to add likes would name a remedy that changes nothing.
+        let refused = AccountStats(followers: 944, recordedOn: Date(),
+                                   followersSource: .measured, outcome: .notProfessional)
+
+        XCTAssertNotEqual(refused.countedness, .followersOnly)
+    }
+
+    func testAnAccountWithHiddenLikesIsNotCalledFollowersOnlyEither() {
+        // Deliberately with NO comment figure either. An account that hid its
+        // likes and did report comments is already counted a branch earlier,
+        // through `hasEngagementData`, so a fixture carrying comments does not
+        // reach the rule this is about and passed with that rule removed: the
+        // mutation sweep reported SURVIVED (L159, L165).
+        //
+        // It is the narrow case, and it is the one that would otherwise be
+        // told to add likes the account is refusing to show.
+        let hidden = AccountStats(followers: 5_244, likes: nil, comments: nil,
+                                  recordedOn: Date(), followersSource: .measured,
+                                  likesSource: .hidden, outcome: .measured)
+
+        XCTAssertNotEqual(hidden.countedness, .followersOnly)
+        XCTAssertEqual(hidden.countedness, .counted)
+    }
+
+    func testAnAccountWithHiddenLikesAndRealCommentsIsCountedToo() {
+        // The commoner shape, and the positive control for the narrow one
+        // above: both of the real accounts that withhold likes do report
+        // comments.
+        let hidden = AccountStats(followers: 5_244, comments: 8, recordedOn: Date(),
+                                  followersSource: .measured, likesSource: .hidden,
+                                  outcome: .measured)
+
+        XCTAssertEqual(hidden.countedness, .counted)
+    }
+
+    func testTheDialogSaysTheRequirementBeforeTheFieldsRatherThanAfterTheSave() {
+        // The copy described three independent optional fields. That is true of
+        // each field alone and says nothing about the requirement binding them,
+        // so somebody who knows a follower count fills in the one field they
+        // have and gets nothing, with no statement anywhere that the entry was
+        // insufficient.
+        let copy = AccountStats.numbersFormRequirement
+
+        XCTAssertTrue(copy.lowercased().contains("likes")
+                      || copy.lowercased().contains("comments"), copy)
+        XCTAssertTrue(copy.lowercased().contains("rank"), copy)
+    }
+
+    func testTheDialogDrawsThatSentenceRatherThanSpellingIt() {
+        // Naming it where a check can read it proves nothing on its own: typed
+        // back into the view it would leave the constant correct, unread and
+        // passing (L3, L46).
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Views/CollaboratorPanel.swift")
+        let code = SwiftSourceText.withoutComments(
+            try! String(contentsOf: url, encoding: .utf8))
+
+        XCTAssertTrue(code.contains("AccountStats.numbersFormRequirement"),
+                      "the numbers dialog does not draw the requirement at all, so "
+                      + "nothing on it says a follower count alone will not rank")
+    }
 }

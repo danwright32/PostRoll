@@ -1,0 +1,8 @@
+{
+  "name": "followers-only-is-not-never-counted",
+  "file": "PostRollApp/Sources/Services/AccountBook.swift",
+  "find": "        case .followersOnly: return \"Followers only, add likes or comments to rank\"",
+  "replace": "        case .followersOnly: return \"Not counted yet\"",
+  "test": "PostRollTests/AccountFreshnessTests/testTheThreeStatesDoNotShareALabel",
+  "breaks": "a record holding a follower count and a date reports that nothing was entered, immediately after somebody entered something, which is the state most likely to make them enter it again (#977, L11)"
+}

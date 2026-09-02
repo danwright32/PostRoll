@@ -665,7 +665,16 @@ enum CollaboratorPick {
         } else {
             // Never a zero: an unmeasured account said to have 0% engagement is
             // a claim the app has no basis for.
-            parts.append("Not counted yet")
+            //
+            // Which of the two unranked states this is, though (#977). "Not
+            // counted yet" meant both "nobody has opened this" and "this has a
+            // follower count and needs one more figure", and those need
+            // different things done to them. The label comes from the record
+            // rather than being spelled again here, so the suggestion line and
+            // the panel row cannot describe one account differently.
+            parts.append(stats?.countedness == .followersOnly
+                         ? stats?.freshnessLabel(asOf: now) ?? "Not counted yet"
+                         : "Not counted yet")
         }
         if appliesFirstPhoto {
             parts.append(inFirstPhoto ? "in the first photo" : "not in the first photo")

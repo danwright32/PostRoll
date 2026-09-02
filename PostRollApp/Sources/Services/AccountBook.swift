@@ -307,12 +307,73 @@ extension AccountStats {
         return daysOld > Self.staleAfterDays ? .stale(daysOld: daysOld) : .fresh
     }
 
+    // MARK: - How far counted (#977)
+
+    /// What is known about this account, in the three states that differ.
+    ///
+    /// Rankability has three answers and only two were represented. Dan entered
+    /// a follower count for an account, left the other two fields empty and
+    /// saved; the row still read "Not counted yet", and so did the foot of the
+    /// dialog with the number sitting in the field above it.
+    ///
+    /// The rule that a follower count alone cannot produce an engagement rate
+    /// is correct and does not change. What changes is that "nobody has ever
+    /// opened this" and "this needs one more figure" are different facts with
+    /// different remedies, and reporting that nothing was entered immediately
+    /// after something was is the state most likely to make somebody enter it
+    /// again.
+    enum Countedness: Equatable {
+        /// Nothing at all, or nothing that could be ranked or assumed from.
+        case neverCounted
+        /// A follower count and no engagement figures, and no reason to assume
+        /// any. One more figure away from ranking.
+        case followersOnly
+        /// Enough to rank, whether measured or assumed.
+        case counted
+    }
+
+    var countedness: Countedness {
+        if hasEngagementData { return .counted }
+        // An account Meta refused, or one that withheld its like count, is
+        // scored on an assumption and IS ranked (#1005, #1032). Telling those
+        // to add likes would name a remedy that changes nothing.
+        if likesAreHidden { return .counted }
+        if outcome == .notProfessional || outcome == .noSuchAccount {
+            return followers ?? 0 > 0 ? .counted : .neverCounted
+        }
+        if let followers, followers > 0 { return .followersOnly }
+        return .neverCounted
+    }
+
+    /// The requirement the numbers form has to state BEFORE the fields.
+    ///
+    /// The old copy described three independent optional fields. That is true
+    /// of each field alone and says nothing about the requirement binding
+    /// them, so somebody who knows a follower count fills in the one field
+    /// they have, saves, and gets nothing, with no statement anywhere that the
+    /// entry was insufficient.
+    ///
+    /// Held here rather than in the view so the sentence the form shows and the
+    /// label the row shows cannot come to disagree about the same rule.
+    static let numbersFormRequirement =
+        "Followers alone cannot rank an account: the ranking needs likes or "
+        + "comments too. Leave a field empty if you do not know it, which "
+        + "stores as not counted rather than as zero."
+
     /// What to show beside the numbers, wherever they are shown.
     ///
     /// Never a blank: a gap where a figure goes reads as a number that failed
     /// to load rather than one nobody has entered.
     func freshnessLabel(asOf now: Date) -> String {
-        guard let recordedOn, hasEngagementData else { return "Not counted yet" }
+        // Three answers, not two (#977). A record holding a follower count and
+        // a date is not one nobody has opened, and it needs a different thing
+        // done to it.
+        switch countedness {
+        case .neverCounted:  return "Not counted yet"
+        case .followersOnly: return "Followers only, add likes or comments to rank"
+        case .counted:       break
+        }
+        guard let recordedOn else { return "Not counted yet" }
         let stamp = Self.stampFormatter.string(from: recordedOn)
         switch freshness(asOf: now) {
         case .stale(let daysOld):

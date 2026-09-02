@@ -783,6 +783,39 @@ final class CollaboratorPickTests: XCTestCase {
         XCTAssertTrue(reason.lowercased().contains("not counted"), reason)
     }
 
+    func testAFollowersOnlyAccountSaysWhatIsMissingInTheSuggestionLine() {
+        // The other half of #977. The row on the panel and the line in
+        // CAPTIONS.txt both described this account as never counted, so the
+        // surface reported that nothing was entered immediately after Dan
+        // entered something.
+        let table = ["followersonly": AccountStats(followers: 12_700, recordedOn: now,
+                                                   followersSource: .typed),
+                     "b": stats(1_000, 50, 5)]
+        let result = CollaboratorPick.suggest(
+            handles: ["followersonly", "b", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        let reason = result.unranked.first(where: { $0.handle == "followersonly" })?.reason ?? ""
+        XCTAssertTrue(reason.lowercased().contains("likes"), reason)
+        XCTAssertFalse(reason.lowercased().contains("not counted yet"),
+                       "the suggestion line still says nothing was entered: \(reason)")
+
+        XCTAssertTrue(CollaboratorPick.captionBlock(result).lowercased().contains("likes"),
+                      "CAPTIONS.txt does not say what this account is missing")
+    }
+
+    func testAnAccountNobodyOpenedStillSaysNotCountedYetInTheSuggestionLine() {
+        // The positive control (L159). A reason line that named the missing
+        // figures for every unranked account would satisfy the assertion above
+        // and would be wrong here: nothing at all has been entered.
+        let result = CollaboratorPick.suggest(
+            handles: ["a", "b", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup([:]), asOf: now)
+
+        let reason = result.unranked.first?.reason ?? ""
+        XCTAssertTrue(reason.lowercased().contains("not counted yet"), reason)
+    }
+
     func testAnUnrankedFirstPhotoAccountStillSaysItIsInTheFirstPhoto() {
         // The two facts are independent: not knowing the numbers does not make
         // the strongest reason to invite them go away.
