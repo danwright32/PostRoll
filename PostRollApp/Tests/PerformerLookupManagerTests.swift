@@ -267,8 +267,9 @@ final class PerformerLookupManagerTests: XCTestCase {
         let event = event(performers: [Performer(name: "Jenna Robison")])
         let state = state([event])
         let manager = PerformerLookupManager()
+        let gate = Gate()
         manager.fetchFromWeb = { _ in
-            try await Task.sleep(for: .milliseconds(300))
+            await gate.held()
             return []
         }
 
@@ -283,7 +284,8 @@ final class PerformerLookupManagerTests: XCTestCase {
                       "the reason has to name the lookup that is actually running, "
                       + "or it cannot be acted on: \(reason)")
 
-        await settle()
+        gate.open()
+        await until("the web fetch finished") { !manager.hasWorkInFlight }
         XCTAssertNil(manager.blockedReason(for: event.id),
                      "the run finished, so the reason must go with it")
     }
@@ -295,8 +297,9 @@ final class PerformerLookupManagerTests: XCTestCase {
         let event = event(performers: [Performer(name: "Jenna Robison")])
         let state = state([event])
         let manager = PerformerLookupManager()
+        let gate = Gate()
         manager.lookUpHandles = { _, _, _, _ in
-            try await Task.sleep(for: .milliseconds(300))
+            await gate.held()
             return []
         }
 
@@ -306,7 +309,8 @@ final class PerformerLookupManagerTests: XCTestCase {
         let reason = try XCTUnwrap(manager.blockedReason(for: event.id))
         XCTAssertTrue(reason.contains("looking up handles"), reason)
 
-        await settle()
+        gate.open()
+        await until("the handle lookup finished") { !manager.hasWorkInFlight }
     }
 
     func testTheButtonsAreUnavailableWithTheirReasonRatherThanSilent() {
@@ -422,5 +426,54 @@ final class PerformerLookupManagerTests: XCTestCase {
         private var count = 0
         func bump() { lock.withLock { count += 1 } }
         var value: Int { lock.withLock { count } }
+    }
+
+    /// Holds an injected call open until the test lets it go (L290).
+    ///
+    /// The alternative, and what the older tests in this file do, is to sleep
+    /// inside the seam for longer than the assertions take. That asserts about
+    /// the machine's load rather than about the code, and it is slowest
+    /// precisely when the machine is busiest, which is when it is judged.
+    /// A run is in flight from the moment `begin` is called, synchronously,
+    /// so nothing has to be waited for at all to observe one.
+    private final class Gate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var waiting: CheckedContinuation<Void, Never>?
+        private var opened = false
+
+        func held() async {
+            await withCheckedContinuation { continuation in
+                lock.lock()
+                if opened {
+                    lock.unlock()
+                    continuation.resume()
+                } else {
+                    waiting = continuation
+                    lock.unlock()
+                }
+            }
+        }
+
+        func open() {
+            lock.lock()
+            opened = true
+            let continuation = waiting
+            waiting = nil
+            lock.unlock()
+            continuation?.resume()
+        }
+    }
+
+    /// Wait for a condition rather than for a duration.
+    ///
+    /// Fails at the bound rather than returning, because a wait that gives up
+    /// quietly reports a condition that never held as one that did (L98, L110).
+    private func until(_ description: String, _ condition: () -> Bool,
+                       file: StaticString = #filePath, line: UInt = #line) async {
+        for _ in 0..<10_000 {
+            if condition() { return }
+            await Task.yield()
+        }
+        XCTFail("never became true: \(description)", file: file, line: line)
     }
 }
