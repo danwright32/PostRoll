@@ -1,0 +1,8 @@
+{
+  "name": "a-successful-fetch-clears-the-failure-count",
+  "file": "PostRollApp/Sources/Services/AccountFetchDue.swift",
+  "find": "        guard let outcome, outcome.isWorthRetrying else { return 0 }",
+  "replace": "        guard let outcome, outcome.isWorthRetrying else { return attempts }",
+  "test": "PostRollTests/AccountFetchDueTests/testTheCountIsCarriedForwardByAFailureAndClearedBySuccess",
+  "breaks": "a good fetch leaves the failure count standing, so the next failure starts from an old number and the account is frozen out of the retry after fewer attempts than it should have (#1004)"
+}

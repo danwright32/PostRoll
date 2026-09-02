@@ -13,6 +13,27 @@ import Foundation
 /// subprocess.
 enum AccountFetchDue {
 
+    /// How many failures in a row before an account is left alone for a while.
+    ///
+    /// Three. Enough that a bad afternoon does not freeze an account out, few
+    /// enough that a handle which always fails costs three calls rather than
+    /// one per settle forever. The refusal is not permanent: it lifts once the
+    /// record is old, because whatever was wrong may have been fixed and an
+    /// account written off for good is the unrecoverable state the non terminal
+    /// outcomes exist to avoid (L248, L365).
+    static let maximumAttempts = 3
+
+    /// The attempt count after one fetch ends with this outcome.
+    ///
+    /// Cleared by anything that is not worth retrying, which includes success:
+    /// a count left standing after a good fetch means the next failure starts
+    /// from an old number and the account is frozen out early.
+    static func attemptsAfter(_ outcome: AccountStats.FetchOutcome?,
+                              wasAt attempts: Int) -> Int {
+        guard let outcome, outcome.isWorthRetrying else { return 0 }
+        return attempts + 1
+    }
+
     /// Every account an event could tag, from both places one can be stored.
     ///
     /// `CaptionBlocks.accountsTagged` answers what a POST tags, which is the
@@ -76,9 +97,16 @@ enum AccountFetchDue {
             // post mix, and whether Meta will answer for this account at all.
             return true
         case .some(let outcome) where outcome.isWorthRetrying:
-            // Bounded by the caller, which owns the attempt count. Nothing here
-            // can bound it: this answers about one account and holds no history.
-            return true
+            // Bounded. Every attempt against a metered API spends the thing
+            // that is running out, and a handle which always fails would ask
+            // on every settle forever (L365).
+            //
+            // The bound lifts once the record is old, so this is a pause and
+            // not a verdict: whatever was wrong may have been fixed, and an
+            // account frozen out for good on three bad afternoons is the same
+            // unrecoverable state the non terminal outcomes exist to avoid.
+            return stats.fetchAttempts < maximumAttempts
+                || isPastTheStaleLine(stats, asOf: now)
         case .some:
             // Terminal. A personal account does not become a professional one
             // because somebody tagged it again, and asking spends the allowance

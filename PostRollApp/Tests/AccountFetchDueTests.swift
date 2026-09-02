@@ -111,4 +111,65 @@ final class AccountFetchDueTests: XCTestCase {
         let table = ["a": measured(), "b": measured()]
         XCTAssertEqual(due(["a", "b"], table), [])
     }
+
+    // MARK: - The retry is bounded (#1004)
+
+    /// `COULD_NOT_CLASSIFY` and the transient failures are deliberately not
+    /// terminal, because writing an account off on an error nobody understood
+    /// has no way back. The cost is that a handle which always fails would be
+    /// asked about on every settle forever, against an API metered by the hour.
+    ///
+    /// The bound lives here because this is the only side that has a history:
+    /// the Python fetch answers about one account and remembers nothing.
+
+    private func failed(attempts: Int, daysAgo: Int = 0) -> AccountStats {
+        AccountStats(followers: 900,
+                     recordedOn: now.addingTimeInterval(-Double(daysAgo) * 86_400),
+                     outcome: .networkFailed, fetchAttempts: attempts)
+    }
+
+    func testAFailureIsRetriedWhileItIsUnderTheBound() {
+        XCTAssertTrue(AccountFetchDue.isDue(failed(attempts: 1), asOf: now))
+        XCTAssertTrue(AccountFetchDue.isDue(
+            failed(attempts: AccountFetchDue.maximumAttempts - 1), asOf: now))
+    }
+
+    func testAFailureStopsBeingRetriedAtTheBound() {
+        XCTAssertFalse(AccountFetchDue.isDue(
+            failed(attempts: AccountFetchDue.maximumAttempts), asOf: now),
+            "a handle that always fails is asked about on every settle forever, "
+            + "and every attempt spends the hourly allowance to be told the same "
+            + "thing")
+    }
+
+    func testTheBoundIsLiftedOnceTheRecordIsOld() {
+        // Not a permanent refusal. Whatever was wrong may have been fixed, and
+        // an account frozen out for good on three bad afternoons is the same
+        // unrecoverable state the non terminal outcomes exist to avoid.
+        XCTAssertTrue(AccountFetchDue.isDue(
+            failed(attempts: AccountFetchDue.maximumAttempts,
+                   daysAgo: AccountStats.staleAfterDays + 1), asOf: now))
+    }
+
+    func testATerminalOutcomeIgnoresTheAttemptCountEntirely() {
+        // The positive control (L159): the bound is about failures. A measured
+        // account has attempts on it too and must not be affected.
+        let measured = AccountStats(followers: 1_000, likes: 50, comments: 5,
+                                    recordedOn: now, outcome: .measured,
+                                    fetchAttempts: 99)
+
+        XCTAssertFalse(AccountFetchDue.isDue(measured, asOf: now))
+    }
+
+    func testTheCountIsCarriedForwardByAFailureAndClearedBySuccess() {
+        // The count has to move, or the bound is a field nothing increments and
+        // the retry is unbounded with a number beside it (L46).
+        var stats = AccountStats(outcome: .networkFailed, fetchAttempts: 2)
+        XCTAssertEqual(AccountFetchDue.attemptsAfter(stats.outcome, wasAt: 2), 3)
+
+        stats.outcome = .measured
+        XCTAssertEqual(AccountFetchDue.attemptsAfter(stats.outcome, wasAt: 2), 0,
+                       "a success left the failure count standing, so the next "
+                       + "failure starts from an old number")
+    }
 }
