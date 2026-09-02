@@ -372,6 +372,21 @@ final class ManifestContractTests: XCTestCase {
             "learn_suggestion")
     }
 
+    func testTheAccountNumbersManifestSendsEveryRequiredKey() throws {
+        try assertSends(
+            PythonBridge.buildAccountNumbersManifest(handles: ["someone", "another"]),
+            "account_numbers")
+    }
+
+    func testTheAccountNumbersManifestSendsTheKeyEvenWithNothingToAsk() throws {
+        // The key goes either way. Python reads `handles` unconditionally, so
+        // an omitted key is a crash on the other side rather than an empty run,
+        // and "nothing to ask about" is a state the manager already refuses
+        // before it gets here (#1004).
+        try assertSends(PythonBridge.buildAccountNumbersManifest(handles: []),
+                        "account_numbers")
+    }
+
     func testTheBrandVoiceIsSentEvenWhenEmpty() throws {
         // Python loads the file itself when the key is absent. Two copies of
         // the voice that can disagree is worse than one that is briefly blank,
@@ -390,6 +405,7 @@ final class ManifestContractTests: XCTestCase {
         "week", "week_day", "media", "media_day", "cover", "friday_override",
         "reel_preview", "swap_reel_audio", "caption_revision", "blog_revision",
         "blog_photo_swap", "analytics", "learn_suggestion",
+        "account_numbers",
     ]
 
     func testEveryManifestInTheContractHasAProofHere() throws {

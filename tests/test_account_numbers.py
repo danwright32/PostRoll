@@ -16,11 +16,14 @@ so the backoff is asserted as a schedule rather than lived through (L524).
 from __future__ import annotations
 
 import json
+from pathlib import Path
+
 import pytest
 
 from postroll.ai.account_numbers import (
     ATTEMPTS,
     Figures,
+    main as account_numbers_main,
     followers_in_description,
     Outcome,
     PageVerdict,
@@ -135,6 +138,20 @@ class Sleeps:
 
     def __call__(self, seconds):
         self.seconds.append(seconds)
+
+
+def run_command(manifest, output, answers, monkeypatch=None):
+    """Drive the module's own entry point with the fetch stubbed out.
+
+    Through `main` rather than around it, because the app runs `main` and a
+    test that assembled the same JSON itself would be checking its own copy of
+    the format (L52).
+    """
+    import os
+    os.environ["META_SYSTEM_USER_TOKEN"] = TOKEN
+    account_numbers_main(["--manifest", str(manifest), "--output", str(output)],
+                         fetch=lambda handle, **_: answers[handle])
+    return json.loads(Path(output).read_text())
 
 
 def run(handle, answers, **kwargs):
@@ -576,6 +593,78 @@ def test_an_error_page_that_also_names_the_handle_is_still_a_profile():
                     body=profile_page("wanted").body + '"PolarisErrorRoot"')
 
     assert classify_page(page, handle="wanted") is PageVerdict.FOUND
+
+
+# ── The command the app runs (#1004) ─────────────────────────────────────────
+
+def test_the_command_answers_about_every_handle_it_was_given(tmp_path):
+    # One record per handle, including the ones that failed. A command that
+    # dropped the failures would leave the app unable to tell an account it
+    # never asked about from one it asked about and could not reach, which is
+    # the whole point of having seven outcomes (L11).
+    manifest = tmp_path / "in.json"
+    output = tmp_path / "out.json"
+    manifest.write_text(json.dumps({"handles": ["natgeo", "aperson", "flaky"]}))
+
+    answers = {
+        "natgeo": Figures(handle="natgeo", outcome=Outcome.MEASURED, followers=10),
+        "aperson": Figures(handle="aperson", outcome=Outcome.NOT_PROFESSIONAL),
+        "flaky": Figures(handle="flaky", outcome=Outcome.NETWORK_FAILED),
+    }
+    written = run_command(manifest, output, answers)
+
+    assert [row["handle"] for row in written["accounts"]] == ["natgeo", "aperson", "flaky"]
+    assert [row["outcome"] for row in written["accounts"]] == [
+        "measured", "not_professional", "network_failed"]
+
+
+def test_the_command_refuses_without_a_token(tmp_path, monkeypatch):
+    # Named rather than run against an empty string, which Meta answers with a
+    # rejected token: that would report every account as a credential problem
+    # rather than as one nobody set up (L138).
+    monkeypatch.delenv("META_SYSTEM_USER_TOKEN", raising=False)
+    manifest = tmp_path / "in.json"
+    manifest.write_text(json.dumps({"handles": ["natgeo"]}))
+
+    code = account_numbers_main(
+        ["--manifest", str(manifest), "--output", str(tmp_path / "out.json")])
+
+    assert code != 0
+    assert not (tmp_path / "out.json").exists(), (
+        "a run that could not start wrote an output file, which the app would "
+        "read as a fetch that answered about nothing")
+
+
+def test_the_command_carries_the_provenance_the_app_stores(tmp_path):
+    # Everything #1003 added has to survive the trip, or the app merges a
+    # record with the fields it was given and nothing else.
+    manifest = tmp_path / "in.json"
+    manifest.write_text(json.dumps({"handles": ["natgeo"]}))
+    figures = Figures(handle="natgeo", outcome=Outcome.MEASURED, followers=1000,
+                      likes=50, comments=5, likes_hidden=False,
+                      instagram_id="17841400000000000", reels=4, feed=8)
+
+    written = run_command(manifest, tmp_path / "out.json", {"natgeo": figures})
+
+    row = written["accounts"][0]
+    assert row["instagram_id"] == "17841400000000000"
+    assert row["reels"] == 4 and row["feed"] == 8
+    assert row["likes_hidden"] is False
+    assert row["followers_from_page"] is False
+
+
+def test_a_withheld_like_count_survives_the_trip(tmp_path):
+    # The one field where absent and refused are different things, so the
+    # boolean has to travel beside the null rather than instead of it (#1032).
+    manifest = tmp_path / "in.json"
+    manifest.write_text(json.dumps({"handles": ["hidden"]}))
+    figures = Figures(handle="hidden", outcome=Outcome.MEASURED, followers=1000,
+                      likes=None, comments=8, likes_hidden=True)
+
+    written = run_command(manifest, tmp_path / "out.json", {"hidden": figures})
+
+    assert written["accounts"][0]["likes"] is None
+    assert written["accounts"][0]["likes_hidden"] is True
 
 
 # ── Which outcomes are done with ─────────────────────────────────────────────
