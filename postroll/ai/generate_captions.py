@@ -672,6 +672,38 @@ def _alt_text_instruction_for(post_type: str) -> str:
     return ALT_TEXT_INSTRUCTION.get(post_type, DEFAULT_ALT_TEXT_INSTRUCTION)
 
 
+def _rewritten_alt_detail(draft: object, produced: object) -> str:
+    """What a review pass did to the alt texts, said in the unit that matters.
+
+    A post with one alt text has one sentence worth quoting. A per photo post
+    has a list whose POSITION is its meaning, and there the useful facts are how
+    many entries moved and where the first one is: one rewritten entry and all
+    of them rewritten want different responses, and quoting entry 0 alone cannot
+    tell those apart (L11, #1214).
+    """
+    was = draft if isinstance(draft, list) else []
+    now = produced if isinstance(produced, list) else []
+
+    def quote(items: list, index: int) -> str:
+        return str(items[index])[:90] if index < len(items) else "(none)"
+
+    if len(was) <= 1 and len(now) <= 1:
+        return f"Shipped: {quote(was, 0)} | The pass wanted: {quote(now, 0)}"
+
+    moved = [i for i in range(max(len(was), len(now)))
+             if quote(was, i) != quote(now, i)]
+    parts = [f"{len(moved)} of {len(was)} alt texts differ"]
+    if len(was) != len(now):
+        # A length change is the shape that shifts every later entry onto a
+        # different photograph, so it is named rather than folded into the count.
+        parts.append(f"the pass returned {len(now)}")
+    if moved:
+        parts.append(f"first at photo {moved[0] + 1}. Shipped: "
+                     f"{quote(was, moved[0])} | The pass wanted: "
+                     f"{quote(now, moved[0])}")
+    return ". ".join(parts)
+
+
 def org_prompt_lines(org: str) -> tuple[str, str]:
     """What this prompt says about the organisation: the detail line, and the
     hashtag rule (#689).
@@ -926,32 +958,50 @@ def generate_caption(
     # per photo anyway, and say so rather than swallowing it (#1067).
     per_frame_findings: list[Finding] = []
 
-    # The draft's alt text put back, for the post types that take ONE alt text
-    # describing the whole post (#1067).
+    # The draft's alt text put back, whatever the post type (#1067, #1214).
+    #
+    # Both review prompts DO carry a rule about these lists: "for lists of
+    # strings (alt_texts, scene_labels), preserve count and order, clean each
+    # item in place" (`ai_tells.py`). So the passes are licensed to clean an
+    # alt text in place, and forbidden to reorder or recount them, and nothing
+    # enforced either half. A rule that lives only in a prompt is a hope (L27).
+    #
+    # This withdraws the licence rather than enforcing the prohibition, and
+    # that is a deliberate trade with a cost: an AI tell inside an alt text now
+    # survives the humanizer. It is worth paying, because the two cannot be
+    # told apart after the fact on a single entry list, which is exactly the
+    # reel case: condensing a reel level alt into one frame's description IS a
+    # clean in place by every measure available here. Correct and plainly
+    # written beats well written and about the wrong photograph, for a sentence
+    # that is the whole post to a screen reader user. `strip_em_dashes` still
+    # runs over alt_texts deterministically below.
+    #
+    # #1067 did this for the post types taking ONE post level alt, where the
+    # fault is a reel described as a single frame. #1214 is the rest of it: on a
+    # per photo post the list's POSITION is its meaning, so a pass that reorders
+    # the entries, drops one, or merges two shifts every alt text after that
+    # point onto the wrong photograph. That is #1008's failure by another route,
+    # and invisible for the same reason: each sentence is true of SOME
+    # photograph in the post, so a sighted read does not catch it.
     #
     # Reported as well as undone, because putting it back DESTROYS the only
     # evidence the pass ignored it: a pass that rewrote the alt and one that
     # reproduced it exactly leave an identical result behind (L340). This repo
-    # has already shipped that exact shape once, and it is cause three of this
-    # same issue.
+    # has already shipped that exact shape once, which is #1067's third cause.
     #
     # Restored even when the draft produced no alt text at all, so a pass can
     # never invent one: an alt text written by a stage that never saw the
     # photographs is the failure this is here to prevent, and a missing alt
     # reads as missing rather than as plausibly wrong.
-    if post_type in SINGLE_ALT_POST_TYPES:
-        produced = data.get("alt_texts")
-        if produced != draft_alt_texts:
-            shipped = draft_alt_texts[0] if draft_alt_texts else "(none)"
-            attempted = produced[0] if produced else "(none)"
-            per_frame_findings.append(Finding(
-                code="alt_text_rewritten_by_review",
-                message=("A review pass rewrote this post's alt text. The "
-                         "draft's own alt text is what shipped."),
-                detail=(f"Shipped: {str(shipped)[:90]} | "
-                        f"The pass wanted: {str(attempted)[:90]}"),
-            ))
-        data = dict(data, alt_texts=draft_alt_texts)
+    produced = data.get("alt_texts")
+    if produced != draft_alt_texts:
+        per_frame_findings.append(Finding(
+            code="alt_text_rewritten_by_review",
+            message=("A review pass rewrote this post's alt text. The "
+                     "draft's own alt text is what shipped."),
+            detail=_rewritten_alt_detail(draft_alt_texts, produced),
+        ))
+    data = dict(data, alt_texts=draft_alt_texts)
 
     alt_texts = data.get("alt_texts") or []
     scene_labels = data.get("scene_labels") or []
