@@ -91,3 +91,81 @@ def test_no_generator_keeps_its_own_shortest_fallback(module):
 
     assert '"-shortest"' not in source, (
         f"{module} still passes -shortest, so a short track can still cut its reel")
+
+
+# ── and the reel SAYS when the track had to be stretched (#1076) ─────────────
+#
+# Looping covers the reel, which is the right thing to do, but it was done in
+# silence: a reel whose music repeats read exactly like one whose track fits.
+# Dan noticed only because he happened to know a track's length, and his
+# response was to accept a reel he had just called too fast rather than loop the
+# music further, which is a decision he would have made earlier with the fact in
+# front of him.
+#
+# Only the scroll reel carries the fact out. It is the one with an `on_warning`
+# channel, because it is the one whose length Dan chooses in the editor; the
+# Tuesday reels are a fixed length with nothing to decide and nowhere to put a
+# warning, so they pass no hook rather than being left out by oversight.
+
+def _tone(path, seconds: float):
+    import subprocess
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+         "-i", f"sine=frequency=440:duration={seconds}", "-c:a", "aac", str(path)],
+        check=True)
+    return str(path)
+
+
+def test_the_scroll_reel_says_when_its_music_had_to_repeat(tmp_path, monkeypatch):
+    from PIL import Image
+
+    from postroll.media import generate_reel_scroll as scroll_mod
+
+    photos = []
+    for i in range(6):
+        p = tmp_path / f"p{i}.jpg"
+        Image.new("RGB", (1200, 800), (i * 30, 80, 160)).save(p)
+        photos.append(str(p))
+
+    # Deliberately shorter than the reel, which is what a real short upload is.
+    audio = _tone(tmp_path / "short.m4a", 2.0)
+
+    monkeypatch.setattr(scroll_mod, "FPS", 4)
+    said: list[str] = []
+    out = tmp_path / "reel.mp4"
+    scroll_mod.generate_reel_scroll(
+        photos, audio, str(out), event_name="Reference Event", org="Org",
+        venue="Hall", seed=163, scroll_duration=1.0, on_warning=said.append)
+
+    # The positive half: a render that failed before the audio step warns about
+    # nothing either, and would satisfy the assertion below (L98, L159).
+    assert out.exists() and out.stat().st_size > 0, "the render produced no reel"
+
+    looped = [m for m in said if "repeat" in m.lower()]
+    assert looped, f"the music was stretched and the run said {said}"
+
+
+def test_the_scroll_reel_says_nothing_when_the_track_covers_it(tmp_path, monkeypatch):
+    """The other half. A warning on the ordinary outcome is one nobody
+    reads, and this is the ordinary outcome: most tracks are minutes long."""
+    from PIL import Image
+
+    from postroll.media import generate_reel_scroll as scroll_mod
+
+    photos = []
+    for i in range(6):
+        p = tmp_path / f"p{i}.jpg"
+        Image.new("RGB", (1200, 800), (i * 30, 80, 160)).save(p)
+        photos.append(str(p))
+
+    audio = _tone(tmp_path / "long.m4a", 60.0)
+
+    monkeypatch.setattr(scroll_mod, "FPS", 4)
+    said: list[str] = []
+    out = tmp_path / "reel.mp4"
+    scroll_mod.generate_reel_scroll(
+        photos, audio, str(out), event_name="Reference Event", org="Org",
+        venue="Hall", seed=163, scroll_duration=1.0, on_warning=said.append)
+
+    assert out.exists() and out.stat().st_size > 0, "the render produced no reel"
+    assert [m for m in said if "repeat" in m.lower()] == [], said

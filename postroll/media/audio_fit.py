@@ -110,15 +110,29 @@ def fit_audio_to_duration(
     *,
     duration: float,
     crossfade: float = DEFAULT_CROSSFADE,
+    on_warning=None,
 ) -> str:
     """Render `src` to `out_path` (WAV) at exactly `duration` seconds.
 
     Loops with crossfaded seams when `src` is shorter than `duration`, otherwise
     trims. Returns `out_path`. Raises RuntimeError only if even the plain
     trim/pad fallback fails (i.e. the source is unreadable).
+
+    `on_warning` is called with one sentence when the track did not cover the
+    reel on its own (#1076). Looping was silent, so a reel whose music repeats
+    was indistinguishable from one whose track fits: Battery Dance Festival's
+    track is 53.3 seconds against a 56 second video, and Dan found out only
+    because he happened to know its length. Raised here rather than recomputed
+    by each caller, since this is the only place that knows which branch ran
+    (L107). Optional, because most callers have no warnings channel to put it
+    in, and a default of None keeps them working unchanged.
     """
     src, out_path = str(src), str(out_path)
     length = audio_duration(src)
+
+    def warn(message: str) -> None:
+        if on_warning is not None:
+            on_warning(message)
 
     if length is not None and length < duration:
         cross = min(crossfade, length / 2)
@@ -127,8 +141,19 @@ def fit_audio_to_duration(
         looped = _loop_command(src, out_path, copies=copies, graph=graph,
                                duration=duration)
         if _run(looped) and _usable(out_path):
+            warn(f"The music is {length:.0f} seconds long and this reel is "
+                 f"{duration:.0f}, so the track repeats to cover the rest.")
             return out_path
         # Fall through to trim/pad if the loop graph fails for any reason.
+        #
+        # Said separately, and it is the more important of the two: the
+        # fallback below pads with SILENCE rather than looping, so the reel
+        # ends in nothing at all. That is a worse outcome than a repeat and the
+        # one least likely to be noticed, so it must not be the case that says
+        # nothing (L11, L47).
+        warn(f"The music is {length:.0f} seconds long and this reel is "
+             f"{duration:.0f}, and looping it failed, so the last "
+             f"{duration - length:.0f} seconds are SILENCE.")
 
     # Long, equal, unprobeable, or loop fallback: trim to length and pad with
     # silence only if the source turns out shorter than expected.

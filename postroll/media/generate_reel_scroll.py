@@ -883,6 +883,11 @@ def generate_reel_scroll(
         try:
             audio_in = fit_audio_to_duration(
                 audio_path, str(tmpdir / "audio_fit.wav"), duration=total_duration,
+                # So a reel whose music repeats is not indistinguishable from
+                # one whose track fits (#1076). Raised where the branch is
+                # actually taken rather than recomputed from the two lengths
+                # here, which would be a second answer to the same question.
+                on_warning=on_warning,
             )
             audio_af = fade
         except Exception as e:

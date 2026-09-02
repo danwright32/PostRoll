@@ -1967,6 +1967,14 @@ private struct ThursdayReelSection: View {
 
     @State private var isExpanded = true
 
+    /// The chosen track's length, once it has been read off the file.
+    ///
+    /// Its own state here rather than a parameter from the parent, whose body
+    /// is already large, and nil until the read finishes: an unknown length is
+    /// not a short one, and `ScrollReelTiming.musicNotice` says nothing about
+    /// it rather than warning on every reel that has not picked its music yet.
+    @State private var trackSeconds: Double?
+
     var body: some View {
         VStack(spacing: 0) {
             Button(action: { isExpanded.toggle() }) {
@@ -2014,6 +2022,34 @@ private struct ThursdayReelSection: View {
                                 .foregroundStyle(PaintedSurfaces.bodyText)
                                 .frame(width: 32, alignment: .trailing)
                         }
+
+                        // Beside the control that changes it, and before any
+                        // render (#1076). Looping a short track is the right
+                        // thing to do and used to be done in silence, so a
+                        // reel whose music repeats read exactly like one whose
+                        // track fits. Dan found out only because he happened
+                        // to know a track's length.
+                        //
+                        // The reel is the slider value plus six seconds of
+                        // holds, which is why this asks ScrollReelTiming
+                        // rather than comparing against `scrollDuration`: a
+                        // track that covers the scroll and not the reel is the
+                        // one somebody is most likely to think is fine.
+                        if let notice = ScrollReelTiming.musicNotice(
+                            trackSeconds: trackSeconds, scrollSeconds: scrollDuration) {
+                            Text(notice)
+                                .font(.light(11))
+                                .foregroundStyle(PaintedSurfaces.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    // Re-read whenever the chosen file changes, and cleared
+                    // first, so a swapped track cannot leave the previous
+                    // one's length on screen while the new one is being read.
+                    .task(id: audio) {
+                        trackSeconds = nil
+                        guard let audio else { return }
+                        trackSeconds = await loadVideoDuration(url: audio)
                     }
 
                     // Layout seed

@@ -1,0 +1,26 @@
+{
+  "_comment": "Written by tools/record_scroll_reel_timing.py. The Thursday reel's timing, stated once for both languages: Python renders with these and the Swift editor answers 'is the music long enough' and 'is this comfortable to watch' from the same numbers, before anything is rendered.",
+  "hold_end_s": 1.0,
+  "closing_frame_s": 5.0,
+  "slider": {
+    "min_s": 15.0,
+    "max_s": 60.0,
+    "step_s": 5.0
+  },
+  "reel_seconds_for_scroll": {
+    "15": 21.0,
+    "20": 26.0,
+    "25": 31.0,
+    "30": 36.0,
+    "35": 41.0,
+    "40": 46.0,
+    "45": 51.0,
+    "50": 56.0,
+    "55": 61.0,
+    "60": 66.0
+  },
+  "fps": 30,
+  "viewport_h": 1430,
+  "ease_ramp": 0.15,
+  "cruise_factor": 1.1764705882352942
+}
