@@ -195,3 +195,94 @@ def test_an_unreadable_loop_result_falls_back_to_the_trim(tmp_path, monkeypatch)
 
     assert fit_audio_to_duration(src, out, duration=12.0, crossfade=1.0) == str(out)
     assert calls == ["loop", "trim"], calls
+
+
+# ===================================================================
+# Saying that the music had to repeat (#1076)
+# ===================================================================
+#
+# Looping was silent. A reel whose music repeats was indistinguishable from one
+# whose track fits, and Dan found out only because he happened to know a track's
+# length: Battery Dance Festival's is 53.3 seconds and its 50 second scroll is a
+# 56 second video, so that reel was already being extended. He would have made a
+# different decision with the fact in front of him.
+#
+# Raised from here rather than recomputed by each caller, so the sentence and
+# the thing it describes cannot disagree (L107).
+
+@needs_ffmpeg
+def test_a_track_shorter_than_the_reel_says_it_had_to_repeat(tmp_path):
+    src = tmp_path / "short.wav"
+    _make_tone(src, seconds=3.0)
+    said: list[str] = []
+
+    fit_audio_to_duration(src, tmp_path / "fit.wav", duration=12.0,
+                          crossfade=1.0, on_warning=said.append)
+
+    assert len(said) == 1, said
+    message = said[0]
+    # The two lengths and the consequence. A sentence saying only that
+    # something happened sends Dan to measure the track himself, which is the
+    # step this exists to remove (L80).
+    assert "3" in message and "12" in message, message
+    assert "repeat" in message.lower(), message
+
+
+@needs_ffmpeg
+def test_a_track_that_covers_the_reel_says_nothing(tmp_path):
+    """A warning on the ordinary outcome is one nobody reads (L36)."""
+    src = tmp_path / "long.wav"
+    _make_tone(src, seconds=30.0)
+    said: list[str] = []
+
+    fit_audio_to_duration(src, tmp_path / "fit.wav", duration=10.0,
+                          on_warning=said.append)
+
+    assert said == []
+
+
+@needs_ffmpeg
+def test_the_loop_is_still_reported_when_the_loop_graph_fails(tmp_path, monkeypatch):
+    """The failure path, and the one that matters most.
+
+    When the crossfade graph fails, the trim/pad fallback silently pads with
+    SILENCE rather than looping, so the reel ends in nothing. That is a worse
+    outcome than a repeat and the least likely to be noticed, so it must not be
+    the one case that says nothing (L47).
+    """
+    import postroll.media.audio_fit as fit_mod
+
+    real_run = fit_mod._run
+    intercepted: list[list[str]] = []
+
+    def fail_the_loop(cmd):
+        # The exact argument, not a substring of it: `-filter_complex` is one
+        # element of the list, and matching "filter_complex" catches nothing,
+        # so the double silently becomes no double and the real loop runs
+        # (L143). Asserted below rather than assumed.
+        if "-filter_complex" in cmd:
+            intercepted.append(cmd)
+            return False
+        return real_run(cmd)
+
+    monkeypatch.setattr(fit_mod, "_run", fail_the_loop)
+
+    src = tmp_path / "short.wav"
+    _make_tone(src, seconds=3.0)
+    said: list[str] = []
+
+    fit_audio_to_duration(src, tmp_path / "fit.wav", duration=12.0,
+                          crossfade=1.0, on_warning=said.append)
+
+    assert intercepted, "the loop command was never intercepted, so nothing failed"
+    assert said, "the fallback padded with silence and said nothing about it"
+    assert any("silence" in m.lower() for m in said), said
+
+
+def test_fitting_without_a_warning_hook_still_works(tmp_path):
+    """Every caller that has no warnings channel passes nothing, so the
+    default has to be a no-op rather than a required argument."""
+    import inspect
+
+    signature = inspect.signature(fit_audio_to_duration)
+    assert signature.parameters["on_warning"].default is None
