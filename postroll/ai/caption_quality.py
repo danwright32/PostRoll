@@ -82,3 +82,99 @@ nothing else.
 Caption:
 {caption}
 """
+
+
+# -- alt text (#1068) --------------------------------------------------------
+#
+# Blog alt text is checked six ways and social caption alt text was checked in
+# no way at all, so every description reaching Instagram, Facebook, Bluesky and
+# Pinterest was whatever the model returned, unexamined.
+#
+# THREE of the six transfer. Which ones was decided by measurement, not by
+# reading: run over the 319 alt texts in the live store on 2026-09-02, with each
+# day's post type taken from `posting_preset.post_type`, the blog's rules fire
+# at these rates on real, shipped, largely correct captions.
+#
+#     names a performer                92%   NOT transferred
+#     names the venue                  77%   NOT transferred (42% on reels)
+#     appearance instead of the name   30%   NOT transferred
+#     length outside the band          17%   transferred
+#     inferred inner state              5%   transferred
+#     empty                             0%   transferred
+#
+# The three that are out are out for a reason, recorded here so their absence
+# reads as a decision rather than as a gap nobody got to (L129). The performer
+# rule is infeasible on social: a carousel of eight photos from a forty
+# performer concert cannot name somebody in every one, which is why it fires on
+# nine in ten. The venue rule is a blog convention, and loosening it to accept
+# any part of a compound venue rescues only 5% of its hits. The appearance rule
+# catches real things, but the alternative it implies IS the performer rule, so
+# it asks for something that cannot be done here. Any of them would put a
+# finding on most posts, and a panel that fires on everything is one that gets
+# skimmed (L36).
+#
+# The word lists come from `blog_quality` rather than being copied, so "an
+# inferred inner state" has ONE definition across both paths. Two same named
+# rules either side of a boundary are never compared and drift indefinitely
+# (L263).
+
+from .blog_findings import Finding                       # noqa: E402
+from .blog_quality import DIRECTED_INTENT, INFERRED_STATE  # noqa: E402
+
+
+def check_caption_alt_texts(
+        alt_texts: list, *, band: tuple[int, int] | None,
+        photo_names: list[str] | None = None) -> list[Finding]:
+    """Every checkable rule a post's alt texts break.
+
+    `band` is the (minimum, maximum) word count THIS post type's own alt
+    instruction asks for, passed in rather than looked up, so this stays a leaf
+    and the instruction remains the single place the numbers are stated (L41).
+    None switches the length rule off; `generate_captions` has a test asserting
+    every instruction states a range, which is what keeps that unreachable
+    (L113).
+
+    `photo_names` positionally names the photograph each alt text describes. A
+    finding about one of eight descriptions is unusable without saying which one
+    (L80), and the position is the fallback when the names are not to hand.
+    Deliberately tolerant of a short name list: keeping the two in step is
+    somebody else's job, and a check that crashes when an upstream invariant
+    slipped reports nothing at all about the rest (L215).
+    """
+    names = list(photo_names or [])
+    found: list[Finding] = []
+
+    for index, raw in enumerate(alt_texts or []):
+        where = names[index] if index < len(names) else str(index + 1)
+        alt = "" if raw is None else str(raw)
+
+        if not alt.split():
+            found.append(Finding(
+                "alt_text_empty",
+                "This photo has no alt text, so the picture is described to "
+                "nobody who cannot see it.",
+                where))
+            # Nothing else can be said about a description that is not there,
+            # and saying it is also too short would be a second finding about
+            # one fault (L260).
+            continue
+
+        words = len(alt.split())
+        if band and not (band[0] <= words <= band[1]):
+            found.append(Finding(
+                "alt_text_length",
+                f"Alt text for this post should be {band[0]} to {band[1]} words.",
+                f"{where}: {words} words. {alt[:90]}"))
+
+        low = alt.lower()
+        hits = [w for w in INFERRED_STATE if re.search(rf"\b{re.escape(w)}\b", low)]
+        hits += [m.group(0) for pat in DIRECTED_INTENT
+                 for m in [re.search(pat, low)] if m]
+        if hits:
+            found.append(Finding(
+                "alt_text_inferred_state",
+                "Alt text describes what the camera recorded, not what someone "
+                "felt.",
+                f"{where}: {', '.join(hits)} in '{alt[:80]}'"))
+
+    return found

@@ -65,7 +65,7 @@ from .caption_credits import (
     norm_handle,
     rewrite_lost_a_credit,
 )
-from .caption_quality import problems_in, REWRITE_PROMPT
+from .caption_quality import check_caption_alt_texts, problems_in, REWRITE_PROMPT
 from . import org_prompt
 from .performer_hashtags import ensure_brand_hashtag, strip_performer_hashtags
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
@@ -677,8 +677,25 @@ _WORD_RANGE_RE = re.compile(r"(\d+)\s*[-\u2013\u2014]\s*(\d+)\s*words", re.I)
 
 def _word_floor_in(instruction: str) -> int | None:
     """The smaller half of the "25-50 words" range an alt instruction states."""
+    band = _word_band_in(instruction)
+    return band[0] if band else None
+
+
+def _word_band_in(instruction: str) -> tuple[int, int] | None:
+    """Both ends of the "25-50 words" range an alt instruction states."""
     match = _WORD_RANGE_RE.search(instruction or "")
-    return int(match.group(1)) if match else None
+    return (int(match.group(1)), int(match.group(2))) if match else None
+
+
+def _alt_word_band(post_type: str) -> tuple[int, int] | None:
+    """The word range this post type's OWN alt instruction asks for (#1068).
+
+    Read out of the instruction rather than written down beside it, so the
+    check and the rule it enforces cannot drift into two numbers (L41). A
+    scroll reel asks for 25 to 50 and a carousel photo for 15 to 35, so there
+    is no single band to write down even if that were wanted.
+    """
+    return _word_band_in(_alt_text_instruction_for(post_type))
 
 
 def _alt_word_floor(post_type: str) -> int | None:
@@ -1181,6 +1198,16 @@ def generate_caption(
     # removes from that stack anything the body already credits, because
     # whether a handle appears twice is checkable and a rule that lives only
     # in a prompt is a hope.
+    # What actually ships, computed once and both returned and checked (#1068).
+    #
+    # `strip_em_dashes` splits a dash joined token into two, so a word count
+    # taken before it and one taken after it are different numbers. The blog
+    # side learned this the hard way: its repairer and its checker measured the
+    # same body differently and the round cap became a silent give up. So the
+    # checks read the text that reaches Instagram, not the text before the last
+    # thing that rewrites it.
+    shipped_alt_texts = [strip_em_dashes(str(a).strip()) for a in alt_texts]
+
     final_caption = dedupe_credit_stack(_enforce_caption_bans(
         strip_em_dashes(data.get("caption", "").strip()),
         tag_handles=tag_handles, name_mentions=name_mentions))
@@ -1202,7 +1229,7 @@ def generate_caption(
             tag_handles=tag_handles,
             famous=data.get("famous_people") or [],
         )),
-        "alt_texts": [strip_em_dashes(str(a).strip()) for a in alt_texts],
+        "alt_texts": shipped_alt_texts,
         "scene_labels": scene_labels,
         # Named so the review screen can say which file was left out. Always
         # present, so a consumer reading it cannot mistake "no key" for "no
@@ -1219,7 +1246,15 @@ def generate_caption(
             finding_entry(f) for f in (
                 credit_findings(final_caption, tag_handles=tag_handles,
                                 name_mentions=name_mentions)
-                + per_frame_findings)
+                + per_frame_findings
+                # The alt text rules (#1068). Three of the blog's six, chosen by
+                # measuring all six against the live store rather than by
+                # reading them; `caption_quality` records the rates and why the
+                # other three are out.
+                + check_caption_alt_texts(
+                    shipped_alt_texts,
+                    band=_alt_word_band(post_type),
+                    photo_names=[Path(p).name for p in original_paths]))
         ],
         # The exact text those findings were measured against, so an edited
         # caption stops showing findings about the text before the edit. Same

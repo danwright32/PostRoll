@@ -1,0 +1,8 @@
+{
+  "name": "a-caption-alt-text-that-infers-a-feeling-is-reported",
+  "file": "postroll/ai/caption_quality.py",
+  "find": "        hits += [m.group(0) for pat in DIRECTED_INTENT",
+  "replace": "        hits += [] or [] if True else [m.group(0) for pat in DIRECTED_INTENT",
+  "test": "tests/test_caption_alt_text_checks.py::test_an_expression_aimed_at_someone_is_reported",
+  "breaks": "an alt text reading a visible expression as being AIMED at somebody ('grinning toward the audience') is accepted. The expression is in the frame; who it was meant for is not, so the description states as fact something the camera did not record (#1068)"
+}
