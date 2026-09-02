@@ -280,16 +280,30 @@ final class SaveButtonStateTests: XCTestCase {
         // The exact line the issue is about, named rather than covered only by
         // the count above, so a read moving INTO it fails with the reason
         // rather than as an arithmetic surprise.
+        //
+        // Matched on `read(` rather than `read()`. This checked for the empty
+        // parentheses, and when the read gained an argument (#1002) the guard
+        // went on passing over a disabled state that really did reach for the
+        // store: the mutation sweep reported it SURVIVED. A guard that pins the
+        // exact rendering of a call rather than the rule behind it fails the
+        // first legitimate refinement of that call (L103).
+        //
+        // Every `.disabled(` in the file, not the first one. There are two
+        // secret fields now, so a check that stopped at the first would leave
+        // the second exempt from the rule it exists to enforce.
         let code = try settingsViewCode()
-        let start = try XCTUnwrap(code.range(of: ".disabled("),
-                                  "the Save button has no disabled state at all, "
-                                  + "so #348's block on a partial paste is gone")
-        let modifier = code[start.lowerBound...].prefix(200)
+        let modifiers = code.components(separatedBy: ".disabled(").dropFirst()
 
-        XCTAssertFalse(modifier.contains("read()"), """
-            the Save button's disabled state reads the store again: \
-            \(modifier). That modifier runs on every render pass, which is the \
-            whole of #935.
-            """)
+        XCTAssertFalse(modifiers.isEmpty,
+                       "no Save button has a disabled state at all, so #348's block "
+                       + "on a partial paste is gone")
+
+        for modifier in modifiers {
+            let scope = modifier.prefix(200)
+            XCTAssertFalse(scope.contains("read("), """
+                a disabled state reads the store again: \(scope). That modifier \
+                runs on every render pass, which is the whole of #935.
+                """)
+        }
     }
 }
