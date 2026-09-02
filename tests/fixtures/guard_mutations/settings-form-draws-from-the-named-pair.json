@@ -1,8 +1,8 @@
 {
   "name": "settings-form-draws-from-the-named-pair",
   "file": "PostRollApp/Sources/Views/SettingsView.swift",
-  "find": "                            .foregroundStyle(PaintedSurfaces.stateSuccessText)",
-  "replace": "                            .foregroundStyle(PaintedSurfaces.readableSecondaryLabel)",
+  "find": "                        .foregroundStyle(PaintedSurfaces.stateSuccessText)",
+  "replace": "                        .foregroundStyle(PaintedSurfaces.readableSecondaryLabel)",
   "test": "PostRollTests/BannerLegibilityTests/testTheSettingsFormDrawsItsWordsFromANamedPair",
   "breaks": "the Settings window stops drawing from one of the four names measured against it, so that pair is measuring a colour the window does not use. The earlier version of this entry mutated one of five sites using the same name, which the remaining four answered for, and it SURVIVED on CI (#596, #598, L135)"
 }
