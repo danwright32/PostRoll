@@ -352,6 +352,7 @@ final class BridgePayloadContractTests: XCTestCase {
         XCTAssertEqual(row.feed, 4)
         XCTAssertFalse(row.likesHidden)
         XCTAssertFalse(row.followersFromPage)
+        XCTAssertEqual(row.allowanceSpent, 3)
 
         // And the whole point of carrying it: what lands in the book.
         let stats = row.stats(recordedOn: Date(timeIntervalSince1970: 1_775_000_000))
@@ -361,7 +362,7 @@ final class BridgePayloadContractTests: XCTestCase {
         try assertCovers("account_numbers",
                          ["handle", "outcome", "followers", "likes", "comments",
                           "likes_hidden", "followers_from_page", "instagram_id",
-                          "reels", "feed", "detail"])
+                          "reels", "feed", "detail", "allowance_spent"])
     }
 
     func testAWithheldLikeCountCrossesAsHiddenRatherThanAbsent() throws {
