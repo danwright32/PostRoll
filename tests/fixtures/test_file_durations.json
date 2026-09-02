@@ -71,6 +71,7 @@
     "test_build_cache_location.py": 0.39000000000000007,
     "test_cap_signals.py": 0.01,
     "test_cap_signals_never_touch_live_data.py": 0.0,
+    "test_caption_alt_text_checks.py": 0.4,
     "test_caption_backstops.py": 0.01,
     "test_caption_blocks.py": 0.0,
     "test_caption_credit_dedup.py": 0.0,
@@ -529,6 +530,10 @@
     "test_cap_signals_never_touch_live_data.py": {
       "run": "full-2026-09-02T04:01Z",
       "scale": 1.0
+    },
+    "test_caption_alt_text_checks.py": {
+      "run": "partial-2026-09-02T17:28Z",
+      "scale": 0.92
     },
     "test_caption_backstops.py": {
       "run": "full-2026-09-02T04:01Z",

@@ -223,9 +223,18 @@ def _generate(fake_caption, photo, *, tag_handles=None, name_mentions=None,
               rewrite=None):
     from postroll.ai import generate_captions
 
+    #: A realistic alt text, not a placeholder. This file is about CREDIT
+    #: findings, and its stub used to return "a", which was invisible until
+    #: #1068 gave alt text its own rules and a one word description became a
+    #: real finding. A fixture standing in for something no rule read is fine
+    #: until a rule reads it, and then it makes an unrelated test fail for a
+    #: reason that has nothing to do with what it checks.
+    ALT = ("A conductor leads roughly twenty singers in all black across the "
+           "stage with a piano at the left and red lighting behind them")
+
     def fake_run_json(prompt, **kw):
         return {"caption": fake_caption, "hashtags": [],
-                "alt_texts": ["a"], "scene_labels": [None]}
+                "alt_texts": [ALT], "scene_labels": [None]}
 
     with patch("postroll.ai.generate_captions.run_json_prompt", side_effect=fake_run_json), \
          patch("postroll.ai.generate_captions.run_prompt",

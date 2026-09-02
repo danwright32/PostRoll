@@ -1,0 +1,8 @@
+{
+  "name": "an-empty-caption-alt-text-is-reported",
+  "file": "postroll/ai/caption_quality.py",
+  "find": "        if not alt.split():",
+  "replace": "        if False:",
+  "test": "tests/test_caption_alt_text_checks.py::test_an_empty_alt_text_is_reported",
+  "breaks": "a photo that shipped with no alt text at all is reported as nothing, so the picture is described to nobody who cannot see it and the review screen says the post is fine. An alt text is the whole content of the post for a screen reader user (#1068)"
+}

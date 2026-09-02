@@ -1,0 +1,8 @@
+{
+  "name": "the-caption-alt-text-checks-reach-the-review-screen",
+  "file": "postroll/ai/generate_captions.py",
+  "find": "                + check_caption_alt_texts(",
+  "replace": "                + [] and check_caption_alt_texts(",
+  "test": "tests/test_caption_alt_text_checks.py::test_a_short_alt_text_reaches_the_findings_on_the_day",
+  "breaks": "the alt text rules still run and their findings reach nobody, so every one of them is a check that does not exist. That is the shape #1068 was filed about: the rules for hashtags and credits were wired to the review screen and alt text had none at all (L3)"
+}

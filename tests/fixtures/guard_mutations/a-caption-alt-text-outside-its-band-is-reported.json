@@ -1,0 +1,8 @@
+{
+  "name": "a-caption-alt-text-outside-its-band-is-reported",
+  "file": "postroll/ai/caption_quality.py",
+  "find": "        if band and not (band[0] <= words <= band[1]):",
+  "replace": "        if False:",
+  "test": "tests/test_caption_alt_text_checks.py::test_an_alt_text_under_the_band_is_reported",
+  "breaks": "an alt text far outside the word range its own post type asks for is accepted silently. Measured against the live store on 2026-09-02, 17% of 319 shipped caption alt texts are outside their band, and on Thursday reels a short one is the signature of a reel described as a single photograph (#1067, #1068)"
+}
