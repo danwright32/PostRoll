@@ -16,6 +16,16 @@ import AppKit
 @Observable
 final class ExportManager {
 
+    /// What the last automatic figures fetch failed with, or nil (#1004).
+    ///
+    /// Handed in rather than read from the manager, because the export copies
+    /// everything it needs before detaching and this is one more of those. Its
+    /// OWN property rather than folded into the book's recovery note: two
+    /// independent conditions sharing one field means one silences the other
+    /// (L53).
+    var accountNumbersNote: String?
+
+
     enum Phase: Equatable {
         case exportingText
         case generatingMedia(URL)            // folder where text export landed
@@ -203,7 +213,12 @@ final class ExportManager {
         // An unreadable book looks exactly like an empty one from the export's
         // side: every account comes back not counted. Carried so CAPTIONS.txt
         // says which of the two it is.
-        let accountNotes = [AccountBook.shared.recoveryNote].compactMap { $0 }
+        // Both notes, as two elements (#1004). The export runs detached, so
+        // this is copied with everything else rather than reached for from the
+        // task below. Set by the app when the fetch manager exists; nil in the
+        // suite, which is the same as no failure to report.
+        let accountNotes = [AccountBook.shared.recoveryNote,
+                            accountNumbersNote].compactMap { $0 }
 
         // Held outside the do so the failure paths can throw the staged work
         // away: a staging folder nobody commits is debris in Dan's own folder.

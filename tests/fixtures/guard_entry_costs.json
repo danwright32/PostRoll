@@ -39,6 +39,11 @@
       "entry": "a-day-with-nothing-to-rank-is-not-an-empty-ranking",
       "seconds": 17.66,
       "shard": ""
+    },
+    {
+      "entry": "a-day-already-rebuilding-is-refused",
+      "seconds": 16.53,
+      "shard": ""
     }
   ],
   "kinds": {
@@ -68,12 +73,15 @@
     "a-dismissed-out-of-date-sheet-stays-dismissed": true,
     "a-dismissed-sheet-records-which-verdict-it-was": true,
     "a-displaced-sheet-is-kept-rather-than-thrown-away": true,
+    "a-dragged-layout-is-judged-against-the-posted-photos": true,
     "a-drift-reading-says-where-the-pixels-are": false,
     "a-failed-analysis-keeps-its-reason": true,
+    "a-failed-fetch-is-due-another-attempt": true,
     "a-failed-frame-names-its-ffmpeg": false,
     "a-failed-permission-request-is-not-a-refusal": true,
     "a-failed-rebuild-keeps-its-reason": true,
     "a-failed-run-is-not-silent": true,
+    "a-fetch-failure-is-not-the-books-recovery-note": true,
     "a-fold-matching-two-files-repairs-neither": false,
     "a-frame-that-moved-by-design-is-refused-the-third-door": false,
     "a-full-run-records-why-a-day-failed": true,
@@ -127,6 +135,7 @@
     "a-refused-account-does-not-get-an-engagement-rate": false,
     "a-refused-analytics-write-is-not-shown-as-an-import": true,
     "a-refused-band-write-is-reported": true,
+    "a-refused-lookup-names-the-one-holding-the-list": true,
     "a-refused-marker-move-is-reported": false,
     "a-refused-rebuild-says-which-day": true,
     "a-refused-write-leaves-the-stored-key-alone": true,
@@ -141,13 +150,14 @@
     "a-run-still-in-flight-is-never-green": false,
     "a-scale-of-one-is-a-claim-not-a-default": false,
     "a-scratch-suite-opens-empty": true,
-    "a-screen-shows-the-layout-with-no-way-to-change-it": true,
+    "a-screen-shows-the-layout-with-no-way-to-change-it": false,
     "a-second-definition-of-the-test-only-flag-is-caught": false,
     "a-second-insights-analysis-is-refused": true,
     "a-second-notes-search-is-refused": true,
     "a-second-person-rewrite-keeps-its-marker": false,
     "a-second-press-does-not-start-a-second-update": true,
     "a-second-reflow-on-one-program-is-refused": true,
+    "a-sentinel-behind-a-link-is-not-an-account": true,
     "a-shard-with-nothing-to-prove-is-not-a-duration": false,
     "a-sheet-command-opens-the-window": true,
     "a-short-duration-window-is-not-called-steady": false,
@@ -173,6 +183,7 @@
     "a-thin-report-says-out-of-how-many": true,
     "a-third-layout-is-described-as-the-second": true,
     "a-title-card-muxes-to-the-name-its-callers-pass": false,
+    "a-transient-failure-never-becomes-a-scrape": false,
     "a-typed-name-does-not-reach-the-tag-list": false,
     "a-typed-name-is-credited-not-mentioned": true,
     "a-typed-note-survives-the-web-search": true,
@@ -186,16 +197,18 @@
     "accent-is-never-drawn-unnamed": false,
     "accent-is-never-drawn-unnamed-in-a-wrapped-ternary": false,
     "accent-tint-is-never-drawn-unnamed": false,
+    "accepting-a-suggestion-tells-the-fetch": true,
     "account-book-keeps-generations": true,
     "account-book-names-a-refusal": true,
     "account-book-sets-a-bad-file-aside": true,
     "adding-a-file-does-not-rewrite-the-record": false,
+    "an-absent-secret-is-not-exported-as-blank": true,
     "an-account-nobody-looked-at-is-still-not-scored": true,
     "an-added-test-file-must-be-measured": false,
     "an-alt-text-is-paired-with-its-neighbour": true,
     "an-assumed-rate-is-labelled-wherever-it-renders": true,
     "an-edited-test-file-does-not-owe-a-measurement": false,
-    "an-export-that-fails-is-not-silent": true,
+    "an-export-that-fails-is-not-silent": false,
     "an-idle-worker-can-take-work-from-a-busy-one": false,
     "an-uncertain-answer-runs-the-job": false,
     "an-unfinished-job-has-no-duration": false,
@@ -207,6 +220,7 @@
     "an-unread-log-is-not-a-run-that-passed": false,
     "an-unreadable-branch-point-is-not-a-clean-branch": false,
     "an-unreadable-finish-time-is-not-a-fresh-proof": false,
+    "an-unreadable-follower-count-is-not-zero-followers": false,
     "an-unreadable-module-is-not-cached-as-empty": false,
     "an-unreadable-quota-header-is-not-a-low-reading": false,
     "an-unreadable-report-is-not-a-clean-run": false,
@@ -269,6 +283,7 @@
     "drift-publishing-is-scoped-to-its-shard": false,
     "drift-publishing-survives-a-red-run": false,
     "duration-drift-ignores-run-to-run-noise": false,
+    "each-secret-reaches-the-subprocess-under-its-own-carrier": true,
     "each-suite-leg-counts-what-it-ran": false,
     "empty-segment-is-not-a-search-miss": true,
     "event-row-draws-from-the-named-pairs": true,
@@ -465,12 +480,14 @@
     "sweep-reuses-one-build-cache": false,
     "sweep-says-how-far-it-has-got": false,
     "sweep-says-when-it-cannot-reuse-a-cache": false,
+    "swifts-sentinel-list-is-the-shared-one": true,
     "tagged-handles-stamped-on-success": true,
     "tertiary-text-clears-the-text-level": true,
     "test-seam-stays-out": false,
     "the-alert-is-told-which-alert-it-is-showing": true,
     "the-app-and-python-agree-on-what-the-phone-covers": false,
     "the-app-declares-one-window-not-a-group": true,
+    "the-app-joins-the-lookup-to-the-fetch": true,
     "the-app-target-must-not-define-the-test-only-flag": false,
     "the-assumed-rate-comes-from-the-comparable-band": false,
     "the-audience-measurement-reaches-the-report": false,
@@ -508,6 +525,7 @@
     "the-live-store-is-not-compiled-into-the-tests": false,
     "the-liveliness-floor-comes-from-the-population": false,
     "the-lock-probe-asks-only-for-what-it-uses": false,
+    "the-lookup-lock-is-not-every-case-of-the-enum": true,
     "the-mac-leg-does-not-re-render-the-shards-work": false,
     "the-mac-legs-skip-list-is-derived-not-spelled": false,
     "the-manifest-keeps-the-plist-ordering-edge": false,
@@ -522,6 +540,7 @@
     "the-notification-banner-is-on-the-review-sheet": true,
     "the-out-of-date-verdict-is-taken-again": true,
     "the-performer-lookups-outlive-their-section": true,
+    "the-performers-editor-is-told-why-it-cannot-look-up": true,
     "the-permission-seam-still-asks": false,
     "the-photographs-outlive-the-checks": false,
     "the-placement-result-cannot-be-unpacked-into-two": false,
@@ -692,6 +711,10 @@
       "run": "33415040753",
       "scale": 1.0
     },
+    "a-dragged-layout-is-judged-against-the-posted-photos": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.562
+    },
     "a-drift-reading-says-where-the-pixels-are": {
       "run": "33415040753",
       "scale": 1.0
@@ -699,6 +722,10 @@
     "a-failed-analysis-keeps-its-reason": {
       "run": "33415040753",
       "scale": 1.0
+    },
+    "a-failed-fetch-is-due-another-attempt": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.562
     },
     "a-failed-frame-names-its-ffmpeg": {
       "run": "33415040753",
@@ -715,6 +742,10 @@
     "a-failed-run-is-not-silent": {
       "run": "33415040753",
       "scale": 1.0
+    },
+    "a-fetch-failure-is-not-the-books-recovery-note": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.562
     },
     "a-fold-matching-two-files-repairs-neither": {
       "run": "local-Daniels-MacBook-Pro-2.local",
@@ -928,6 +959,10 @@
       "run": "33415040753",
       "scale": 1.0
     },
+    "a-refused-lookup-names-the-one-holding-the-list": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.562
+    },
     "a-refused-marker-move-is-reported": {
       "run": "local-Daniels-MacBook-Pro-2.local",
       "scale": 3.094
@@ -1011,6 +1046,10 @@
     "a-second-reflow-on-one-program-is-refused": {
       "run": "33415040753",
       "scale": 1.0
+    },
+    "a-sentinel-behind-a-link-is-not-an-account": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.562
     },
     "a-shard-with-nothing-to-prove-is-not-a-duration": {
       "run": "33415040753",
@@ -1112,6 +1151,10 @@
       "run": "33415040753",
       "scale": 1.0
     },
+    "a-transient-failure-never-becomes-a-scrape": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.562
+    },
     "a-typed-name-does-not-reach-the-tag-list": {
       "run": "33415040753",
       "scale": 1.0
@@ -1164,6 +1207,10 @@
       "run": "33415040753",
       "scale": 1.0
     },
+    "accepting-a-suggestion-tells-the-fetch": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.562
+    },
     "account-book-keeps-generations": {
       "run": "33415040753",
       "scale": 1.0
@@ -1179,6 +1226,10 @@
     "adding-a-file-does-not-rewrite-the-record": {
       "run": "33415040753",
       "scale": 1.0
+    },
+    "an-absent-secret-is-not-exported-as-blank": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.562
     },
     "an-account-nobody-looked-at-is-still-not-scored": {
       "run": "local-Daniels-MacBook-Pro-2.local",
@@ -1247,6 +1298,10 @@
     "an-unreadable-finish-time-is-not-a-fresh-proof": {
       "run": "33415040753",
       "scale": 1.0
+    },
+    "an-unreadable-follower-count-is-not-zero-followers": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.562
     },
     "an-unreadable-module-is-not-cached-as-empty": {
       "run": "33415040753",
@@ -1495,6 +1550,10 @@
     "duration-drift-ignores-run-to-run-noise": {
       "run": "33415040753",
       "scale": 1.0
+    },
+    "each-secret-reaches-the-subprocess-under-its-own-carrier": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.562
     },
     "each-suite-leg-counts-what-it-ran": {
       "run": "33415040753",
@@ -2280,6 +2339,10 @@
       "run": "33415040753",
       "scale": 1.0
     },
+    "swifts-sentinel-list-is-the-shared-one": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.562
+    },
     "tagged-handles-stamped-on-success": {
       "run": "33415040753",
       "scale": 1.0
@@ -2303,6 +2366,10 @@
     "the-app-declares-one-window-not-a-group": {
       "run": "33415040753",
       "scale": 1.0
+    },
+    "the-app-joins-the-lookup-to-the-fetch": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.562
     },
     "the-app-target-must-not-define-the-test-only-flag": {
       "run": "33415040753",
@@ -2452,6 +2519,10 @@
       "run": "33415040753",
       "scale": 1.0
     },
+    "the-lookup-lock-is-not-every-case-of-the-enum": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.562
+    },
     "the-mac-leg-does-not-re-render-the-shards-work": {
       "run": "33415040753",
       "scale": 1.0
@@ -2507,6 +2578,10 @@
     "the-performer-lookups-outlive-their-section": {
       "run": "33415040753",
       "scale": 1.0
+    },
+    "the-performers-editor-is-told-why-it-cannot-look-up": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.562
     },
     "the-permission-seam-still-asks": {
       "run": "33415040753",
@@ -2795,12 +2870,15 @@
     "a-dismissed-out-of-date-sheet-stays-dismissed": 38.07,
     "a-dismissed-sheet-records-which-verdict-it-was": 30.94,
     "a-displaced-sheet-is-kept-rather-than-thrown-away": 28.3,
+    "a-dragged-layout-is-judged-against-the-posted-photos": 25.78,
     "a-drift-reading-says-where-the-pixels-are": 2.62,
     "a-failed-analysis-keeps-its-reason": 34.48,
+    "a-failed-fetch-is-due-another-attempt": 23.45,
     "a-failed-frame-names-its-ffmpeg": 1.21,
     "a-failed-permission-request-is-not-a-refusal": 34.51,
     "a-failed-rebuild-keeps-its-reason": 29.9,
     "a-failed-run-is-not-silent": 35.41,
+    "a-fetch-failure-is-not-the-books-recovery-note": 25.56,
     "a-fold-matching-two-files-repairs-neither": 1.95,
     "a-frame-that-moved-by-design-is-refused-the-third-door": 1.42,
     "a-full-run-records-why-a-day-failed": 32.22,
@@ -2854,6 +2932,7 @@
     "a-refused-account-does-not-get-an-engagement-rate": 0.84,
     "a-refused-analytics-write-is-not-shown-as-an-import": 22.91,
     "a-refused-band-write-is-reported": 20.85,
+    "a-refused-lookup-names-the-one-holding-the-list": 23.68,
     "a-refused-marker-move-is-reported": 0.84,
     "a-refused-rebuild-says-which-day": 21.39,
     "a-refused-write-leaves-the-stored-key-alone": 17.04,
@@ -2875,6 +2954,7 @@
     "a-second-person-rewrite-keeps-its-marker": 2.04,
     "a-second-press-does-not-start-a-second-update": 27.94,
     "a-second-reflow-on-one-program-is-refused": 32.16,
+    "a-sentinel-behind-a-link-is-not-an-account": 25.17,
     "a-shard-with-nothing-to-prove-is-not-a-duration": 0.71,
     "a-sheet-command-opens-the-window": 25.99,
     "a-short-duration-window-is-not-called-steady": 0.57,
@@ -2900,6 +2980,7 @@
     "a-thin-report-says-out-of-how-many": 15.63,
     "a-third-layout-is-described-as-the-second": 23.4,
     "a-title-card-muxes-to-the-name-its-callers-pass": 1.05,
+    "a-transient-failure-never-becomes-a-scrape": 0.39,
     "a-typed-name-does-not-reach-the-tag-list": 0.3,
     "a-typed-name-is-credited-not-mentioned": 24.67,
     "a-typed-note-survives-the-web-search": 19.2,
@@ -2913,10 +2994,12 @@
     "accent-is-never-drawn-unnamed": 0.58,
     "accent-is-never-drawn-unnamed-in-a-wrapped-ternary": 0.6,
     "accent-tint-is-never-drawn-unnamed": 0.89,
+    "accepting-a-suggestion-tells-the-fetch": 23.72,
     "account-book-keeps-generations": 22.12,
     "account-book-names-a-refusal": 20.93,
     "account-book-sets-a-bad-file-aside": 21.89,
     "adding-a-file-does-not-rewrite-the-record": 0.81,
+    "an-absent-secret-is-not-exported-as-blank": 23.84,
     "an-account-nobody-looked-at-is-still-not-scored": 21.31,
     "an-added-test-file-must-be-measured": 1.07,
     "an-alt-text-is-paired-with-its-neighbour": 20.69,
@@ -2934,6 +3017,7 @@
     "an-unread-log-is-not-a-run-that-passed": 0.97,
     "an-unreadable-branch-point-is-not-a-clean-branch": 0.37,
     "an-unreadable-finish-time-is-not-a-fresh-proof": 0.84,
+    "an-unreadable-follower-count-is-not-zero-followers": 0.37,
     "an-unreadable-module-is-not-cached-as-empty": 0.55,
     "an-unreadable-quota-header-is-not-a-low-reading": 0.87,
     "an-unreadable-report-is-not-a-clean-run": 0.66,
@@ -2996,6 +3080,7 @@
     "drift-publishing-is-scoped-to-its-shard": 0.71,
     "drift-publishing-survives-a-red-run": 1.12,
     "duration-drift-ignores-run-to-run-noise": 1.15,
+    "each-secret-reaches-the-subprocess-under-its-own-carrier": 23.95,
     "each-suite-leg-counts-what-it-ran": 0.44,
     "empty-segment-is-not-a-search-miss": 21.14,
     "event-row-draws-from-the-named-pairs": 19.08,
@@ -3192,12 +3277,14 @@
     "sweep-reuses-one-build-cache": 0.88,
     "sweep-says-how-far-it-has-got": 1.12,
     "sweep-says-when-it-cannot-reuse-a-cache": 0.76,
+    "swifts-sentinel-list-is-the-shared-one": 28.5,
     "tagged-handles-stamped-on-success": 20.15,
     "tertiary-text-clears-the-text-level": 27.32,
     "test-seam-stays-out": 0.61,
     "the-alert-is-told-which-alert-it-is-showing": 30.38,
     "the-app-and-python-agree-on-what-the-phone-covers": 0.96,
     "the-app-declares-one-window-not-a-group": 35.49,
+    "the-app-joins-the-lookup-to-the-fetch": 24.0,
     "the-app-target-must-not-define-the-test-only-flag": 0.58,
     "the-assumed-rate-comes-from-the-comparable-band": 0.9,
     "the-audience-measurement-reaches-the-report": 1.59,
@@ -3235,6 +3322,7 @@
     "the-live-store-is-not-compiled-into-the-tests": 0.91,
     "the-liveliness-floor-comes-from-the-population": 0.76,
     "the-lock-probe-asks-only-for-what-it-uses": 1.03,
+    "the-lookup-lock-is-not-every-case-of-the-enum": 24.15,
     "the-mac-leg-does-not-re-render-the-shards-work": 0.7,
     "the-mac-legs-skip-list-is-derived-not-spelled": 0.33,
     "the-manifest-keeps-the-plist-ordering-edge": 0.65,
@@ -3249,6 +3337,7 @@
     "the-notification-banner-is-on-the-review-sheet": 22.33,
     "the-out-of-date-verdict-is-taken-again": 24.09,
     "the-performer-lookups-outlive-their-section": 21.42,
+    "the-performers-editor-is-told-why-it-cannot-look-up": 24.54,
     "the-permission-seam-still-asks": 0.76,
     "the-photographs-outlive-the-checks": 1.92,
     "the-placement-result-cannot-be-unpacked-into-two": 0.74,

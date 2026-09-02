@@ -65,6 +65,9 @@ struct SettingsView: View {
     // from inside any test that rendered the screen; the app provides the one
     // store in PostRollApp.
     @Environment(PostingPresetStore.self) private var presetStore
+    /// Told when the Meta token changes, so the records that failed for want of
+    /// one are asked about again (#1004).
+    @Environment(AccountNumbersManager.self) private var accountNumbers
 
     // Legacy-data reclaim (#47): nil until probed; 0 means nothing to reclaim.
     @State private var reclaimableBytes: Int64? = nil
@@ -80,7 +83,8 @@ struct SettingsView: View {
 
             SecretField(secret: .meta,
                         footer: SettingsCopy.metaTokenFooter,
-                        source: keySource)
+                        source: keySource,
+                        onSaved: { accountNumbers.credentialChanged() })
 
             Section {
                 Picker("Default layout", selection: Binding(
@@ -204,6 +208,9 @@ struct SecretField: View {
     /// Markdown, so an address in it is a real link.
     let footer: String
     let source: SettingsView.KeySource
+    /// Called when a value actually LANDS, so a secret with a consequence can
+    /// have it. Optional because most secrets have none.
+    var onSaved: (() -> Void)?
 
     @State private var typed: String
     @State private var stored: String
@@ -213,10 +220,11 @@ struct SecretField: View {
     @State private var saveError: String?
 
     init(secret: KeychainStore.Secret, footer: String,
-         source: SettingsView.KeySource) {
+         source: SettingsView.KeySource, onSaved: (() -> Void)? = nil) {
         self.secret = secret
         self.footer = footer
         self.source = source
+        self.onSaved = onSaved
         let held = source.read(secret) ?? ""
         _typed = State(initialValue: held)
         _stored = State(initialValue: held)
@@ -257,6 +265,15 @@ struct SecretField: View {
                     stored = outcome.stored
                     saved = outcome.saved
                     saveError = outcome.error
+                    // A saved Meta token is the remedy `token_rejected` names,
+                    // so it has to actually change the state Dan is stuck in
+                    // (#1004). Without this, the records that failed for want
+                    // of a credential sit there until something else happens to
+                    // re-tag those accounts, and the message telling him to
+                    // paste a token is one he can obey with no effect (L111).
+                    if outcome.saved, secret == .meta {
+                        onSaved?()
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 // Unchanged, or not long enough to be a whole value (#348). The

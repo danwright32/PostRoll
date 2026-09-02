@@ -1,0 +1,8 @@
+{
+  "name": "the-app-joins-the-lookup-to-the-fetch",
+  "file": "PostRollApp/Sources/Services/AppOwners.swift",
+  "find": "        lookup.onHandlesSettled = { [accountNumbers] handles in",
+  "replace": "        lookup.onHandlesSettled = nil; _ = { [accountNumbers] handles in",
+  "test": "PostRollTests/AccountNumbersManagerTests/testTheAppJoinsTheLookupToTheFetch",
+  "breaks": "both managers are correct in isolation and nothing connects them, so the automatic fetch never runs at all and every test of either half still passes (#1004, L3)"
+}

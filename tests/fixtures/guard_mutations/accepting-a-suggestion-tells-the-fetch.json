@@ -1,0 +1,8 @@
+{
+  "name": "accepting-a-suggestion-tells-the-fetch",
+  "file": "PostRollApp/Sources/Services/PerformerLookupManager.swift",
+  "find": "        // six rather than one fetch about the first.\n        onHandlesSettled?(AccountFetchDue.accounts(in: live))",
+  "replace": "        // six rather than one fetch about the first.\n        onHandlesSettled?([])",
+  "test": "PostRollTests/AccountNumbersManagerTests/testAcceptingAHandleSuggestionTellsTheFetch",
+  "breaks": "accepting a handle suggestion no longer tells the figures fetch, so the account Dan just added is never asked about and the whole automatic feature does nothing on the commonest path into it (#1004, L3)"
+}

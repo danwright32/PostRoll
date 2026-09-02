@@ -9,6 +9,9 @@ struct OCRReviewView: View {
     /// Owns the two performer lookups, so neither dies with the section that
     /// started it or with this screen (#707).
     @Environment(PerformerLookupManager.self) private var lookupManager
+    /// The automatic figures fetch (#1004), told when handles typed by hand are
+    /// confirmed. The other two moments are inside the lookup manager.
+    @Environment(AccountNumbersManager.self) private var accountNumbers
     /// For the rescan of pages an earlier run could not read (#518).
     @Environment(OCRManager.self) private var ocrManager
     /// Owns the "describe the correction" reflow, so a paid model call is not
@@ -560,6 +563,10 @@ struct OCRReviewView: View {
         ev.visionCheckSkipped = nil
         ev.stage = .photosAssigned
         appState.updateEvent(ev)
+        // The third moment the handle list settles (#1004): typed by hand, and
+        // confirmed. Here rather than on every keystroke in the field, because
+        // this is where a typed handle stops being a half finished word.
+        accountNumbers.handlesSettled(AccountFetchDue.accounts(in: ev))
     }
 
     private func goBack() {

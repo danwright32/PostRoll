@@ -1,0 +1,8 @@
+{
+  "name": "a-failing-fetch-is-bounded",
+  "file": "PostRollApp/Sources/Services/AccountFetchDue.swift",
+  "find": "            return stats.fetchAttempts < maximumAttempts\n                || isPastTheStaleLine(stats, asOf: now)",
+  "replace": "            return true",
+  "test": "PostRollTests/AccountFetchDueTests/testAFailureStopsBeingRetriedAtTheBound",
+  "breaks": "a handle that always fails is asked about on every settle forever, and every attempt spends more of an hourly allowance to be told the same thing, which is exactly the shape recorded as L365 (#1004)"
+}

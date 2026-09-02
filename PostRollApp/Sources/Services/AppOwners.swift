@@ -36,9 +36,32 @@ struct AppOwners {
     var captionWork = CaptionWorkManager()
     /// The layout gallery's render of a day's candidate collages (#718).
     var collageLayouts = CollageLayoutLoader()
+    /// The automatic audience figures fetch (#1004).
+    var accountNumbers = AccountNumbersManager()
 }
 
 extension AppOwners {
+    /// Join the handle lookups to the figures fetch (#1004).
+    ///
+    /// Done here rather than at either end, because this is the one place that
+    /// already knows about both, and neither of them should have to know about
+    /// the other: the lookup manager stays ignorant of audience figures, and
+    /// the fetch stays ignorant of where a handle came from.
+    ///
+    /// Called once when the app builds its owners. Idempotent, because the
+    /// assignment replaces rather than appends.
+    func connectTheHandleTrigger() {
+        lookup.onHandlesSettled = { [accountNumbers] handles in
+            accountNumbers.handlesSettled(handles)
+        }
+        // And the export, which copies what it needs before detaching, gets
+        // the note the fetch leaves behind. Re-read on every trigger rather
+        // than once, because the note changes with each run.
+        accountNumbers.onNoteChanged = { [export] note in
+            export.accountNumbersNote = note
+        }
+    }
+
     /// Everything running right now, phrased for a sentence (#862).
     ///
     /// Derived from this struct rather than written out again, for the same
@@ -84,7 +107,8 @@ extension View {
             .environment(owners.reflow)
             .environment(owners.captionWork)
             .environment(owners.collageLayouts)
-            // What is running, derived from the nine above rather than named
+            .environment(owners.accountNumbers)
+            // What is running, derived from the ten above rather than named
             // again by whoever needs it (#862).
             .environment(\.workInFlight, owners.workInFlight)
     }

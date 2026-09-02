@@ -107,6 +107,18 @@ struct AccountStats: Codable, Equatable, Sendable {
     /// population: 2 of 122 accounts withhold it.
     var likesAreHidden: Bool { likesSource == .hidden }
 
+    /// How many times a fetch of this account has failed in a row (#1004).
+    ///
+    /// Zero after any success. The transient outcomes are deliberately not
+    /// terminal, because writing an account off on an error nobody understood
+    /// has no way back, and the cost of that is a handle which always fails
+    /// being asked about on every settle forever against an API metered by the
+    /// hour. This is what bounds it.
+    ///
+    /// Kept here rather than in the fetch, which answers about one account and
+    /// remembers nothing.
+    var fetchAttempts: Int = 0
+
     /// Marked private by hand (#982).
     ///
     /// Not detectable from the logged out page: an account serving a normal
@@ -161,6 +173,7 @@ struct AccountStats: Codable, Equatable, Sendable {
         reels           = try c.decodeIfPresent(Int.self, forKey: .reels)
         feed            = try c.decodeIfPresent(Int.self, forKey: .feed)
         isPrivate       = try c.decodeIfPresent(Bool.self, forKey: .isPrivate) ?? false
+        fetchAttempts   = try c.decodeIfPresent(Int.self, forKey: .fetchAttempts) ?? 0
     }
 
     init(followers: Int? = nil, likes: Int? = nil, comments: Int? = nil,
@@ -171,7 +184,8 @@ struct AccountStats: Codable, Equatable, Sendable {
          outcome: FetchOutcome? = nil,
          instagramID: String? = nil,
          reels: Int? = nil, feed: Int? = nil,
-         isPrivate: Bool = false) {
+         isPrivate: Bool = false,
+         fetchAttempts: Int = 0) {
         self.followers = followers
         self.likes = likes
         self.comments = comments
@@ -184,6 +198,7 @@ struct AccountStats: Codable, Equatable, Sendable {
         self.reels = reels
         self.feed = feed
         self.isPrivate = isPrivate
+        self.fetchAttempts = fetchAttempts
     }
 
     // MARK: - Merging, never rebuilding (#1003)
@@ -222,6 +237,15 @@ struct AccountStats: Codable, Equatable, Sendable {
         if let recordedOn = incoming.recordedOn { merged.recordedOn = recordedOn }
         // isPrivate is never carried by a fetch: it is a mark Dan makes by
         // hand and nothing else may clear it (#982).
+        //
+        // The attempt count moves with the OUTCOME, so a success clears it and
+        // a failure carries it forward. Without this the bound is a field
+        // nothing increments and the retry is unbounded with a number beside
+        // it (L46).
+        if let outcome = incoming.outcome {
+            merged.fetchAttempts = AccountFetchDue.attemptsAfter(outcome,
+                                                                 wasAt: fetchAttempts)
+        }
         return merged
     }
 
