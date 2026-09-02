@@ -1704,6 +1704,100 @@ actor PythonBridge {
         }
     }
 
+    /// One account's figures as the Python fetch reports them (#1004).
+    ///
+    /// Every field, including the ones that came back null, because
+    /// `AccountStats.merged` treats an absent field and a null one differently:
+    /// one replaces what is stored and the other leaves it alone (#1003).
+    struct AccountFigures: Codable, Equatable, Sendable {
+        let handle: String
+        let outcome: String
+        let followers: Int?
+        let likes: Int?
+        let comments: Int?
+        let likesHidden: Bool
+        let followersFromPage: Bool
+        let instagramID: String?
+        let reels: Int?
+        let feed: Int?
+        let detail: String
+
+        enum CodingKeys: String, CodingKey {
+            case handle, outcome, followers, likes, comments, detail, reels, feed
+            case likesHidden = "likes_hidden"
+            case followersFromPage = "followers_from_page"
+            case instagramID = "instagram_id"
+        }
+
+        /// What to merge into the account book.
+        ///
+        /// An outcome this build has no case for becomes `couldNotClassify`
+        /// rather than nothing: the Python side may learn a new one, and the
+        /// honest reading of a word we do not know is that the account was not
+        /// classified, which is retryable and claims nothing (L337).
+        func stats(recordedOn: Date) -> AccountStats {
+            AccountStats(
+                followers: followers,
+                likes: likes,
+                comments: comments,
+                recordedOn: recordedOn,
+                followersSource: followers == nil ? nil : .measured,
+                likesSource: likesHidden ? .hidden : (likes == nil ? nil : .measured),
+                commentsSource: comments == nil ? nil : .measured,
+                outcome: AccountStats.FetchOutcome(rawValue: outcome) ?? .couldNotClassify,
+                instagramID: instagramID,
+                reels: reels,
+                feed: feed)
+        }
+    }
+
+    /// What the app SENDS to the fetch.
+    ///
+    /// Built by a named function rather than inline, so the manifest contract
+    /// can be proved without running a subprocess: the check is that the app
+    /// keeps sending the keys Python reads, and it cannot be that if the only
+    /// way to see the manifest is to launch the interpreter.
+    static func buildAccountNumbersManifest(handles: [String]) -> [String: Any] {
+        ["handles": handles]
+    }
+
+    /// Ask Meta about a set of handles, through the shipping Python module.
+    func fetchAccountNumbers(handles: [String]) async throws -> [AccountFigures] {
+        let inputFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("postroll_accounts_in_\(UUID().uuidString).json")
+        let outputFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("postroll_accounts_out_\(UUID().uuidString).json")
+        defer {
+            try? FileManager.default.removeItem(at: inputFile)
+            try? FileManager.default.removeItem(at: outputFile)
+        }
+
+        try JSONSerialization
+            .data(withJSONObject: Self.buildAccountNumbersManifest(handles: handles))
+            .write(to: inputFile)
+
+        try await runProcess(args: [
+            "-m", "postroll.ai.account_numbers",
+            "--manifest", inputFile.path,
+            "--output", outputFile.path,
+        ])
+
+        // A missing output is a run that could not start, which is what the
+        // module does when there is no token: it refuses by name and writes
+        // NOTHING, so an empty file cannot be read as a fetch that answered
+        // about no accounts (L98).
+        guard FileManager.default.fileExists(atPath: outputFile.path) else {
+            throw PythonBridgeError.outputMissing
+        }
+        struct Answer: Codable { let accounts: [AccountFigures] }
+        do {
+            return try JSONDecoder().decode(Answer.self, from: Data(contentsOf: outputFile))
+                .accounts
+        } catch {
+            throw PythonBridgeError.invalidOutput(error.localizedDescription)
+        }
+    }
+
     func suggestHandles(performers: [Performer], org: String, venue: String, event: String) async throws -> [HandleSuggestion] {
         let inputFile = FileManager.default.temporaryDirectory
             .appendingPathComponent("postroll_suggest_input_\(UUID().uuidString).json")

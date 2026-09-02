@@ -774,6 +774,34 @@
       "suggestion": "swift"
     }
   },
+  "account_numbers": {
+    "_what": "One row per handle the automatic fetch asked Meta about, including the ones that failed, feeding AccountBook.merge and the collaborator ranking (#1002, #1004).",
+    "python": [
+      {
+        "module": "postroll/ai/account_numbers.py",
+        "function": "as_row",
+        "variable": "row"
+      }
+    ],
+    "swift": {
+      "kind": "reader",
+      "file": "PostRollApp/Sources/Services/PythonBridge.swift",
+      "function": "fetchAccountNumbers"
+    },
+    "keys": {
+      "handle": "swift",
+      "outcome": "swift",
+      "followers": "swift",
+      "likes": "swift",
+      "comments": "swift",
+      "likes_hidden": "swift",
+      "followers_from_page": "swift",
+      "instagram_id": "swift",
+      "reels": "swift",
+      "feed": "swift",
+      "detail": "swift"
+    }
+  },
   "_manifests_comment": [
     "The other direction (#266). Above: keys Python WRITES and Swift reads.",
     "Below: keys Python READS out of a manifest Swift built.",
@@ -1151,6 +1179,20 @@
       "keys": {
         "edits": "always",
         "brand_voice": "always"
+      }
+    },
+    "account_numbers": {
+      "_what": "The handles the automatic fetch should ask Meta about (#1004).",
+      "swift": "PythonBridge.fetchAccountNumbers",
+      "python": [
+        {
+          "module": "postroll/ai/account_numbers.py",
+          "function": "main",
+          "variable": "manifest"
+        }
+      ],
+      "keys": {
+        "handles": "always"
       }
     }
   }

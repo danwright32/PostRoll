@@ -47,15 +47,22 @@ from __future__ import annotations
 import html
 import json
 import re
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 from statistics import median
 from typing import Any, Callable, Mapping, Sequence
 
-from .meta_app import GRAPH_API_HOST, GRAPH_API_VERSION, QUERYING_ACCOUNT_ID
+from .meta_app import (
+    GRAPH_API_HOST,
+    GRAPH_API_VERSION,
+    QUERYING_ACCOUNT_ID,
+    TOKEN_ENV_VAR,
+)
 
 
 class Outcome(Enum):
@@ -623,3 +630,71 @@ def _decide_by_page(key: str, refusal: Response,
     return Figures(handle=key, outcome=outcome, quota=quota,
                    detail=f"Meta would not report on this account; the profile page "
                           f"was {verdict.value}.")
+
+
+# ── The command the app runs (#1004) ─────────────────────────────────────────
+
+def as_row(figures: Figures) -> dict[str, Any]:
+    """One account's answer, in the shape the Swift side merges.
+
+    Every field, including the ones that are None. A row that omitted its nulls
+    would be indistinguishable on the other side from a field the fetch had
+    nothing to say about, and `AccountStats.merged` treats those differently:
+    one replaces, the other leaves alone (#1003).
+    """
+    row = {
+        "handle": figures.handle,
+        "outcome": figures.outcome.value,
+        "followers": figures.followers,
+        "likes": figures.likes,
+        "comments": figures.comments,
+        "likes_hidden": figures.likes_hidden,
+        "followers_from_page": figures.followers_from_page,
+        "instagram_id": figures.instagram_id,
+        "reels": figures.reels,
+        "feed": figures.feed,
+        "detail": figures.detail,
+    }
+    return row
+
+
+def main(argv: Sequence[str],
+         fetch: Callable[..., Figures] = fetch) -> int:
+    """Answer about every handle in a manifest, and write the results.
+
+    `fetch` is a parameter so the suite can drive this without a token and
+    without the network. It defaults to the real one, so no call site can
+    accidentally get a fake: a seam whose default became the test double would
+    leave the app fetching nothing (L196).
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--manifest", required=True, type=Path)
+    parser.add_argument("--output", required=True, type=Path)
+    args = parser.parse_args(list(argv))
+
+    import os
+    token = os.environ.get(TOKEN_ENV_VAR)
+    if not token:
+        # Refused by name, and NOTHING is written. An empty output file would
+        # be read by the app as a fetch that answered about no accounts, and an
+        # empty token would be read by Meta as a rejected one, which reports a
+        # credential problem rather than a credential nobody has set (L138).
+        print(f"{TOKEN_ENV_VAR} is not set. See docs/META-APP.md.", file=sys.stderr)
+        return 2
+
+    manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+    handles = manifest["handles"]
+    rows = [as_row(fetch(handle, token=token)) for handle in handles]
+
+    # One row per handle asked about, including the failures. Dropping those
+    # would leave the app unable to tell an account it never asked about from
+    # one it asked about and could not reach.
+    args.output.write_text(json.dumps({"accounts": rows}, indent=1) + "\n",
+                           encoding="utf-8")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

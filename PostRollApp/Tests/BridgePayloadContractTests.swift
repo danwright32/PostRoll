@@ -128,6 +128,7 @@ final class BridgePayloadContractTests: XCTestCase {
         // looks broken.
         "ocr_performer", "program_piece", "program_scene", "ig_post",
         "insight_findings", "insight_finding", "blog_finding",
+        "account_numbers",
         "retried_blog_repair",
     ]
 
@@ -325,6 +326,81 @@ final class BridgePayloadContractTests: XCTestCase {
         XCTAssertEqual(s.confidence, "medium")
         try assertCovers("handle_suggestions",
                          ["name", "handle", "profile_url", "confidence", "note"])
+    }
+
+    func testAccountNumbersReadEveryDeclaredKey() throws {
+        // Every key, including the nulls, because `AccountStats.merged` treats
+        // an absent field and a null one differently: one replaces what is
+        // stored and the other leaves it alone (#1003). A row that dropped its
+        // nulls would silently stop clearing a figure the fetch no longer has.
+        let json = """
+        {"accounts": [{"handle": "someone", "outcome": "measured",
+          "followers": 1000, "likes": 50, "comments": 5,
+          "likes_hidden": false, "followers_from_page": false,
+          "instagram_id": "17841400000000000", "reels": 2, "feed": 4,
+          "detail": "Read from 12 recent posts."}]}
+        """
+        struct Answer: Codable { let accounts: [PythonBridge.AccountFigures] }
+        let out = try JSONDecoder().decode(Answer.self, from: Data(json.utf8))
+        let row = try XCTUnwrap(out.accounts.first)
+
+        XCTAssertEqual(row.handle, "someone")
+        XCTAssertEqual(row.outcome, "measured")
+        XCTAssertEqual(row.followers, 1_000)
+        XCTAssertEqual(row.instagramID, "17841400000000000")
+        XCTAssertEqual(row.reels, 2)
+        XCTAssertEqual(row.feed, 4)
+        XCTAssertFalse(row.likesHidden)
+        XCTAssertFalse(row.followersFromPage)
+
+        // And the whole point of carrying it: what lands in the book.
+        let stats = row.stats(recordedOn: Date(timeIntervalSince1970: 1_775_000_000))
+        XCTAssertEqual(stats.outcome, .measured)
+        XCTAssertEqual(stats.likesSource, .measured)
+
+        try assertCovers("account_numbers",
+                         ["handle", "outcome", "followers", "likes", "comments",
+                          "likes_hidden", "followers_from_page", "instagram_id",
+                          "reels", "feed", "detail"])
+    }
+
+    func testAWithheldLikeCountCrossesAsHiddenRatherThanAbsent() throws {
+        // The one field where null and refused are different things, so the
+        // boolean has to travel BESIDE the null rather than instead of it, and
+        // it has to still be hidden on the Swift side of the trip (#1032).
+        let json = """
+        {"accounts": [{"handle": "someone", "outcome": "measured",
+          "followers": 5244, "likes": null, "comments": 8,
+          "likes_hidden": true, "followers_from_page": false,
+          "instagram_id": null, "reels": null, "feed": null, "detail": ""}]}
+        """
+        struct Answer: Codable { let accounts: [PythonBridge.AccountFigures] }
+        let out = try JSONDecoder().decode(Answer.self, from: Data(json.utf8))
+        let stats = try XCTUnwrap(out.accounts.first)
+            .stats(recordedOn: Date(timeIntervalSince1970: 1_775_000_000))
+
+        XCTAssertNil(stats.likes)
+        XCTAssertEqual(stats.likesSource, .hidden)
+        XCTAssertTrue(stats.likesAreHidden)
+    }
+
+    func testAnOutcomeThisBuildDoesNotKnowCrossesAsUnclassified() throws {
+        // The Python side may learn an eighth outcome. The honest reading of a
+        // word we do not know is that the account was not classified, which is
+        // retryable and claims nothing, rather than throwing and losing the
+        // whole answer (L337).
+        let json = """
+        {"accounts": [{"handle": "someone", "outcome": "invented_later",
+          "followers": null, "likes": null, "comments": null,
+          "likes_hidden": false, "followers_from_page": false,
+          "instagram_id": null, "reels": null, "feed": null, "detail": ""}]}
+        """
+        struct Answer: Codable { let accounts: [PythonBridge.AccountFigures] }
+        let out = try JSONDecoder().decode(Answer.self, from: Data(json.utf8))
+        let stats = try XCTUnwrap(out.accounts.first)
+            .stats(recordedOn: Date(timeIntervalSince1970: 1_775_000_000))
+
+        XCTAssertEqual(stats.outcome, .couldNotClassify)
     }
 
     func testPieceNotesReadEveryDeclaredKey() throws {
