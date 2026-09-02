@@ -337,3 +337,146 @@ def test_a_carousel_entry_cleaned_in_place_is_kept(tmp_path):
     assert "alt_text_rewritten_by_review" not in codes, (
         "an accepted clean is not a fault, and reporting one on every tidied "
         "post is how a findings panel stops being read")
+
+
+# -- a reorder HIDING inside a reword (found by testing the shipped check) ----
+#
+# The reorder rule compares the two lists as multisets, so it only fires when
+# the entries come back byte identical in a different order. A pass that
+# reorders AND rewords defeats it: the entries stop looking like the same
+# sentences, the count is unchanged, and every entry is still over its word
+# floor, so all three rules pass and the post ships with every description
+# beside the wrong photograph. That is the failure #1214 was filed for, walking
+# back in through the check written to stop it.
+#
+# The alignment is what closes it. A genuine clean in place changes a few words,
+# so a returned description still resembles its own draft far more than it
+# resembles a neighbour's; a swap does the opposite.
+
+ONE = ("A dancer in blue light stands alone at the front of the stage with both "
+       "arms raised above her head while the company waits behind her in shadow")
+TWO = ("The full choir stands in four rows on the risers wearing black concert "
+       "dress with the accompanist visible at the piano on the left of the frame")
+THREE = ("The conductor raises both hands above the orchestra as the brass "
+         "section lifts their instruments and the first violins lean forward")
+
+
+def _long_draft():
+    return {"caption": "Three frames from the second half.",
+            "hashtags": ["#dwphotony"],
+            "alt_texts": [ONE, TWO, THREE],
+            "scene_labels": [None, None, None]}
+
+
+def test_a_reorder_hidden_inside_a_reword_is_still_refused(tmp_path):
+    draft = _long_draft()
+    sneaky = dict(draft, alt_texts=[
+        TWO.replace("The full choir", "The whole choir"),
+        ONE.replace("in blue light", "under blue light"),
+        THREE.replace("raises both hands", "lifts both hands"),
+    ])
+    for entry in sneaky["alt_texts"]:
+        assert len(entry.split()) >= 15, "the fixture must clear the word floor"
+    result = _through_review_passes([draft, sneaky], _three_photos(tmp_path),
+                                    post_type="carousel")
+    assert result["alt_texts"] == draft["alt_texts"], (
+        "the pass swapped the first two descriptions while rewording them, so "
+        "the multiset comparison could not see the swap and every description "
+        "shipped beside the wrong photograph")
+
+
+def test_a_plain_reword_in_the_same_slots_is_still_accepted(tmp_path):
+    """The positive control. An alignment strict enough to refuse every reword
+    would turn the humanizer back into a no-op on alt text, which is the thing
+    letting the tidy run was for (L143, L159)."""
+    draft = _long_draft()
+    cleaned = dict(draft, alt_texts=[
+        ONE.replace("in blue light", "under blue light"),
+        TWO.replace("The full choir", "The whole choir"),
+        THREE.replace("raises both hands", "lifts both hands"),
+    ])
+    result = _through_review_passes([draft, cleaned], _three_photos(tmp_path),
+                                    post_type="carousel")
+    assert result["alt_texts"] == cleaned["alt_texts"]
+
+
+def test_a_heavily_rewritten_entry_in_its_own_slot_is_not_called_a_reorder(tmp_path):
+    """A rewrite that shares almost nothing with the draft is not a swap, and
+    must not be reported as one: it has no better home than its own slot."""
+    draft = _long_draft()
+    rewritten = dict(draft, alt_texts=[
+        "Under a wash of blue the soloist holds both arms overhead at the lip "
+        "of the stage as her company waits in darkness behind",
+        TWO, THREE])
+    result = _through_review_passes([draft, rewritten], _three_photos(tmp_path),
+                                    post_type="carousel")
+    finding = [f for f in result["findings"]
+               if f["code"] == "alt_text_rewritten_by_review"]
+    assert not any("reorder" in f["detail"] for f in finding), finding
+
+
+# -- 1.2: one bad entry must not discard the tidy on all the others -----------
+
+
+def test_only_the_entry_that_failed_falls_back_to_the_draft(tmp_path):
+    draft = _long_draft()
+    mixed = dict(draft, alt_texts=[
+        ONE.replace("in blue light", "under blue light"),   # a fine clean
+        "The choir sings.",                                 # cut under the floor
+        THREE.replace("raises both hands", "lifts both hands"),
+    ])
+    result = _through_review_passes([draft, mixed], _three_photos(tmp_path),
+                                    post_type="carousel")
+    assert result["alt_texts"][0] == mixed["alt_texts"][0], (
+        "a good clean on photo one was thrown away because photo two's was bad")
+    assert result["alt_texts"][1] == TWO, "the bad entry must fall back"
+    assert result["alt_texts"][2] == mixed["alt_texts"][2]
+
+
+def test_the_report_names_the_entry_that_fell_back(tmp_path):
+    draft = _long_draft()
+    mixed = dict(draft, alt_texts=[ONE, "The choir sings.", THREE])
+    result = _through_review_passes([draft, mixed], _three_photos(tmp_path),
+                                    post_type="carousel")
+    finding = next(f for f in result["findings"]
+                   if f["code"] == "alt_text_rewritten_by_review")
+    assert "2" in finding["detail"], finding["detail"]
+
+
+def test_a_shape_fault_still_refuses_the_whole_list(tmp_path):
+    """A changed count or a reorder is not a per entry fault: the whole list's
+    alignment is what is wrong, so there is no good entry to keep."""
+    draft = _long_draft()
+    short = dict(draft, alt_texts=[TWO, THREE])
+    result = _through_review_passes([draft, short], _three_photos(tmp_path),
+                                    post_type="carousel")
+    assert result["alt_texts"] == draft["alt_texts"]
+
+
+def test_a_review_pass_that_adds_an_alt_text_is_refused(tmp_path):
+    """The one shape fault the alignment rule cannot see.
+
+    An entry APPENDED leaves the first three aligned perfectly, so nothing
+    about resemblance is wrong; what is wrong is that the post now carries
+    more descriptions than it has photographs, and everything downstream
+    indexes one list into the other.
+    """
+    draft = _long_draft()
+    padded = dict(draft, alt_texts=[ONE, TWO, THREE, "An invented fourth photo."])
+    result = _through_review_passes([draft, padded], _three_photos(tmp_path),
+                                    post_type="carousel")
+    assert result["alt_texts"] == draft["alt_texts"]
+    assert len(result["alt_texts"]) == len(result["alt_text_photo_paths"])
+
+
+def test_the_reorder_report_says_it_was_a_reorder(tmp_path):
+    """Four faults sharing one sentence tell the reader nothing about what the
+    pass actually did, and they want different responses (L11)."""
+    draft = _long_draft()
+    swapped = dict(draft, alt_texts=[TWO, ONE, THREE])
+    result = _through_review_passes([draft, swapped], _three_photos(tmp_path),
+                                    post_type="carousel")
+    finding = next(f for f in result["findings"]
+                   if f["code"] == "alt_text_rewritten_by_review")
+    assert "slot" in finding["detail"] or "moved" in finding["detail"], (
+        finding["detail"])

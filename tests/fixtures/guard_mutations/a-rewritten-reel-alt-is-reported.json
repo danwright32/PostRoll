@@ -1,8 +1,8 @@
 {
   "name": "a-rewritten-reel-alt-is-reported",
   "file": "postroll/ai/generate_captions.py",
-  "find": "            code=\"alt_text_rewritten_by_review\",",
-  "replace": "            code=\"alt_text_review_noise\",",
-  "test": "tests/test_reel_alt_text_describes_the_reel.py::test_the_rewrite_is_reported_rather_than_only_undone",
-  "breaks": "the refusal stops reaching the review screen under the code anything reads, so putting the draft's alt text back becomes silent again and a pass that ignored the instruction is indistinguishable from one that obeyed it, which is the evidence destroying shape #1067's third cause was filed for (L340)"
+  "find": "            detail=(f\"The pass {shape_fault}. \"",
+  "replace": "            detail=(f\"\"",
+  "test": "tests/test_alt_text_photo_anchor.py::test_the_reorder_report_says_it_was_a_reorder",
+  "breaks": "a shape fault reaches the review screen naming nothing, so a reorder, a dropped entry and an added one all read the same. Putting the draft's alt text back destroys the only evidence a pass ignored the instruction, and a report that cannot say WHICH fault happened leaves the reader unable to act (L11, L340)"
 }

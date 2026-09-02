@@ -1,0 +1,8 @@
+{
+  "name": "a-reorder-hiding-inside-a-reword-is-caught",
+  "file": "postroll/ai/generate_captions.py",
+  "find": "            if theirs > mine and theirs >= _SWAP_RESEMBLANCE:",
+  "replace": "            if False:",
+  "test": "tests/test_alt_text_photo_anchor.py::test_a_reorder_hidden_inside_a_reword_is_still_refused",
+  "breaks": "a review pass that reorders the alt texts AND rewords them slips through every other rule at once: the multiset comparison stops seeing a swap the moment the words change, the count is unchanged, and each entry still clears its word floor. Every description then ships beside the wrong photograph, which is the failure #1214 was filed for walking back in through the check written to stop it"
+}
