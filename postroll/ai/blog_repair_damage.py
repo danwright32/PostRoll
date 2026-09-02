@@ -380,8 +380,11 @@ def blog_repair_damage(
 
     # -- 2. the order of the markers it was not allowed to touch -------------
     #
-    # The repo's only marker guard sorts (`ai_tells.markers_preserved_validator`),
-    # so it cannot see a reorder at all. This compares the ordered list.
+    # This compares the ORDERED list. Until #1141 it was the only thing in the
+    # repo that did: `ai_tells.markers_preserved_validator` sorted, so a reorder
+    # was invisible to it. That validator now compares ordered
+    # (filename, alt text) pairs as well, and this stays because it answers a
+    # different question: which markers this repair was ALLOWED to touch.
     kept_before = [k for k in _marker_keys(prior) if k not in touched.markers]
     kept_after = [k for k in _marker_keys(revised) if k not in touched.markers]
     if kept_before != kept_after:

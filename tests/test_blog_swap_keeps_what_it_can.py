@@ -12,8 +12,10 @@ Three defects that are live today, closed here:
   * the retained photographs are re-described at all;
   * the prompt says "Do NOT change any prose. Not one word" and NOTHING verified
     it: the call has no validator;
-  * a marker moving to a different point in the post is invisible, because the
-    repo's only marker guard sorts.
+  * a marker moving to a different point in the post is invisible, because at
+    the time the repo's only marker guard sorted. Since #1141 it compares the
+    ordered (filename, alt text) pairs, but this path is guarded by the splice
+    rather than by that validator.
 
 The fallback is a COST regression, never a correctness one, and it is announced
 because it is a failure of the app's own machinery rather than a finding about

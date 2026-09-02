@@ -281,8 +281,11 @@ def revise_blog(
     # Every marker restored from the body being revised (#1131).
     #
     # A revision is under orders to keep each `[PHOTO: filename | alt text]`
-    # verbatim and nothing checked it: the repo's only marker guard sorts the
-    # filenames and never reads the alt text. The splice makes the instruction
+    # verbatim and nothing checked it: until #1141 the repo's only marker guard
+    # sorted the filenames and never read the alt text. It now sees both, and
+    # the splice stays, because seeing the fault and repairing it are different
+    # things: a validator can only REFUSE, and refusing here discards a review
+    # pass that has already been paid for. The splice makes the instruction
     # unnecessary rather than better worded, needs no photograph, and costs
     # nothing.
     #
