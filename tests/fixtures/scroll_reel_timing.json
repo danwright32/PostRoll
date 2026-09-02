@@ -22,5 +22,18 @@
   "fps": 30,
   "viewport_h": 1430,
   "ease_ramp": 0.15,
-  "cruise_factor": 1.1764705882352942
+  "cruise_factor": 1.1764705882352942,
+  "comfortable_travel_px": 10.81,
+  "measured_reels": [
+    {
+      "name": "Battery Dance Festival",
+      "photos": 234,
+      "strip_h": 29000
+    },
+    {
+      "name": "DiGangi With A G",
+      "photos": 149,
+      "strip_h": 18695
+    }
+  ]
 }

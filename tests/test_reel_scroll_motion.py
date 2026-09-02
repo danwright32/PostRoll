@@ -37,15 +37,13 @@ from postroll.media import generate_reel_scroll as scroll_mod
 REPORTED_STRIP_H = 29000
 REPORTED_DURATION = 35.0
 
-#: What a frame may advance before the scroll reads as rushed, in the units the
-#: renderer works in and at the frame rate that actually ships.
+#: What a frame may advance before the scroll reads as rushed.
 #:
-#: Not chosen from theory. Dan judged a ladder of the reported reel on
-#: 2026-08-30, one layout, one photo set, speed the only variable: 11.50 px a
-#: frame read as fast and 10.81 read as right. Instagram re-encodes every reel
-#: to 30fps regardless of what it is given, so these are the numbers a viewer
-#: sees rather than numbers only the master has.
-COMFORTABLE_TRAVEL_PX = 10.81
+#: Read from the module rather than restated here since #1066: the app computes
+#: its speed warning from the same number, and two copies of a value Dan
+#: calibrated by watching ten reels is exactly the split that lets the warning
+#: and the reel disagree about what comfortable means.
+COMFORTABLE_TRAVEL_PX = scroll_mod.COMFORTABLE_TRAVEL_PX
 
 #: What the reported reel needs to reach that speed, given its 234 photographs.
 #: Its shipped 35s is a third of this, which is the defect, and the fix belongs

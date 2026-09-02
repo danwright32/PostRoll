@@ -42,4 +42,110 @@ enum ScrollReelTiming {
         return "This track is \(Int(trackSeconds.rounded())) seconds and the reel "
             + "is \(Int(reel.rounded())), so the music will repeat to cover the rest."
     }
+
+    // MARK: - How fast it reads (#1066)
+    //
+    // Dan, 2026-08-30: "in general I think it's too fast though. Is there a
+    // warning we can put if it's running too fast?"
+    //
+    // Every number here is held to `tests/fixtures/scroll_reel_timing.json`,
+    // so the sentence the editor shows and the reel the encoder makes cannot
+    // describe different speeds.
+
+    /// The frame rate the reel is encoded at, and that Instagram re-encodes to.
+    static let fps: Double = 30
+
+    /// How much of the gallery a viewer sees at once. The reading below is
+    /// expressed as how long a full screen takes to be replaced, because that
+    /// is a quantity a person can picture; pixels per frame is not.
+    static let viewportHeight: Double = 1430
+
+    /// How much faster the constant middle of the scroll runs than its average,
+    /// since the ends are ramps. The middle is what a viewer is watching.
+    static let cruiseFactor: Double = 1.0 / (1.0 - 0.15)
+
+    /// The speed Dan settled on by watching a ladder of ten renders of one
+    /// reel on 2026-08-30: 11.50px a frame read as fast, 10.81 read as right.
+    static let comfortableTravelPx: Double = 10.81
+
+    /// How far the strip travels in total. A strip no taller than the viewport
+    /// does not scroll at all.
+    static func scrollTravel(stripHeight: Double) -> Double {
+        max(0, stripHeight - viewportHeight)
+    }
+
+    /// How far the strip advances between frames, at cruise.
+    static func travelPerFrame(stripHeight: Double, scrollSeconds: Double) -> Double {
+        guard scrollSeconds > 0 else { return 0 }
+        return scrollTravel(stripHeight: stripHeight) / (scrollSeconds * fps) * cruiseFactor
+    }
+
+    /// How long the gallery takes to replace one full screen.
+    static func secondsPerScreen(stripHeight: Double, scrollSeconds: Double) -> Double {
+        let perFrame = travelPerFrame(stripHeight: stripHeight, scrollSeconds: scrollSeconds)
+        guard perFrame > 0 else { return .infinity }
+        return viewportHeight / perFrame / fps
+    }
+
+    /// The scroll length that would bring this strip to the comfortable speed.
+    static func comfortableScrollSeconds(stripHeight: Double) -> Double {
+        let travel = scrollTravel(stripHeight: stripHeight)
+        guard travel > 0 else { return 0 }
+        return travel * cruiseFactor / (fps * comfortableTravelPx)
+    }
+
+    /// Roughly how many photographs would reach the comfortable speed at this
+    /// length, given how tall the ones already chosen made the strip.
+    ///
+    /// Approximate, and deliberately so: the masonry layout is Python's and
+    /// the exact height of a different photo set cannot be known here. The
+    /// strip's height per photograph is taken from the set in hand, which is
+    /// the same estimate #1066 used to arrive at its own figure, and it is
+    /// offered as a number to aim at rather than a promise.
+    static func comfortablePhotoCount(stripHeight: Double, photoCount: Int,
+                                      scrollSeconds: Double) -> Int {
+        guard photoCount > 0, scrollSeconds > 0, stripHeight > 0 else { return 0 }
+        let perPhoto = stripHeight / Double(photoCount)
+        let allowedTravel = comfortableTravelPx * scrollSeconds * fps / cruiseFactor
+        let allowedStrip = allowedTravel + viewportHeight
+        return max(1, Int((allowedStrip / perPhoto).rounded(.down)))
+    }
+
+    /// One sentence when the reel is faster than is comfortable to watch, else
+    /// nil. A warning only: Dan may well want a fast one deliberately, and this
+    /// blocks no render and changes no reel.
+    ///
+    /// It names BOTH remedies with real numbers, and which one it leads with is
+    /// decided by whether the slider can actually reach the answer. At 234
+    /// photographs the slider's 60 second maximum still leaves the reel faster
+    /// than one Dan had already called too fast, so naming only the duration
+    /// would point at a control that cannot solve the problem (L80, L111).
+    static func speedNotice(stripHeight: Double, photoCount: Int,
+                            scrollSeconds: Double) -> String? {
+        guard photoCount > 0, scrollSeconds > 0 else { return nil }
+        let perFrame = travelPerFrame(stripHeight: stripHeight, scrollSeconds: scrollSeconds)
+        guard perFrame > comfortableTravelPx else { return nil }
+
+        let screen = secondsPerScreen(stripHeight: stripHeight, scrollSeconds: scrollSeconds)
+        let opening = String(
+            format: "This reel replaces the whole screen every %.1f seconds, "
+                  + "which is faster than is comfortable to watch. ", screen)
+
+        let needed = comfortableScrollSeconds(stripHeight: stripHeight)
+        if needed <= sliderMaximumSeconds {
+            return opening + "Try \(Int(needed.rounded())) seconds."
+        }
+
+        let fewer = comfortablePhotoCount(stripHeight: stripHeight,
+                                          photoCount: photoCount,
+                                          scrollSeconds: sliderMaximumSeconds)
+        return opening
+            + "Even at \(Int(sliderMaximumSeconds)) seconds it would still be too "
+            + "fast, so this one needs about \(fewer) photographs rather than "
+            + "\(photoCount)."
+    }
+
+    /// The longest scroll the editor offers, from the reel length presets.
+    /// Named here because the notice's choice of remedy turns on it.
+    static let sliderMaximumSeconds: Double = 60
 }
