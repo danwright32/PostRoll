@@ -1,0 +1,8 @@
+{
+  "name": "the-assumed-rate-comes-from-the-comparable-band",
+  "file": "postroll/ai/collaborator_metric.py",
+  "find": "ASSUMED_BAND = (104, 3_422)",
+  "replace": "ASSUMED_BAND = (0, 100_000_000)",
+  "test": "tests/test_collaborator_metric.py::test_the_assumed_rate_comes_from_the_comparable_follower_band",
+  "breaks": "the rate assumed for an account Meta refuses is drawn from the whole population rather than from accounts its own size, so it is pulled by audiences nothing like theirs and every refused account is scored on a number measured somewhere else (#1114)"
+}
