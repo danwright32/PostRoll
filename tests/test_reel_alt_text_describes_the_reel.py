@@ -290,3 +290,92 @@ def test_a_per_frame_draft_is_still_collapsed_and_reported(sample_photo):
     assert len(result["alt_texts"]) == 1
     codes = [f["code"] for f in result["findings"]]
     assert "alt_text_per_frame" in codes
+
+
+# -- the tidy is allowed back, and its RESULT is checked ----------------------
+#
+# Holding alt text out of the review passes entirely stopped the condensation,
+# and it also stopped the humanizer cleaning an AI tell out of an alt text,
+# which it is explicitly asked to do ("preserve count and order, clean each item
+# in place"). Dan's call, 2026-09-02: it should work everywhere.
+#
+# So the action is allowed and the RESULT is judged, which needs a check that
+# tells a clean from a condensation. There is one, and it comes from the
+# instruction itself: the scroll reel rule asks for 25 to 50 words. Measured
+# against the live store the same day, 7 of 21 shipped Thursday alt texts fall
+# under that floor and every one of them is in the single moment group, while
+# none of the 9 reel level ones do.
+#
+# The floor sits in the dense middle of the real distribution (24, 24, 24, 25,
+# 25, 25), so it will fire on near boundary cases (L172). That is affordable
+# ONLY because refusing a tidy keeps the draft's own alt text, so the cost of
+# being wrong is a lost tidy rather than a wrong description.
+
+REEL_LEVEL_ALT = (
+    "A photo scroll through the Battery Dance Festival at Rockefeller Park, "
+    "covering the evening's six companies from the opening solo through the "
+    "ensemble sections to the final bow, lit in blue and pink against the "
+    "harbour behind the stage.")
+
+
+def test_a_reel_alt_the_tidy_left_long_enough_is_kept(sample_photo):
+    """The whole point of letting the tidy run: its work must survive."""
+    draft = dict(COMPLIANT, alt_texts=[REEL_LEVEL_ALT])
+    tidied = REEL_LEVEL_ALT.replace("covering", "moving through")
+    assert len(tidied.split()) >= 25
+    result = _capture_through_passes(
+        [draft, dict(draft, alt_texts=[tidied])],
+        photo_paths=[sample_photo], post_type="scroll_reel", post_photo_count=234)
+    assert result["alt_texts"] == [tidied], (
+        "the humanizer is asked to clean each alt text in place, so a clean "
+        "that kept the reel level description must reach the post")
+
+
+def test_a_tidy_that_lengthens_a_short_reel_alt_is_kept(sample_photo):
+    # A tidy moving a too-short alt TOWARDS the floor is the opposite of the
+    # fault, so the floor must not refuse it.
+    draft = dict(COMPLIANT, alt_texts=[ONE_FRAME])
+    result = _capture_through_passes(
+        [draft, dict(draft, alt_texts=[REEL_LEVEL_ALT])],
+        photo_paths=[sample_photo], post_type="scroll_reel", post_photo_count=234)
+    assert result["alt_texts"] == [REEL_LEVEL_ALT]
+
+
+def test_a_reel_alt_condensed_under_its_own_floor_is_still_refused(sample_photo):
+    draft = dict(COMPLIANT, alt_texts=[REEL_LEVEL_ALT])
+    result = _capture_through_passes(
+        [draft, dict(draft, alt_texts=[ONE_FRAME])],
+        photo_paths=[sample_photo], post_type="scroll_reel", post_photo_count=234)
+    assert result["alt_texts"] == [REEL_LEVEL_ALT]
+
+
+def test_the_refusal_says_it_was_the_word_floor(sample_photo):
+    # Distinct reasons want distinct sentences: a condensation, a reorder and a
+    # dropped entry are three different things a pass did (L11).
+    draft = dict(COMPLIANT, alt_texts=[REEL_LEVEL_ALT])
+    result = _capture_through_passes(
+        [draft, dict(draft, alt_texts=[ONE_FRAME])],
+        photo_paths=[sample_photo], post_type="scroll_reel", post_photo_count=234)
+    finding = next(f for f in result["findings"]
+                   if f["code"] == "alt_text_rewritten_by_review")
+    assert "25" in finding["detail"], finding["detail"]
+
+
+def test_every_post_type_alt_instruction_states_a_word_floor():
+    """The floor is READ from each post type's own instruction rather than
+    written down beside it, so the two cannot drift (L41). That only holds
+    while every instruction actually states one, and an instruction reworded
+    without its numbers would silently switch the check off (L113, L100)."""
+    from postroll.ai.generate_captions import (
+        ALT_TEXT_INSTRUCTION, DEFAULT_ALT_TEXT_INSTRUCTION, _alt_word_floor,
+        _word_floor_in)
+    assert _word_floor_in(DEFAULT_ALT_TEXT_INSTRUCTION) is not None
+    for post_type in ALT_TEXT_INSTRUCTION:
+        assert _alt_word_floor(post_type) is not None, post_type
+    assert _alt_word_floor("scroll_reel") == 25
+    assert _alt_word_floor("carousel") == 15
+
+
+def test_a_post_type_with_no_instruction_still_gets_the_default_floor():
+    from postroll.ai.generate_captions import _alt_word_floor
+    assert _alt_word_floor("feed_photo") == 15

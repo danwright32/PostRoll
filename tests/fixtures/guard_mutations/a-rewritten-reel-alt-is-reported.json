@@ -1,8 +1,8 @@
 {
   "name": "a-rewritten-reel-alt-is-reported",
   "file": "postroll/ai/generate_captions.py",
-  "find": "    if produced != draft_alt_texts:",
-  "replace": "    if False:",
+  "find": "            code=\"alt_text_rewritten_by_review\",",
+  "replace": "            code=\"alt_text_review_noise\",",
   "test": "tests/test_reel_alt_text_describes_the_reel.py::test_the_rewrite_is_reported_rather_than_only_undone",
-  "breaks": "putting the draft's alt text back becomes silent, and a pass that rewrote the alt is then indistinguishable from one that reproduced it exactly, because both leave the same result behind. That is the same evidence destroying shape as the collapse #1067's third cause was filed for (#1067, #1214, L340)"
+  "breaks": "the refusal stops reaching the review screen under the code anything reads, so putting the draft's alt text back becomes silent again and a pass that ignored the instruction is indistinguishable from one that obeyed it, which is the evidence destroying shape #1067's third cause was filed for (L340)"
 }

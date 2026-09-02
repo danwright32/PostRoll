@@ -319,3 +319,21 @@ def test_the_passes_can_still_improve_a_carousels_caption(tmp_path):
         [draft, dict(draft, caption="A tighter caption.")],
         _three_photos(tmp_path), post_type="carousel")
     assert result["caption"] == "A tighter caption."
+
+
+def test_a_carousel_entry_cleaned_in_place_is_kept(tmp_path):
+    """The humanizer is asked to clean each alt text in place, and on a per
+    photo post that is safe: the count and the order are what carry the
+    alignment, and both are checked. Refusing this too would have made the
+    humanizer pass a no-op on alt text for every post type (Dan, 2026-09-02).
+    """
+    draft = _carousel_draft()
+    cleaned = dict(draft, alt_texts=["alt for one, tidied", "alt for two",
+                                     "alt for three"])
+    result = _through_review_passes([draft, cleaned], _three_photos(tmp_path),
+                                    post_type="carousel")
+    assert result["alt_texts"] == cleaned["alt_texts"]
+    codes = [f["code"] for f in result["findings"]]
+    assert "alt_text_rewritten_by_review" not in codes, (
+        "an accepted clean is not a fault, and reporting one on every tidied "
+        "post is how a findings panel stops being read")

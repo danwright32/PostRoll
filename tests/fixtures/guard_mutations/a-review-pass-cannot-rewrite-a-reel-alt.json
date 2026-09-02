@@ -1,8 +1,8 @@
 {
   "name": "a-review-pass-cannot-rewrite-a-reel-alt",
   "file": "postroll/ai/generate_captions.py",
-  "find": "    data = dict(data, alt_texts=draft_alt_texts)",
-  "replace": "    pass",
-  "test": "tests/test_reel_alt_text_describes_the_reel.py::test_the_voice_pass_cannot_condense_a_reel_alt_to_one_frame",
-  "breaks": "the voice and humanizer passes get the alt text back, and neither carries the post type, so a compliant reel level alt can be condensed into a single frame description by a later stage while the stage that enforced the rule has already run. A screen reader user is then told a 234 photo reel is a picture of four dancers, and on a per photo post the same rewrite shifts every alt text onto a different photograph (#1067, #1214, L280)"
+  "find": "        data = dict(data, alt_texts=draft_alt_texts)",
+  "replace": "        pass",
+  "test": "tests/test_reel_alt_text_describes_the_reel.py::test_a_reel_alt_condensed_under_its_own_floor_is_still_refused",
+  "breaks": "a refused review pass keeps its own alt text anyway, so the refusal is a message with no effect: a reel level description condensed into one frame's still ships, and a per photo post's reordered alt texts still sit beside the wrong photographs (#1067, #1214)"
 }

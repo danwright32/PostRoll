@@ -672,6 +672,85 @@ def _alt_text_instruction_for(post_type: str) -> str:
     return ALT_TEXT_INSTRUCTION.get(post_type, DEFAULT_ALT_TEXT_INSTRUCTION)
 
 
+_WORD_RANGE_RE = re.compile(r"(\d+)\s*[-\u2013\u2014]\s*(\d+)\s*words", re.I)
+
+
+def _word_floor_in(instruction: str) -> int | None:
+    """The smaller half of the "25-50 words" range an alt instruction states."""
+    match = _WORD_RANGE_RE.search(instruction or "")
+    return int(match.group(1)) if match else None
+
+
+def _alt_word_floor(post_type: str) -> int | None:
+    """The minimum word count this post type's OWN alt instruction asks for.
+
+    Read out of the instruction rather than written down beside it, so the
+    check and the thing it checks cannot drift into two numbers (L41).
+
+    None means the instruction states no range, which switches the floor check
+    off for that post type. `test_every_post_type_alt_instruction_states_a_word_floor`
+    is what keeps that unreachable: an instruction reworded without its numbers
+    fails the suite rather than silently disabling the check (L113, L100).
+    """
+    return _word_floor_in(_alt_text_instruction_for(post_type))
+
+
+def _review_alt_change_refused(post_type: str, draft: object,
+                               produced: object) -> str | None:
+    """Why a review pass's alt texts are refused, or None to accept them.
+
+    Both review prompts ask the passes to "preserve count and order, clean each
+    item in place". Cleaning is the humanizer's job and is wanted; the other two
+    are the damage. So the ACTION is allowed and the RESULT is judged, which
+    needs a check that can tell a clean from the damage.
+
+    Three things are checkable and each gets its own sentence (L11):
+
+    * a changed COUNT, which shifts every later entry onto a different
+      photograph, and is the worst of the three;
+    * a pure REORDER, the same entries in a different order, which puts each
+      description beside somebody else's photograph;
+    * a CONDENSATION, an entry cleaned down under the word floor its own
+      instruction sets. That is the reel failure: #1067 measured 7 of 21 shipped
+      Thursday alt texts under the floor and every one of them describing a
+      single moment, while none of the 9 reel level ones fell under it.
+
+    What is NOT checkable is an entry rewritten in place into a description of
+    something else at the same length. Nothing cheap can see that, and this does
+    not pretend to.
+
+    The condensation rule needs the entry to be BOTH under the floor and shorter
+    than the draft's, so a clean that leaves an already short alt alone, or one
+    that lengthens it towards the floor, is not refused for a fault it did not
+    commit.
+    """
+    if not isinstance(produced, list) or not isinstance(draft, list):
+        # Either side not being a list is a shape nothing downstream indexes
+        # into safely, so the draft stands.
+        return (f"returned {type(produced).__name__} where the draft had "
+                f"{type(draft).__name__}")
+
+    if len(produced) != len(draft):
+        return (f"returned {len(produced)} alt texts where the draft had "
+                f"{len(draft)}, which moves every entry after the change onto "
+                f"a different photograph")
+
+    if produced != draft and sorted(produced, key=str) == sorted(draft, key=str):
+        return ("reordered the alt texts, so each description now sits beside "
+                "a different photograph")
+
+    floor = _alt_word_floor(post_type)
+    if floor is not None:
+        for index, (was, now) in enumerate(zip(draft, produced)):
+            words = len(str(now).split())
+            if words < floor and words < len(str(was).split()):
+                return (f"cut alt text {index + 1} to {words} words, under the "
+                        f"{floor} word floor a {post_type} asks for, which is "
+                        f"what condensing a whole post into one frame's "
+                        f"description looks like")
+    return None
+
+
 def _rewritten_alt_detail(draft: object, produced: object) -> str:
     """What a review pass did to the alt texts, said in the unit that matters.
 
@@ -958,50 +1037,45 @@ def generate_caption(
     # per photo anyway, and say so rather than swallowing it (#1067).
     per_frame_findings: list[Finding] = []
 
-    # The draft's alt text put back, whatever the post type (#1067, #1214).
+    # The review passes may clean the alt text; what they may not do is change
+    # its shape (#1067, #1214, and Dan's call on 2026-09-02).
     #
-    # Both review prompts DO carry a rule about these lists: "for lists of
-    # strings (alt_texts, scene_labels), preserve count and order, clean each
-    # item in place" (`ai_tells.py`). So the passes are licensed to clean an
-    # alt text in place, and forbidden to reorder or recount them, and nothing
-    # enforced either half. A rule that lives only in a prompt is a hope (L27).
-    #
-    # This withdraws the licence rather than enforcing the prohibition, and
-    # that is a deliberate trade with a cost: an AI tell inside an alt text now
-    # survives the humanizer. It is worth paying, because the two cannot be
-    # told apart after the fact on a single entry list, which is exactly the
-    # reel case: condensing a reel level alt into one frame's description IS a
-    # clean in place by every measure available here. Correct and plainly
-    # written beats well written and about the wrong photograph, for a sentence
-    # that is the whole post to a screen reader user. `strip_em_dashes` still
-    # runs over alt_texts deterministically below.
-    #
-    # #1067 did this for the post types taking ONE post level alt, where the
-    # fault is a reel described as a single frame. #1214 is the rest of it: on a
-    # per photo post the list's POSITION is its meaning, so a pass that reorders
-    # the entries, drops one, or merges two shifts every alt text after that
-    # point onto the wrong photograph. That is #1008's failure by another route,
-    # and invisible for the same reason: each sentence is true of SOME
+    # Both review prompts already ask for exactly this: "for lists of strings
+    # (alt_texts, scene_labels), preserve count and order, clean each item in
+    # place" (`ai_tells.py`). Nothing enforced either half, so a pass could
+    # condense a reel level description into one frame's, and on a per photo
+    # post could reorder or drop entries and shift every later alt text onto a
+    # different photograph. That second one is #1008's failure by another
+    # route, and invisible for the same reason: each sentence is true of SOME
     # photograph in the post, so a sighted read does not catch it.
     #
-    # Reported as well as undone, because putting it back DESTROYS the only
-    # evidence the pass ignored it: a pass that rewrote the alt and one that
-    # reproduced it exactly leave an identical result behind (L340). This repo
-    # has already shipped that exact shape once, which is #1067's third cause.
+    # #1067 and #1214 first held alt text out of the rewrite entirely, which
+    # stopped the damage and also stopped the cleaning the humanizer is there
+    # to do. So the action is allowed and the RESULT is judged instead:
+    # `_review_alt_change_refused` says which of the three checkable faults a
+    # pass committed, and only then does the draft's alt text stand.
     #
-    # Restored even when the draft produced no alt text at all, so a pass can
-    # never invent one: an alt text written by a stage that never saw the
-    # photographs is the failure this is here to prevent, and a missing alt
-    # reads as missing rather than as plausibly wrong.
+    # Refusing rather than repairing, deliberately: the pass's whole answer for
+    # this field is discarded, so a refusal costs the cleaning and never the
+    # correctness. A rule that lives only in a prompt is a hope (L27); this is
+    # the same rule with something reading the answer.
+    #
+    # Reported, because a refusal is evidence a pass ignored an instruction and
+    # putting the draft back destroys it (L340). Not reported when the pass is
+    # accepted: this fires on real weeks, and a finding on every tidied post is
+    # a panel that gets skimmed (L36).
     produced = data.get("alt_texts")
-    if produced != draft_alt_texts:
+    refusal = _review_alt_change_refused(post_type, draft_alt_texts, produced)
+    if refusal is not None:
         per_frame_findings.append(Finding(
             code="alt_text_rewritten_by_review",
-            message=("A review pass rewrote this post's alt text. The "
-                     "draft's own alt text is what shipped."),
-            detail=_rewritten_alt_detail(draft_alt_texts, produced),
+            message=("A review pass changed this post's alt text in a way it "
+                     "was not asked to. The draft's own alt text is what "
+                     "shipped."),
+            detail=(f"The pass {refusal}. "
+                    + _rewritten_alt_detail(draft_alt_texts, produced)),
         ))
-    data = dict(data, alt_texts=draft_alt_texts)
+        data = dict(data, alt_texts=draft_alt_texts)
 
     alt_texts = data.get("alt_texts") or []
     scene_labels = data.get("scene_labels") or []
