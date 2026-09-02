@@ -902,20 +902,6 @@ struct CaptionSection: View {
                                     .padding(Spacing.md)
                                 }
 
-                                if day == .thursday, let coverURL {
-                                    CoverSlotView(
-                                        coverURL: coverURL,
-                                        rationale: coverRationale,
-                                        isRegenerating: isCoverRegenerating,
-                                        regenStartedAt: coverRegenStartedAt,
-                                        onPreview: { onPreview?(coverURL) },
-                                        onRegenerate: onRegenerateCover,
-                                        onChooseOverride: onChooseCoverOverride,
-                                        maxHeight: 160
-                                    )
-                                    .padding(.horizontal, Spacing.md)
-                                }
-
                                 Spacer(minLength: 0)
                             }
                             .frame(maxWidth: .infinity, maxHeight: storyExpandedMaxHeight)

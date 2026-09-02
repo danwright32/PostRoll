@@ -52,7 +52,7 @@ def test_override_mode_renders_directly_without_claude_call(monkeypatch, tmp_pat
     monkeypatch.setattr(gc_mod, "generate_story", fake_generate_story)
 
     result = gc_mod.generate_cover(
-        day_name="thursday", day_info={}, event="Test Show", org="Org", venue="Hall",
+        day_name="friday", day_info={}, event="Test Show", org="Org", venue="Hall",
         output_path=str(output), override_source=str(source),
     )
 
@@ -60,38 +60,40 @@ def test_override_mode_renders_directly_without_claude_call(monkeypatch, tmp_pat
     assert result == {"cover": str(output)}
 
 
-def test_thursday_regenerate_mode_picks_from_day_photos(monkeypatch, tmp_path):
-    photos = []
-    for i in range(3):
-        p = tmp_path / f"p{i}.jpg"
-        Image.new("RGB", (400, 600), (i * 10, 0, 0)).save(p)
-        photos.append(str(p))
+def test_thursday_is_refused_even_with_an_override(tmp_path):
+    """Thursday's regenerate branch is gone (#961), and the refusal is BY NAME
+    and BEFORE the override branch.
+
+    The app's control is gone with it, but this is a CLI entry point and every
+    Thursday made before the change still carries a `cover_source` in
+    events.json, so the override path is exactly the one a stale caller
+    reaches. `override_source` is tested before the day is, so without a named
+    refusal Thursday would fall through it and write a story composite into a
+    day whose export is not supposed to have one, quietly and successfully
+    (L214).
+
+    This replaces the test that asserted Thursday PICKS a cover from the day's
+    photos. Its whole content was the behaviour being removed, so it is deleted
+    rather than adjusted.
+    """
+    source = tmp_path / "chosen.jpg"
+    Image.new("RGB", (400, 600), "blue").save(source)
     output = tmp_path / "cover.png"
 
-    def fake_select_cover_photo(candidates, **kwargs):
-        assert candidates == [{"path": p} for p in photos]
-        return {"index": 1, "path": photos[1], "rationale": "sharp soloist"}
+    with pytest.raises(ValueError, match="thursday"):
+        gc_mod.generate_cover(
+            day_name="thursday", day_info={"photos": [str(source)]},
+            event="Test Show", org="Org", venue="Hall", output_path=str(output))
 
-    captured = {}
+    with pytest.raises(ValueError, match="thursday"):
+        gc_mod.generate_cover(
+            day_name="thursday", day_info={"photos": [str(source)]},
+            event="Test Show", org="Org", venue="Hall", output_path=str(output),
+            override_source=str(source))
 
-    def fake_generate_story(*, photo_path, event_name, org, venue, output_path, logo_path=None):
-        captured["photo_path"] = photo_path
-        Image.new("RGB", (10, 10)).save(output_path)
-        return output_path
-
-    monkeypatch.setattr(gc_mod, "select_cover_photo", fake_select_cover_photo)
-    monkeypatch.setattr(gc_mod, "generate_story", fake_generate_story)
-
-    result = gc_mod.generate_cover(
-        day_name="thursday", day_info={"photos": photos},
-        event="Test Show", org="Org", venue="Hall", output_path=str(output),
-    )
-
-    assert captured["photo_path"] == photos[1]
-    assert result == {"cover": str(output), "cover_pick": {"source_path": photos[1], "rationale": "sharp soloist"}}
+    assert not output.exists(), "a refused regeneration must leave no cover behind"
 
 
-@needs_ffmpeg
 def test_friday_regenerate_mode_extracts_frames_from_persisted_clips_plan(monkeypatch, tmp_path):
     clip = tmp_path / "clip.mp4"
     _make_gradient(clip)

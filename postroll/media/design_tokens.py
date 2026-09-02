@@ -550,9 +550,13 @@ TEMPLATE_SURFACES: dict[str, frozenset[str]] = {
     "collage": frozenset({"story"}),
     # PRD 4.1 and 4.2, the story beside the single photo post.
     "story": frozenset({"story"}),
-    # The Instagram grid cover for the Thursday scroll reel and the Friday clip
-    # reel (`PostingDay.coverPick` in Event.swift), so it is shown where those
-    # reels are. Drawn by the story's layout, which is what DRAWN_BY records.
+    # The Instagram grid cover for the Friday clip reel
+    # (`PostingDay.coverPick` in Event.swift), so it is shown where that reel
+    # is. Drawn by the story's layout, which is what DRAWN_BY records.
+    #
+    # Thursday had one too until #961: it was a full story composite sitting
+    # under the scroll reel on a day Dan posts no story, and Instagram picks
+    # its own grid thumbnail from a frame of the reel instead.
     "cover": frozenset({"reel"}),
     # PRD 4.6, Friday's before/after story, AND the closing graphic of both
     # plate reels.

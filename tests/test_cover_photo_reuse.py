@@ -119,33 +119,9 @@ def test_paths_are_compared_after_normalising(tmp_path):
 
 # ── wired into the run ────────────────────────────────────────────────────────
 
-def test_the_media_run_keeps_fridays_cover_off_thursdays_photo(tmp_path):
-    """A picker nothing passes the used set to is the same as no picker."""
-    from PIL import Image
-
-    from postroll.ai import generate_media as gm
-
-    shared = tmp_path / "shared.jpg"
-    Image.new("RGB", (300, 200), (10, 20, 30)).save(shared)
-    other = tmp_path / "other.jpg"
-    Image.new("RGB", (300, 200), (90, 20, 30)).save(other)
-
-    excluded_seen: list[list[str]] = []
-
-    def spy_pick(candidates, **kw):
-        excluded_seen.append(list(kw.get("exclude_paths") or []))
-        return {"index": 0, "path": candidates[0]["path"], "rationale": "r"}
-
-    manifest = {
-        "event": "E", "org": "O", "venue": "V", "date": "2026-04-05",
-        "days": {
-            "thursday": {"photos": [str(shared), str(other)]},
-            "friday": {"raw_photo": str(shared), "edited_photo": str(other)},
-        },
-    }
-    with patch("postroll.ai.generate_media.select_cover_photo", side_effect=spy_pick):
-        gm.generate_media(manifest, tmp_path / "out", static_only=True)
-
-    assert excluded_seen, "no cover pick was attempted, so this proves nothing"
-    assert any(paths for paths in excluded_seen), (
-        "every cover pick was told nothing about the rest of the week")
+# The wiring half of this rule, that `generate_media` actually HANDS the used
+# set to the picker, lives in tests/test_generate_media_cover.py, beside the
+# clip fixtures a Friday cover render needs. It was written here against
+# Thursday, which had a cover until #961 and could be reached with two jpegs;
+# Friday's needs a cut clip reel, and copying those fixtures over would be a
+# second set of them to keep in step.

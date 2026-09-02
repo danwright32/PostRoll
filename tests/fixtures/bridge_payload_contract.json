@@ -974,7 +974,7 @@
       }
     },
     "cover": {
-      "_what": "A single day's cover-image regeneration.",
+      "_what": "A single day's cover-image regeneration. Friday only since #961 removed Thursday's cover.",
       "swift": "PythonBridge.buildCoverManifest",
       "python": [
         {
@@ -995,7 +995,6 @@
         "venue": "always",
         "output_path": "always",
         "day_info": "always",
-        "photos": "always",
         "override_source": {
           "conditional": "Sent only when Dan picked the cover by hand, which skips the Claude call entirely."
         },

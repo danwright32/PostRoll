@@ -31,17 +31,25 @@ final class CoverRegenerationManifestTests: XCTestCase {
         XCTAssertNil(PythonBridge.buildCoverManifest(event: event, day: .thursday, overrideSource: nil))
     }
 
-    func testThursdayManifestCarriesPhotosAndOutputPath() {
-        var day = PostingDay(day: .thursday)
+    /// The manifest carries no `photos` any more (#961).
+    ///
+    /// They were Thursday's cover candidates, and Thursday has no cover, so
+    /// `generate_cover.py` reads nothing out of them. This replaces the test
+    /// that asserted they were sent: its whole content was the key being
+    /// removed, and the shared bridge payload contract no longer declares it,
+    /// which is what fails if one side changes without the other.
+    func testTheManifestDoesNotCarryPhotosNobodyReads() {
+        var day = PostingDay(day: .friday)
         day.photoPaths = [URL(fileURLWithPath: "/photos/a.jpg"), URL(fileURLWithPath: "/photos/b.jpg")]
-        let event = makeEvent(day: day)
+        let event = makeEvent(day: day, coverPath: "/preview/friday/cover.png")
 
-        let manifest = PythonBridge.buildCoverManifest(event: event, day: .thursday, overrideSource: nil)
+        let manifest = PythonBridge.buildCoverManifest(event: event, day: .friday, overrideSource: nil)
 
-        XCTAssertEqual(manifest?["day"] as? String, "thursday")
-        XCTAssertEqual(manifest?["output_path"] as? String, "/preview/thursday/cover.png")
+        XCTAssertEqual(manifest?["day"] as? String, "friday")
+        XCTAssertEqual(manifest?["output_path"] as? String, "/preview/friday/cover.png")
         let dayInfo = manifest?["day_info"] as? [String: Any]
-        XCTAssertEqual(dayInfo?["photos"] as? [String], ["/photos/a.jpg", "/photos/b.jpg"])
+        XCTAssertNil(dayInfo?["photos"],
+                     "the day's photographs are sent to a reader that no longer exists")
         XCTAssertNil(manifest?["override_source"])
     }
 

@@ -87,7 +87,6 @@ from .select_cover_photo import (
     # Re-exported: the cover tests pin the per-clip frame count through this
     # module, which is where the behaviour lives from their point of view.
     COVER_FRAMES_PER_CLIP,  # noqa: F401
-    _cover_candidates_from_photos,
     _cover_candidates_from_friday_plan,
 )
 from ..posting_preset import (
@@ -824,19 +823,14 @@ def generate_media(
                     print(f"[generate_media] thursday: ERROR: {tools.message}", flush=True, file=sys.stderr)
                     _record_error(errors, "thursday", tools.message)
 
-            _render_cover(
-                working_on=working_on,
-                exclude_paths=shown_elsewhere,
-                day_name="thursday",
-                day_dir=day_dir,
-                day_info=day_info,
-                # B023 is a false positive here: _render_cover calls
-                # build_candidates() synchronously, so the lambda never outlives
-                # this loop iteration and the late binding cannot bite.
-                build_candidates=lambda: _cover_candidates_from_photos(photos),  # noqa: B023
-                event=event, org=org, venue=venue,
-                day_result=day_result, errors=errors,
-            )
+            # No cover on Thursday (#961). It was a full story composite
+            # written into the export folder Dan uploads from, so the grid
+            # thumbnail was a story on a day he posts no story. Dropped on
+            # 2026-08-29 at his request: Instagram picks its own thumbnail from
+            # a frame of the reel, and this is one fewer Claude call a week.
+            #
+            # Friday keeps its cover, which is a different post and a different
+            # candidate source, so nothing below this changes.
 
         # ──────────────────────────────────────────────────────────────
         # Friday — before/after story (RAW + edited)
