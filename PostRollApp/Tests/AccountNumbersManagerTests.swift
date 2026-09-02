@@ -288,6 +288,33 @@ final class AccountNumbersManagerTests: XCTestCase {
         XCTAssertFalse(AccountFetchDue.isDue(book.stats(for: "personal"), asOf: now))
     }
 
+    func testBothSurfacesCarryTheFetchNoteAsItsOwnElement() {
+        // The note existing is not the note reaching anybody (L3, L46). Both
+        // surfaces build a notes ARRAY, and #1004 is explicit that this goes in
+        // as a second element rather than being folded into the book's own
+        // note, because two conditions sharing one field means one silences the
+        // other (L53).
+        for (file, needle) in [
+            ("Views/CaptionReviewView.swift", "accountNumbers.failureNote"),
+            ("Services/ExportManager.swift", "accountNumbersNote"),
+        ] {
+            let url = URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Sources/\(file)")
+            let code = SwiftSourceText.withoutComments(
+                try! String(contentsOf: url, encoding: .utf8))
+
+            XCTAssertTrue(code.contains(needle),
+                          "\(file) does not carry the fetch failure note, so a fetch "
+                          + "that failed says nothing there and reads exactly like one "
+                          + "that never ran")
+            XCTAssertTrue(code.contains("recoveryNote"),
+                          "\(file) no longer carries the book's own note either, so "
+                          + "this check would pass on a surface that says nothing at all")
+        }
+    }
+
     private final class Told: @unchecked Sendable {
         private let lock = NSLock()
         private var seen: [[String]] = []
