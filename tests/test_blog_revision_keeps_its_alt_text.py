@@ -140,6 +140,33 @@ def test_the_ordered_validator_still_refuses_a_dropped_marker():
     assert ordered_markers_validator(EXISTING, {"body": dropped}) is not None
 
 
+def test_the_revise_validator_leaves_alt_text_to_the_splice():
+    """#1141 taught the shared comparison to see a rewritten alt text, and this
+    path deliberately does not use that half.
+
+    Every retained marker is spliced back verbatim a few lines after these
+    passes run, so refusing here would discard a paid review pass over a fault
+    the next step undoes. The difference is pinned rather than left to be
+    rediscovered as an oversight (L233).
+    """
+    from postroll.ai.revise_blog import ordered_markers_validator
+
+    rewritten = EXISTING.replace("| ", "| a different description of ")
+    assert rewritten != EXISTING, "the fixture did not actually change any alt text"
+    assert ordered_markers_validator(EXISTING, {"body": rewritten}) is None
+
+
+def test_the_generate_validator_does_refuse_a_rewritten_alt_text():
+    """The positive control for the test above. Without it, a shared comparison
+    that had quietly stopped reading alt text at all would satisfy both (L159).
+    """
+    from postroll.ai.ai_tells import markers_preserved_validator
+
+    rewritten = EXISTING.replace("| ", "| a different description of ")
+    assert markers_preserved_validator({"body": EXISTING},
+                                       {"body": rewritten}) is not None
+
+
 def test_a_marker_the_model_dropped_leaves_the_revision_usable(capsys):
     """A dropped marker cannot be spliced back without inventing a position,
     so the run says so rather than guessing, and still returns a draft."""

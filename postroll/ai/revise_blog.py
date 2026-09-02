@@ -50,6 +50,7 @@ from .ai_tells import (
     build_voice_review_prompt,
     is_humanizer_available,
     load_humanizer_rules,
+    ordered_marker_change,
     strip_em_dashes,
 )
 from .claude_client import run_json_prompt, run_review_pass, load_brand_voice, ClaudeError
@@ -75,25 +76,33 @@ from .generate_blog import (
 def ordered_markers_validator(prior_body: str, revised: dict) -> str | None:
     """A review pass may not add, drop, rename OR REORDER a photo marker (#1131).
 
-    `markers_preserved_validator` SORTS the filenames it compares
-    (`ai_tells.photo_marker_filenames` is a `sorted(...)`), so it cannot see a
-    marker moving to a different point in the post. A photograph that swaps
-    places with another, while the prose written about each stays put, passes it
-    every time, and this is the repo's only marker guard.
-
     Takes the prior BODY rather than a prior dict, because the pass 1 call has
     no prior dict to compare against: it is the first thing that runs, and what
     it must preserve is the body Dan is revising.
-    """
-    def markers(body: str) -> list[str]:
-        return [_fold_filename(name)
-                for name, _alt in _PHOTO_MARKER.findall(body or "")]
 
-    expected = markers(prior_body)
-    got = markers(revised.get("body", ""))
-    if expected != got:
-        return f"changed or reordered the [PHOTO:] markers ({expected} -> {got})"
-    return None
+    The comparison and its messages are `ai_tells.ordered_marker_change`, which
+    since #1141 is the one implementation both blog paths use. Two functions
+    answering the same question is how they came to disagree about whether a
+    reorder counts.
+
+    Two deliberate differences from the generate path's validator, both
+    supplied here rather than written into the shared rule:
+
+    * filenames are FOLDED first, because a revision retypes them and a
+      composed against a decomposed accent is the same file on this filesystem.
+    * `compare_alt=False`. Every retained marker is spliced back verbatim after
+      these passes run, so alt text drift here is repaired a few lines later.
+      Refusing on it would discard a paid review pass over a fault the next
+      step undoes, and a revision is licensed to change a marker Dan's feedback
+      asked about, which the splice already excludes from `retained`.
+    """
+    def markers(body: str) -> list[tuple[str, str]]:
+        return [(_fold_filename(name), alt)
+                for name, alt in _PHOTO_MARKER.findall(body or "")]
+
+    return ordered_marker_change(markers(prior_body),
+                                 markers(revised.get("body", "")),
+                                 compare_alt=False)
 
 
 REVISE_PROMPT = """\

@@ -44,22 +44,99 @@ def strip_em_dashes(text: str) -> str:
     return _DASH_RE.sub(", ", text)
 
 
-_PHOTO_MARKER_RE = re.compile(r"\[PHOTO:\s*([^|\]]+?)\s*\|")
+# The same pattern `blog_quality._PHOTO_MARKER` uses, alt text and all. This
+# module used to carry a second, narrower one that captured the filename and
+# stopped at the pipe, which is how the alt text came to be unguarded: a
+# pattern that cannot see a value is a pattern nothing built on it can check
+# (#1141). Spelled here rather than imported because blog_quality imports THIS
+# module, so the dependency only runs one way.
+_PHOTO_MARKER_RE = re.compile(r"\[PHOTO:\s*([^\|\]]+?)\s*\|\s*([^\]]*)\]", re.DOTALL)
+
+
+def photo_markers(body: str) -> list[tuple[str, str]]:
+    """The [PHOTO: filename | alt text] markers in a blog body, in the order
+    they appear.
+
+    Order is the point. The sorted filename list this used to be could not see
+    two photographs swapping places, and the filename alone could not see their
+    descriptions swapping, so both faults passed the only marker guard the repo
+    had (#1141).
+    """
+    return [(m.group(1).strip(), m.group(2).strip())
+            for m in _PHOTO_MARKER_RE.finditer(body or "")]
 
 
 def photo_marker_filenames(body: str) -> list[str]:
-    """Sorted [PHOTO: filename | alt] marker filenames in a blog body."""
-    return sorted(m.group(1).strip() for m in _PHOTO_MARKER_RE.finditer(body or ""))
+    """Sorted [PHOTO: filename | alt] marker filenames in a blog body.
+
+    Still sorted, because its callers want the set of files a body names rather
+    than their order. The guard no longer uses it: see `photo_markers`.
+    """
+    return sorted(name for name, _alt in photo_markers(body))
+
+
+def ordered_marker_change(expected: list[tuple[str, str]],
+                          got: list[tuple[str, str]],
+                          *, compare_alt: bool = True) -> str | None:
+    """How `got` differs from `expected`, or None when it does not.
+
+    Each fault gets its own sentence, because four faults sharing one message
+    leave whoever reads the warning unable to tell which one happened, and they
+    want different responses: a renamed marker attaches the wrong file, a
+    reorder changes which photograph leads the post, and rewritten alt text is
+    a caption describing the neighbouring photograph (L11, #1008).
+
+    Takes already-extracted pairs rather than bodies so the one comparison can
+    serve callers that normalise filenames differently: `revise_blog` folds
+    accents and case before comparing, this module's own validator does not.
+    One implementation of the rule, one set of messages.
+
+    `compare_alt=False` for a caller that puts the alt text back verbatim
+    afterwards. Refusing there would throw away a paid review pass over a fault
+    the very next step repairs.
+    """
+    expected_names = [name for name, _alt in expected]
+    got_names = [name for name, _alt in got]
+
+    # Multiset arithmetic, so a body holding the same file twice is not
+    # reported as an add and a drop of itself.
+    remaining = list(expected_names)
+    added: list[str] = []
+    for name in got_names:
+        if name in remaining:
+            remaining.remove(name)
+        else:
+            added.append(name)
+    dropped = remaining
+
+    if added and dropped:
+        return (f"renamed [PHOTO:] markers ({sorted(dropped)} -> {sorted(added)})")
+    if added:
+        return f"added [PHOTO:] markers ({sorted(added)})"
+    if dropped:
+        return f"dropped [PHOTO:] markers ({sorted(dropped)})"
+    if expected_names != got_names:
+        return (f"reordered the [PHOTO:] markers "
+                f"({expected_names} -> {got_names})")
+    if compare_alt:
+        moved = [name for (name, was), (_n, now) in zip(expected, got) if was != now]
+        if moved:
+            return f"rewrote the alt text on [PHOTO:] markers ({moved})"
+    return None
 
 
 def markers_preserved_validator(prior: dict, revised: dict) -> str | None:
-    """run_review_pass validator: a review pass must not add, drop, or rename
-    [PHOTO:] markers. Returns a problem description, or None when intact."""
-    expected = photo_marker_filenames(prior.get("body", ""))
-    got = photo_marker_filenames(revised.get("body", ""))
-    if expected != got:
-        return f"changed [PHOTO:] markers ({expected} -> {got})"
-    return None
+    """run_review_pass validator: a review pass must not add, drop, rename,
+    reorder or re-describe [PHOTO:] markers. Returns a problem description, or
+    None when intact.
+
+    The blog generate path's two review passes are told to keep every marker
+    exactly as it is, and until #1141 this compared a SORTED list of filenames,
+    so the two faults it could not see were the two that leave a well formed
+    post describing the wrong photographs.
+    """
+    return ordered_marker_change(photo_markers(prior.get("body", "")),
+                                 photo_markers(revised.get("body", "")))
 
 
 # Default global install path for the humanizer skill (cloned via
