@@ -529,6 +529,31 @@ final class CollaboratorPickTests: XCTestCase {
         XCTAssertTrue(result.unranked.map(\.handle).contains("neverlookedat"))
     }
 
+    func testAFollowersOnlyRecordIsNotScoredOnTheAssumedRate() {
+        // The case the narrowing actually turns on, and the one the first
+        // version of this section missed: an account with a follower count Dan
+        // typed in and nothing else. It has everything the assumed path needs
+        // EXCEPT a refusal from Meta, and the refusal is the whole
+        // justification. Scoring it would assume a rate for an account nobody
+        // has said anything about.
+        //
+        // The neighbouring test used an account with no record at all, which
+        // is refused a step earlier, so it passed on code with this rule
+        // removed and the mutation sweep reported it SURVIVED (L159, L165).
+        let table = ["followersonly": AccountStats(followers: 3_000, recordedOn: now,
+                                                   followersSource: .typed)]
+            .merging(Dictionary(uniqueKeysWithValues:
+                ["b", "c", "d", "e", "f"].map { ($0, stats(1_000, 1, 0)) })) { a, _ in a }
+        let result = CollaboratorPick.suggest(
+            handles: ["followersonly", "b", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        XCTAssertFalse(result.suggested.map(\.handle).contains("followersonly"),
+                       "a follower count with nothing behind it was scored on an "
+                       + "assumption nobody is entitled to make")
+        XCTAssertTrue(result.unranked.map(\.handle).contains("followersonly"))
+    }
+
     func testARefusedAccountWithNoFollowerCountIsNotScoredEither() {
         // The assumption is a RATE, so it needs a follower count to apply to.
         // Without one there is nothing to assume against, and inventing a
