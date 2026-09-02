@@ -1,0 +1,8 @@
+{
+  "name": "an-unreadable-follower-count-is-not-zero-followers",
+  "file": "postroll/ai/account_numbers.py",
+  "find": "    found = _FOLLOWERS.search(html.unescape(described.group(1)))\n    if not found:\n        return None",
+  "replace": "    found = _FOLLOWERS.search(html.unescape(described.group(1)))\n    if not found:\n        return 0",
+  "test": "tests/test_account_numbers.py::test_a_description_with_no_follower_count_in_it_yields_nothing",
+  "breaks": "a page whose wording changed reports every account as having no audience rather than as one nobody could count, and an account scored at zero sorts to the bottom of the ranking as though it had been measured and found wanting (#1006, L67)"
+}
