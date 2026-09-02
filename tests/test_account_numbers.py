@@ -21,6 +21,7 @@ import pytest
 from postroll.ai.account_numbers import (
     ATTEMPTS,
     Figures,
+    followers_in_description,
     Outcome,
     PageVerdict,
     Response,
@@ -423,6 +424,106 @@ def test_observe_mode_holds_back_nothing_else():
 
     assert figures.outcome is Outcome.NOT_PROFESSIONAL
     assert figures.would_have_been is None
+
+
+# ── The follower count off the page, for accounts the API refuses (#1006) ────
+
+# Deliberately last in the feature, and outside Instagram's terms. Dan chose it
+# after the concern was raised. It reads the page ALREADY fetched to classify
+# the account rather than fetching a second time, and it is reachable ONLY from
+# a definite `not_professional`, so a transient failure can never silently
+# become a scrape.
+#
+# The shapes below are what instagram.com really served on 2026-09-01. The
+# rounding is why the page count and the API count agree to a median 0.0%
+# difference with a worst case of 4.3%: "12.7K" is anywhere in a 100 wide band.
+
+def described(text):
+    return Response(status=200, headers={},
+                    body=f'<meta property="og:description" content="{text}" />')
+
+
+@pytest.mark.parametrize("description,expected", [
+    ("269M Followers, 195 Following, 32K Posts", 269_000_000),
+    ("12.7K Followers, 800 Following, 1,204 Posts", 12_700),
+    ("1,234 Followers, 56 Following, 78 Posts", 1_234),
+    ("725 Followers, 12 Following, 9 Posts", 725),
+    ("1.2M Followers, 3 Following, 4 Posts", 1_200_000),
+    ("2.5B Followers, 3 Following, 4 Posts", 2_500_000_000),
+])
+def test_a_follower_count_is_read_out_of_the_description(description, expected):
+    assert followers_in_description(described(description).body) == expected
+
+
+@pytest.mark.parametrize("description", [
+    "See Instagram photos and videos",
+    "195 Following, 32K Posts",
+    "",
+    "Followers",
+])
+def test_a_description_with_no_follower_count_in_it_yields_nothing(description):
+    # None rather than zero. A page whose wording changed must read as a figure
+    # nobody has, not as an account with no audience, which would sort it to
+    # the bottom of a ranking as though it had been measured (L67).
+    assert followers_in_description(described(description).body) is None
+
+
+def test_a_page_with_no_description_at_all_yields_nothing():
+    assert followers_in_description("<html>nothing</html>") is None
+
+
+def test_an_account_the_api_refuses_is_still_given_its_follower_count():
+    page = Response(
+        status=200, headers={},
+        body=(profile_page("aperson").body
+              + '<meta property="og:description" content="725 Followers, 12 '
+                'Following, 9 Posts" />'))
+
+    figures, _, _ = run("aperson", [graph_error(110), page])
+
+    assert figures.outcome is Outcome.NOT_PROFESSIONAL
+    assert figures.followers == 725
+    assert figures.followers_from_page is True, (
+        "the source has to be distinguishable, or a scraped figure renders as "
+        "one Meta reported")
+    assert figures.likes is None and figures.comments is None, (
+        "the page gives no engagement figures at all, and inventing them is "
+        "what the assumed rate in #1005 is for")
+
+
+def test_a_measured_account_never_reports_a_page_sourced_follower_count():
+    # The positive control (L159): a `followers_from_page` that was always true
+    # would satisfy the assertion above.
+    figures, _, _ = run("natgeo", [graph_ok(followers=1000)])
+
+    assert figures.followers == 1000
+    assert figures.followers_from_page is False
+
+
+@pytest.mark.parametrize("page", [
+    Response(status=429, headers={}, body=""),
+    wall_page(),
+    Response(status=500, headers={}, body=""),
+])
+def test_a_transient_failure_never_becomes_a_scrape(page):
+    # The rule the issue is most explicit about. A page that could not be read
+    # is not an account whose followers can be counted, and a blocked fetch must
+    # not silently produce a figure from whatever markup came back.
+    figures, _, _ = run("aperson", [graph_error(110), page])
+
+    assert figures.outcome is Outcome.COULD_NOT_CLASSIFY
+    assert figures.followers is None
+    assert figures.followers_from_page is False
+
+
+def test_a_rate_limited_account_is_never_scraped():
+    # The page is only reached from code 110. A rate limit must not send this
+    # anywhere near instagram.com, which would spend the one budget that is not
+    # exhausted while the other is.
+    figures, calls, _ = run("natgeo", [over_allowance()])
+
+    assert figures.outcome is Outcome.RATE_LIMITED
+    assert len(calls.urls) == 1, "a rate limit reached for the profile page"
 
 
 # ── The page classifier, asked directly ──────────────────────────────────────

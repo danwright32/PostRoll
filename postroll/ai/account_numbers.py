@@ -166,6 +166,14 @@ class Figures:
     #: Recorded on every call including the ones that failed, because the
     #: reading that matters most is taken as the limit is reached.
     quota: dict[str, Any] | None = None
+    #: The follower count came from the profile page, not from Meta (#1006).
+    #:
+    #: Distinguishable because it is a different KIND of claim. Meta reports a
+    #: number; the page reports a rounded one, "12.7K" being anywhere in a 100
+    #: wide band, and it is read for accounts Meta will not answer for at all,
+    #: whose engagement rate is therefore assumed rather than measured (#1005).
+    #: A scraped figure rendering as one Meta reported would overstate both.
+    followers_from_page: bool = False
     #: What would have been written if `allow_no_such_account` were on. Set only
     #: in observe mode, so the cycle that calibrates it has something to read.
     would_have_been: Outcome | None = None
@@ -207,6 +215,59 @@ def _error_code(payload: Mapping[str, Any]) -> int | None:
 
 #: The `og:title` meta tag, whose content names the account when one exists.
 _OG_TITLE = re.compile(r'<meta property="og:title" content="([^"]{0,300})"', re.I)
+
+#: The `og:description` meta tag, which carries the follower count.
+_OG_DESCRIPTION = re.compile(
+    r'<meta property="og:description" content="([^"]{0,400})"', re.I)
+
+#: The follower figure inside it, with the suffix Instagram rounds to.
+#:
+#: Measured on 2026-09-01: "269M Followers, 195 Following, 32K Posts". The
+#: comma group is for counts under a thousand thousand, which are written out.
+_FOLLOWERS = re.compile(r"([\d,]+(?:\.\d+)?)\s*([KMB]?)\s+Followers", re.I)
+
+#: What each suffix multiplies by.
+_MAGNITUDE = {"": 1, "K": 1_000, "M": 1_000_000, "B": 1_000_000_000}
+
+
+def followers_in_description(body: str) -> int | None:
+    """The follower count Instagram prints on the logged out page, or None.
+
+    Outside Instagram's terms, and deliberately the last thing in this feature
+    so nothing else depends on it (#1006). Reachable only from a definite
+    `NOT_PROFESSIONAL`, never from a transient failure.
+
+    None rather than zero whenever it cannot be read. A page whose wording
+    changed must read as a figure nobody has, not as an account with no
+    audience, which would sort it to the bottom of a ranking as though it had
+    been measured and found wanting (L67).
+
+    Accuracy, measured for the 78 accounts the API also answered for on
+    2026-08-29: the page count and the API count agree to a median 0.0%
+    difference, worst 4.3%, which is the rounding in a value like "12.7K".
+
+    Coverage, measured through this function against the live pages on
+    2026-09-01: 17 of 17 accounts Meta refused yielded a count, ranging from 0
+    to 3,422 with a median of 1,240. Measured rather than assumed, because the
+    first version of the classifier beside this one passed every invented
+    fixture and matched nothing at all in the real world.
+
+    Zero is a real answer and is kept. An account with no followers cannot be
+    ranked anyway, since a rate is interactions over followers, and reporting
+    it as unknown would claim less than was seen.
+    """
+    described = _OG_DESCRIPTION.search(body)
+    if not described:
+        return None
+    found = _FOLLOWERS.search(html.unescape(described.group(1)))
+    if not found:
+        return None
+    try:
+        value = float(found.group(1).replace(",", ""))
+    except ValueError:
+        return None
+    return int(value * _MAGNITUDE[found.group(2).upper()])
+
 
 #: The name of the route Instagram renders when a handle resolves to nothing.
 #:
@@ -533,6 +594,18 @@ def _decide_by_page(key: str, refusal: Response,
 
     verdict = classify_page(page, handle=key)
     outcome = _from_page(verdict)
+    if outcome is Outcome.NOT_PROFESSIONAL:
+        # The one place a figure is taken off the page (#1006), and only from a
+        # definite yes. Read from the page ALREADY fetched to classify the
+        # account rather than fetching it a second time.
+        followers = followers_in_description(page.body)
+        return Figures(handle=key, outcome=outcome, quota=quota,
+                       followers=followers,
+                       followers_from_page=followers is not None,
+                       detail="Meta would not report on this account; the "
+                              "profile page was found."
+                              + ("" if followers is None
+                                 else f" Followers read off the page: {followers}."))
     if outcome is Outcome.NO_SUCH_ACCOUNT and not allow_no_such_account:
         return Figures(handle=key, outcome=Outcome.COULD_NOT_CLASSIFY, quota=quota,
                        would_have_been=Outcome.NO_SUCH_ACCOUNT,

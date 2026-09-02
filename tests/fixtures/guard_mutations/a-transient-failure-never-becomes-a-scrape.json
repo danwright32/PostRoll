@@ -1,0 +1,8 @@
+{
+  "name": "a-transient-failure-never-becomes-a-scrape",
+  "file": "postroll/ai/account_numbers.py",
+  "find": "    if outcome is Outcome.NOT_PROFESSIONAL:",
+  "replace": "    if outcome is not Outcome.NO_SUCH_ACCOUNT:",
+  "test": "tests/test_account_numbers.py::test_a_transient_failure_never_becomes_a_scrape",
+  "breaks": "a follower count is taken off whatever markup came back from a blocked or unreadable page, so a transient failure silently becomes a scrape and produces a figure nobody measured (#1006)"
+}
