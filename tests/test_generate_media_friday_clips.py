@@ -41,10 +41,7 @@ from conftest import HAVE_FFMPEG, needs_ffmpeg  # noqa: F401
 # The marker is not a judgement kept here. It is derived from the recorded
 # distribution in tests/file_durations.py, and tests/test_fast_subset_stays_honest.py
 # fails if this line and that record disagree.
-pytestmark = pytest.mark.slow That this one file has flipped
-# the marker eight times is what #1196 is about: the share it is measured in
-# moves when unrelated files do, so the reading is noise for this file in
-# particular.
+pytestmark = pytest.mark.slow
 
 
 def _make_gradient(path, seconds=3.0):

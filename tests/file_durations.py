@@ -222,7 +222,7 @@ def smallest_expensive_share() -> float:
     over = [s for name, s in shares().items() if name in expensive()]
     if not over:
         raise AssertionError(
-            f"the record names no expensive file at all, so "
+            "the record names no expensive file at all, so "
             "there is nothing for the fast run to skip and nothing here to "
             "measure an unmeasured file against.")
     return min(over)

@@ -180,8 +180,9 @@ def test_the_boundary_between_expensive_and_ordinary_is_a_real_gap():
         f"{following:.0f}s, a factor of {nth / following:.2f}, under the "
         f"{MINIMUM_SEPARATION}x this asks for. Two files that close swap order "
         "on ordinary noise, so the fast run's contents would change between "
-        "recordings with nobody choosing it. Re-choose EXPENSIVE_COUNT against "
-        "the distribution as it is now.")
+        "recordings with nobody choosing it. Re-measure with "
+        "`make record-test-durations` and re-choose EXPENSIVE_COUNT against the "
+        "distribution as it is then.")
 
 
 def test_every_expensive_file_is_marked_slow():

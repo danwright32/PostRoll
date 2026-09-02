@@ -371,7 +371,7 @@ def test_every_remedy_the_record_guards_name_is_a_make_target_that_exists():
         "test_the_measurement_actually_found_some_expensive_files",
         "test_the_record_names_only_files_that_still_exist",
         "test_the_record_still_covers_the_suite",
-        "test_the_floor_still_sits_in_a_gap_in_the_real_distribution",
+        "test_the_boundary_between_expensive_and_ordinary_is_a_real_gap",
     }
 
     remedies: dict[str, list[str]] = {}
