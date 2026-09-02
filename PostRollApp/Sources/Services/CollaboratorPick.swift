@@ -520,6 +520,12 @@ enum CollaboratorPick {
         /// True when the rate, and therefore the interactions derived from it,
         /// are an assumption rather than a measurement.
         let assumed: Bool
+        /// True when the assumption exists because the ACCOUNT withheld its
+        /// like count, rather than because Meta would not report on it at all
+        /// (#1032). Two causes with two remedies, so two messages (L11): an
+        /// account that hides a figure may start showing it, and one Meta
+        /// cannot report on never will.
+        var likesHidden: Bool = false
     }
 
     /// One account's score, or nil when there is nothing to score it on.
@@ -534,6 +540,16 @@ enum CollaboratorPick {
     static func score(_ stats: AccountStats?) -> Score? {
         guard let stats, !stats.isPrivate || true else { return nil }
         guard let followers = stats.followers, followers > 0 else { return nil }
+
+        // A withheld like count is handled BEFORE the measured path, because
+        // the account does have engagement data by any ordinary reading of the
+        // word: it answered, and it kept one figure back (#1032). Scored on the
+        // assumption rather than on the figures it did give, for the reason
+        // recorded on `assumedRate`.
+        if stats.likesAreHidden {
+            return Score(interactions: Double(followers) * assumedRate,
+                         rate: assumedRate, assumed: true, likesHidden: true)
+        }
 
         if stats.hasEngagementData {
             // These two defaults are additive terms in a sum, not values
@@ -605,6 +621,15 @@ enum CollaboratorPick {
     static let assumedRateLabel =
         "no engagement figures, so scored on an assumed \(percentText(assumedRate)) rate"
 
+    /// Said when the ACCOUNT withheld its like count (#1032).
+    ///
+    /// Distinct from the label above because the causes have different
+    /// remedies: an account that hides a figure may start showing it, and one
+    /// Meta cannot report on never will.
+    static let hiddenLikesLabel =
+        "like count hidden by the account, so scored on an assumed "
+        + "\(percentText(assumedRate)) rate"
+
     /// Said when an account is demoted for having an audience that is not there.
     static let belowFloorLabel = "audience barely engages, so it is ranked last"
 
@@ -619,7 +644,13 @@ enum CollaboratorPick {
                 // account is that it is unmeasurable, and a reason line that
                 // reported the assumed figures as measurements would claim
                 // something nobody took.
-                parts.append(assumedRateLabel)
+                parts.append(scored.likesHidden ? hiddenLikesLabel : assumedRateLabel)
+                // The comments ARE measured even when the likes are not, so
+                // they are still named: dropping them would understate what is
+                // actually known about the account.
+                if scored.likesHidden, let comments = stats.comments {
+                    parts.append("\(number(comments)) comments measured")
+                }
             } else {
                 if let likes = stats.likes { parts.append("\(number(likes)) likes") }
                 if let comments = stats.comments { parts.append("\(number(comments)) comments") }

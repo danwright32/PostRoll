@@ -1,7 +1,7 @@
 {
   "name": "an-assumed-rate-is-labelled-wherever-it-renders",
   "file": "PostRollApp/Sources/Services/CollaboratorPick.swift",
-  "find": "                parts.append(assumedRateLabel)",
+  "find": "                parts.append(scored.likesHidden ? hiddenLikesLabel : assumedRateLabel)",
   "replace": "                parts.append(\"engagement figures\")",
   "test": "PostRollTests/CollaboratorPickTests/testAnAssumedScoreSaysItIsAssumedWhereverItRenders",
   "breaks": "an account scored on an assumed rate renders exactly like one Meta measured, so CAPTIONS.txt and the review screen both report a figure nobody took as a measurement (#1005)"

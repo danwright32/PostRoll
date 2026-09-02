@@ -99,6 +99,14 @@ struct AccountStats: Codable, Equatable, Sendable {
     /// posted rather than who is watching.
     var reels: Int?
     var feed: Int?
+    /// The account answered and kept its like count back (#1032).
+    ///
+    /// A THIRD state, not a missing value and not a measurement. Folded into a
+    /// score as zero, an account doing perfectly well is scored identically to
+    /// one measured and found dead (L507). Measured on the committed
+    /// population: 2 of 122 accounts withhold it.
+    var likesAreHidden: Bool { likesSource == .hidden }
+
     /// Marked private by hand (#982).
     ///
     /// Not detectable from the logged out page: an account serving a normal
