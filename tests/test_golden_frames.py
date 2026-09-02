@@ -674,20 +674,23 @@ def source_clips(broad_photos, tmp_path) -> list[str]:
             for i, photo in enumerate(broad_photos[:2])]
 
 
-@pytest.fixture
-def silent_audio(tmp_path) -> str:
+def _silent_track(path: Path) -> str:
     """A local silent track.
 
     The reel generators fetch a Jamendo track when handed no audio, so a test
     that passed None would make a network call to a third-party service on every
     run and render against whatever it happened to return.
     """
-    path = tmp_path / "silence.m4a"
     subprocess.run(
         ["ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
          "-t", "45", "-c:a", "aac", str(path)],
         check=True, capture_output=True)
     return str(path)
+
+
+@pytest.fixture
+def silent_audio(tmp_path) -> str:
+    return _silent_track(tmp_path / "silence.m4a")
 
 
 def _frame_from_encoded_video(video: str, at_seconds: float, out: Path) -> Image.Image:
@@ -921,26 +924,54 @@ def closing_graphic_bw(photos, tmp_path) -> str:
     return _closing_graphic(photos, tmp_path, bw=photos[2])
 
 
+#: When to photograph the slider's divider IN MOTION, in reel seconds.
+#:
+#: 30% of the way through the first sweep, which is where the curve this
+#: replaced changed speed in a step (#1073) and so where two easings disagree
+#: most: 16px of the 936px print, a hard reveal edge between two different
+#: photographs. Read out of the module's own timeline rather than written as a
+#: number, so re-timing the reel moves the sample with it instead of walking it
+#: into a neighbouring hold.
+SLIDER_SWEEP_SAMPLE_S = slider_mod.HOLD_RAW + 0.3 * slider_mod.SWEEP_DURATION
+
+
+@pytest.fixture(scope="module")
+def slider_reel_video(tmp_path_factory) -> str:
+    """The Tuesday reel, encoded once for the reference frames read out of it.
+
+    Module scoped because the encode is where this file's time goes, about 45
+    seconds, and a second test that rendered its own would pay it twice. The
+    suite runs under `--dist worksteal`, so the two tests below can land on
+    different workers and build this once each; that is the worst case, and it
+    is what two independent renders would have cost anyway.
+
+    Which is also why nothing here depends on the two frames coming from ONE
+    file. Every input is deterministic (seeded photographs, a generated silent
+    track, fixed timings), so a split run encodes the same video twice rather
+    than two different ones.
+
+    A B&W is required: this reel renders three states and nothing in the app
+    reaches it without one (#164, #324). The reference recorded before that was
+    a photograph of the two-photo path, which the product cannot produce.
+    """
+    tmp_folder = tmp_path_factory.mktemp("slider_reel")
+    photos = [_patterned_photo(tmp_folder / f"p{i}.jpg", seed=i) for i in range(3)]
+    return slider_mod.generate_reel_slider(
+        raw_path=photos[0], edit_path=photos[1], bw_path=photos[2],
+        audio_path=_silent_track(tmp_folder / "silence.m4a"),
+        output_path=str(tmp_folder / "slider.mp4"),
+        event_name="Reference Event", org="Reference Org", venue="Reference Venue",
+        closing_frame_path=_closing_graphic(photos, tmp_folder, bw=photos[2]),
+        logo_path=LOGO)
+
+
 @needs_ffmpeg
 @requires_mac_fonts
-def test_slider_reel_matches_its_reference_frame(photos, silent_audio,
-                                                 closing_graphic_bw, tmp_path):
+def test_slider_reel_matches_its_reference_frame(slider_reel_video, tmp_path):
     # 0.6s lands in the opening hold on the RAW, where the plate's chrome and
     # its caption placard sit on the cream mat. That is the frame the
     # invisible-label regression shipped on.
-    #
-    # A B&W is required now: this reel renders three states, and nothing in the
-    # app reaches it without one (#164, #324). The reference recorded before
-    # that was a photograph of the two-photo path, which the product cannot
-    # produce.
-    video = slider_mod.generate_reel_slider(
-        raw_path=photos[0], edit_path=photos[1], bw_path=photos[2],
-        audio_path=silent_audio,
-        output_path=str(tmp_path / "slider.mp4"),
-        event_name="Reference Event", org="Reference Org", venue="Reference Venue",
-        closing_frame_path=closing_graphic_bw, logo_path=LOGO)
-
-    frame = _frame_from_encoded_video(video, 0.6, tmp_path / "slider.png")
+    frame = _frame_from_encoded_video(slider_reel_video, 0.6, tmp_path / "slider.png")
     assert_shows_real_content(frame, "slider_reel")
     _, print_top, _, print_h = slider_mod.print_rect(PHOTO_SIZE)
     caption_top = print_top + print_h + slider_mod.PLACARD_TOP_GAP
@@ -951,6 +982,29 @@ def test_slider_reel_matches_its_reference_frame(photos, silent_audio,
          caption_top + slider_mod.PLACARD_BLOCK_H),
         "slider_reel")
     assert_matches_golden(frame, "slider_reel", tmp_path)
+
+
+@needs_ffmpeg
+@requires_mac_fonts
+def test_the_sliders_divider_matches_its_reference_frame_mid_sweep(
+        slider_reel_video, tmp_path):
+    """The one reference frame in this file that photographs a reel MOVING.
+
+    Every other frame here is a hold, which is how #1073 shipped: the slider's
+    easing was rewritten from a curve that stepped 75% to one that does not, and
+    both of its existing references passed, because both were stills of a
+    stationary divider. The design fingerprint gate reads those references to
+    decide whether a template renders differently, so it had nothing that could
+    ever see a motion change.
+
+    A separate node rather than a second assertion in the test above, because
+    the re-record path skips at its first golden and would never reach a second
+    one, so that frame could be checked but never recorded.
+    """
+    frame = _frame_from_encoded_video(
+        slider_reel_video, SLIDER_SWEEP_SAMPLE_S, tmp_path / "slider_sweep.png")
+    assert_shows_real_content(frame, "slider_reel_sweep")
+    assert_matches_golden(frame, "slider_reel_sweep", tmp_path)
 
 
 @needs_ffmpeg
@@ -1368,7 +1422,7 @@ def test_the_title_card_type_is_drawn_light_enough_to_sit_over_footage(tmp_path)
 
 GOLDEN_NAMES = {
     "collage", "story", "before_after",
-    "slider_reel", "morph_reel", "scroll_reel", "screen_reel",
+    "slider_reel", "slider_reel_sweep", "morph_reel", "scroll_reel", "screen_reel",
     "cover", "reel_preview", "clip_reel", "clip_reel_delivered",
 }
 
