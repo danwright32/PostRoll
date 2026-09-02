@@ -1,0 +1,8 @@
+{
+  "name": "the-liveliness-floor-comes-from-the-population",
+  "file": "PostRollApp/Sources/Services/CollaboratorPick.swift",
+  "find": "    static let livelinessFloor = 0.0037",
+  "replace": "    static let livelinessFloor = 0.0100",
+  "test": "tests/test_collaborator_constants_match_the_population.py::test_the_liveliness_floor_is_the_populations_tenth_percentile",
+  "breaks": "the number deciding which accounts are demoted for having a dead audience drifts away from the population it was fitted to, and nothing reports it: the ranking goes on producing an order whatever the data says (#1005, #1114)"
+}

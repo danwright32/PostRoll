@@ -34,6 +34,11 @@
       "entry": "a-figure-sent-back-unchanged-keeps-its-provenance",
       "seconds": 18.29,
       "shard": ""
+    },
+    {
+      "entry": "a-day-with-nothing-to-rank-is-not-an-empty-ranking",
+      "seconds": 17.66,
+      "shard": ""
     }
   ],
   "kinds": {
@@ -80,6 +85,7 @@
     "a-handle-that-changed-hands-is-not-merged-across": true,
     "a-hanging-gui-test-is-given-a-deadline": false,
     "a-job-at-another-commit-is-not-an-answer": false,
+    "a-large-dead-audience-is-held-out-by-the-floor": true,
     "a-layout-clears-every-surface-it-is-seen-on": false,
     "a-leg-that-ran-nothing-is-refused": false,
     "a-link-raised-sheet-is-not-the-default-action": true,
@@ -103,6 +109,7 @@
     "a-personal-post-is-not-an-uncontrolled-observation": false,
     "a-perturbed-render-cannot-become-the-reference-frame": false,
     "a-pipeline-marker-is-not-wrapped-in-prose": true,
+    "a-private-account-does-not-take-a-collaborator-slot": true,
     "a-proof-is-not-fresh-forever": false,
     "a-quit-with-work-running-asks-first": true,
     "a-raises-block-must-decide-about-recording": false,
@@ -169,6 +176,7 @@
     "a-typed-name-does-not-reach-the-tag-list": false,
     "a-typed-name-is-credited-not-mentioned": true,
     "a-typed-note-survives-the-web-search": true,
+    "a-value-that-is-no-account-is-not-a-candidate": true,
     "a-venv-inside-an-app-bundle-is-refused": false,
     "a-view-does-not-own-long-work": true,
     "a-warning-names-no-cause-it-cannot-know": true,
@@ -182,8 +190,10 @@
     "account-book-names-a-refusal": true,
     "account-book-sets-a-bad-file-aside": true,
     "adding-a-file-does-not-rewrite-the-record": false,
+    "an-account-nobody-looked-at-is-still-not-scored": true,
     "an-added-test-file-must-be-measured": false,
     "an-alt-text-is-paired-with-its-neighbour": true,
+    "an-assumed-rate-is-labelled-wherever-it-renders": true,
     "an-edited-test-file-does-not-owe-a-measurement": false,
     "an-export-that-fails-is-not-silent": true,
     "an-idle-worker-can-take-work-from-a-busy-one": false,
@@ -274,6 +284,7 @@
     "every-make-target-is-in-the-readme": false,
     "every-make-target-is-phony": false,
     "every-owner-of-background-work-can-say-so": true,
+    "every-posting-day-names-its-invites": true,
     "every-review-surface-still-renders": true,
     "every-text-field-states-its-style": true,
     "every-ui-job-carries-a-deadline": false,
@@ -465,6 +476,7 @@
     "the-audience-measurement-reaches-the-report": false,
     "the-banners-do-not-cover-the-content": true,
     "the-class-index-reads-what-the-scan-read": false,
+    "the-collaborator-panel-draws-the-shared-sentence": true,
     "the-deadline-lets-the-rest-of-the-run-finish": false,
     "the-deadline-rule-reads-the-workflow-directory": false,
     "the-delivered-reel-reference-is-not-the-titled-one": false,
@@ -494,6 +506,7 @@
     "the-live-preference-is-not-compiled-into-the-tests": false,
     "the-live-preferences-are-not-written-under-test": false,
     "the-live-store-is-not-compiled-into-the-tests": false,
+    "the-liveliness-floor-comes-from-the-population": false,
     "the-lock-probe-asks-only-for-what-it-uses": false,
     "the-mac-leg-does-not-re-render-the-shards-work": false,
     "the-mac-legs-skip-list-is-derived-not-spelled": false,
@@ -747,6 +760,10 @@
       "run": "33415040753",
       "scale": 1.0
     },
+    "a-large-dead-audience-is-held-out-by-the-floor": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.358
+    },
     "a-layout-clears-every-surface-it-is-seen-on": {
       "run": "33415040753",
       "scale": 1.0
@@ -838,6 +855,10 @@
     "a-pipeline-marker-is-not-wrapped-in-prose": {
       "run": "33415040753",
       "scale": 1.0
+    },
+    "a-private-account-does-not-take-a-collaborator-slot": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.358
     },
     "a-proof-is-not-fresh-forever": {
       "run": "33415040753",
@@ -1103,6 +1124,10 @@
       "run": "33415040753",
       "scale": 1.0
     },
+    "a-value-that-is-no-account-is-not-a-candidate": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.358
+    },
     "a-venv-inside-an-app-bundle-is-refused": {
       "run": "33415040753",
       "scale": 1.0
@@ -1155,6 +1180,10 @@
       "run": "33415040753",
       "scale": 1.0
     },
+    "an-account-nobody-looked-at-is-still-not-scored": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.358
+    },
     "an-added-test-file-must-be-measured": {
       "run": "33415040753",
       "scale": 1.0
@@ -1162,6 +1191,10 @@
     "an-alt-text-is-paired-with-its-neighbour": {
       "run": "33415040753",
       "scale": 1.0
+    },
+    "an-assumed-rate-is-labelled-wherever-it-renders": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.358
     },
     "an-edited-test-file-does-not-owe-a-measurement": {
       "run": "33415040753",
@@ -1522,6 +1555,10 @@
     "every-owner-of-background-work-can-say-so": {
       "run": "33415040753",
       "scale": 1.0
+    },
+    "every-posting-day-names-its-invites": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.358
     },
     "every-review-surface-still-renders": {
       "run": "33415040753",
@@ -2287,6 +2324,10 @@
       "run": "33415040753",
       "scale": 1.0
     },
+    "the-collaborator-panel-draws-the-shared-sentence": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.358
+    },
     "the-deadline-lets-the-rest-of-the-run-finish": {
       "run": "33415040753",
       "scale": 1.0
@@ -2402,6 +2443,10 @@
     "the-live-store-is-not-compiled-into-the-tests": {
       "run": "33415040753",
       "scale": 1.0
+    },
+    "the-liveliness-floor-comes-from-the-population": {
+      "run": "local-Daniels-MacBook-Pro-2.local",
+      "scale": 1.358
     },
     "the-lock-probe-asks-only-for-what-it-uses": {
       "run": "33415040753",
@@ -2767,6 +2812,7 @@
     "a-handle-that-changed-hands-is-not-merged-across": 23.94,
     "a-hanging-gui-test-is-given-a-deadline": 1.26,
     "a-job-at-another-commit-is-not-an-answer": 1.05,
+    "a-large-dead-audience-is-held-out-by-the-floor": 21.59,
     "a-layout-clears-every-surface-it-is-seen-on": 1.79,
     "a-leg-that-ran-nothing-is-refused": 0.36,
     "a-link-raised-sheet-is-not-the-default-action": 22.76,
@@ -2790,6 +2836,7 @@
     "a-personal-post-is-not-an-uncontrolled-observation": 1.73,
     "a-perturbed-render-cannot-become-the-reference-frame": 1.68,
     "a-pipeline-marker-is-not-wrapped-in-prose": 17.16,
+    "a-private-account-does-not-take-a-collaborator-slot": 21.8,
     "a-proof-is-not-fresh-forever": 0.47,
     "a-quit-with-work-running-asks-first": 21.93,
     "a-raises-block-must-decide-about-recording": 0.59,
@@ -2856,6 +2903,7 @@
     "a-typed-name-does-not-reach-the-tag-list": 0.3,
     "a-typed-name-is-credited-not-mentioned": 24.67,
     "a-typed-note-survives-the-web-search": 19.2,
+    "a-value-that-is-no-account-is-not-a-candidate": 21.68,
     "a-venv-inside-an-app-bundle-is-refused": 0.3,
     "a-view-does-not-own-long-work": 27.37,
     "a-warning-names-no-cause-it-cannot-know": 23.44,
@@ -2869,8 +2917,10 @@
     "account-book-names-a-refusal": 20.93,
     "account-book-sets-a-bad-file-aside": 21.89,
     "adding-a-file-does-not-rewrite-the-record": 0.81,
+    "an-account-nobody-looked-at-is-still-not-scored": 21.31,
     "an-added-test-file-must-be-measured": 1.07,
     "an-alt-text-is-paired-with-its-neighbour": 20.69,
+    "an-assumed-rate-is-labelled-wherever-it-renders": 21.11,
     "an-edited-test-file-does-not-owe-a-measurement": 0.61,
     "an-export-that-fails-is-not-silent": 20.71,
     "an-idle-worker-can-take-work-from-a-busy-one": 0.56,
@@ -2961,6 +3011,7 @@
     "every-make-target-is-in-the-readme": 0.34,
     "every-make-target-is-phony": 0.35,
     "every-owner-of-background-work-can-say-so": 26.17,
+    "every-posting-day-names-its-invites": 20.5,
     "every-review-surface-still-renders": 27.13,
     "every-text-field-states-its-style": 23.72,
     "every-ui-job-carries-a-deadline": 0.8,
@@ -3152,6 +3203,7 @@
     "the-audience-measurement-reaches-the-report": 1.59,
     "the-banners-do-not-cover-the-content": 23.76,
     "the-class-index-reads-what-the-scan-read": 6.29,
+    "the-collaborator-panel-draws-the-shared-sentence": 22.1,
     "the-deadline-lets-the-rest-of-the-run-finish": 0.41,
     "the-deadline-rule-reads-the-workflow-directory": 0.61,
     "the-delivered-reel-reference-is-not-the-titled-one": 1.86,
@@ -3181,6 +3233,7 @@
     "the-live-preference-is-not-compiled-into-the-tests": 0.85,
     "the-live-preferences-are-not-written-under-test": 0.89,
     "the-live-store-is-not-compiled-into-the-tests": 0.91,
+    "the-liveliness-floor-comes-from-the-population": 0.76,
     "the-lock-probe-asks-only-for-what-it-uses": 1.03,
     "the-mac-leg-does-not-re-render-the-shards-work": 0.7,
     "the-mac-legs-skip-list-is-derived-not-spelled": 0.33,

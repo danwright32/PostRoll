@@ -1,0 +1,8 @@
+{
+  "name": "an-account-nobody-looked-at-is-still-not-scored",
+  "file": "PostRollApp/Sources/Services/CollaboratorPick.swift",
+  "find": "        guard stats.outcome == .notProfessional || stats.outcome == .noSuchAccount\n        else { return nil }",
+  "replace": "        guard true else { return nil }",
+  "test": "PostRollTests/CollaboratorPickTests/testAFollowersOnlyRecordIsNotScoredOnTheAssumedRate",
+  "breaks": "an account nobody has ever looked at is scored on the assumed rate, so the decision that an unmeasured account is never scored is reversed rather than narrowed, and a follower count with no engagement behind it ranks as though somebody had measured it (#1005)"
+}
