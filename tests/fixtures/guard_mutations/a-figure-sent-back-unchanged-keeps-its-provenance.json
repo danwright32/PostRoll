@@ -1,0 +1,8 @@
+{
+  "name": "a-figure-sent-back-unchanged-keeps-its-provenance",
+  "file": "PostRollApp/Sources/Services/AccountBook.swift",
+  "find": "        return now == was ? (previous ?? .typed) : .typed",
+  "replace": "        return .typed",
+  "test": "PostRollTests/AccountBookTests/testAFigureSentBackUnchangedIsStillAMeasuredOne",
+  "breaks": "every figure the pre-filled sheet sends back is marked as typed by hand, so correcting one field quietly downgrades the other two from measured to typed and the reason line claims Dan entered numbers Meta reported (#1003)"
+}
