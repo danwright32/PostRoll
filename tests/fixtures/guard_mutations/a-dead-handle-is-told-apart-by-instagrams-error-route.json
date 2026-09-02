@@ -1,0 +1,8 @@
+{
+  "name": "a-dead-handle-is-told-apart-by-instagrams-error-route",
+  "file": "postroll/ai/account_numbers.py",
+  "find": "_ERROR_ROUTE = \"PolarisErrorRoot\"",
+  "replace": "_ERROR_ROUTE = \"PolarisErrorRootMoved\"",
+  "test": "tests/test_account_numbers.py::test_the_page_verdicts_are_produced_from_real_shapes",
+  "breaks": "the only marker separating a handle nobody holds from one that exists stops matching, so no account can ever be classified as no_such_account and the outcome becomes unreachable while every other test stays green (#1002)"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "an-unreadable-quota-header-is-not-a-low-reading",
+  "file": "postroll/ai/account_numbers.py",
+  "find": "        except (TypeError, ValueError):\n            return None",
+  "replace": "        except (TypeError, ValueError):\n            return {\"call_count\": 0}",
+  "test": "tests/test_account_numbers.py::test_a_quota_header_that_will_not_parse_is_no_reading_rather_than_a_low_one",
+  "breaks": "a usage header Meta sent that cannot be parsed comes back as a small number instead of no reading, so a spent allowance reads as plenty left and the fetch retries into a wall it has already been told about (#1002)"
+}
