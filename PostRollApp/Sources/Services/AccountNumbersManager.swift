@@ -116,6 +116,13 @@ final class AccountNumbersManager {
 
         running = true
         defer { running = false }
+        // The call spends Meta's allowance BEFORE anything is recorded, so a
+        // crash between the two loses the recording and not the cost (L33).
+        // That is inherent to a metered API and it is survivable here rather
+        // than merely tolerated: an account with nothing merged stays due, so
+        // the next settle asks again, and `AccountFetchDue.maximumAttempts`
+        // stops that becoming a loop. What is NOT covered is noticing that the
+        // allowance is going, which is #1207.
         do {
             let answers = try await fetch(due)
             for answer in answers {
