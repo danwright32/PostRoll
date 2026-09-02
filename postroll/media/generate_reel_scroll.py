@@ -95,6 +95,21 @@ SCROLL_DURATION = 40.0   # seconds to scroll the full strip
 HOLD_END = 1.0           # hold at bottom before closing
 CLOSING_FRAME_DURATION = 5.0
 
+#: How far the strip may advance between frames before the scroll reads as
+#: rushed, in canvas pixels at the frame rate a viewer actually sees.
+#:
+#: Not chosen from theory. Dan judged a ladder of the reel this was reported on
+#: (Battery Dance Festival, 234 photographs, a 29,000px strip) on 2026-08-30,
+#: one layout, one photo set, speed the only variable: 11.50 px a frame read as
+#: fast and 10.81 read as right. Instagram re-encodes every reel to 30fps
+#: whatever it is given, so this is the number a viewer sees rather than one
+#: only the master has.
+#:
+#: Here rather than in the test that first recorded it, because it decides what
+#: the app TELLS Dan before he renders (#1066), and a value the product acts on
+#: cannot live only in a test.
+COMFORTABLE_TRAVEL_PX = 10.81
+
 # Branded chrome
 # ── The title band (#752) ─────────────────────────────────────────────────────
 #

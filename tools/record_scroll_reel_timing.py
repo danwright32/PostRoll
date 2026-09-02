@@ -70,6 +70,15 @@ def build() -> dict:
         "viewport_h": scroll.VIEWPORT_H,
         "ease_ramp": scroll.EASE_RAMP,
         "cruise_factor": cruise_factor(scroll.EASE_RAMP),
+        "comfortable_travel_px": scroll.COMFORTABLE_TRAVEL_PX,
+
+        # Two real reels, so the Swift side's arithmetic is checked against
+        # journeys that happened rather than shapes chosen to pass (L48). Both
+        # measured on 2026-08-30; the first is the one Dan reported as too fast.
+        "measured_reels": [
+            {"name": "Battery Dance Festival", "photos": 234, "strip_h": 29000},
+            {"name": "DiGangi With A G", "photos": 149, "strip_h": 18695},
+        ],
     }
 
 

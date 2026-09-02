@@ -48,6 +48,22 @@ struct ReelStripPreviewThumbnail: View {
     @State private var swapMode: Bool = false
     @State private var swapSourceIdx: Int? = nil
 
+    /// One sentence when this reel is faster than is comfortable to watch.
+    ///
+    /// A computed property rather than the call inline in `body`, which is
+    /// already large enough that the type checker feels it.
+    ///
+    /// Nil until a length is known: `currentReelLength` is only passed on
+    /// Thursday, and every other caller of this view has no reel length to be
+    /// fast at.
+    private var speedNotice: String? {
+        guard let currentReelLength else { return nil }
+        return ScrollReelTiming.speedNotice(
+            stripHeight: Double(stripH),
+            photoCount: cells.count,
+            scrollSeconds: currentReelLength)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if swapMode {
@@ -233,6 +249,20 @@ struct ReelStripPreviewThumbnail: View {
                     .fixedSize()
                     .padding(10)
                 }
+            }
+
+            // How fast this reel will read, before it is rendered (#1066).
+            //
+            // In the panel rather than inside the options menu, which is where
+            // the length control lives: a menu closes, and this is a standing
+            // fact about the reel as it is currently set up, not a response to
+            // an action (L126).
+            if let speedNotice {
+                Text(speedNotice)
+                    .font(.light(11))
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 2)
             }
 
             // Size slider — always reserves its height so the strip doesn't
