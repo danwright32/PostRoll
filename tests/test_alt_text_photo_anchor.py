@@ -201,3 +201,121 @@ def test_a_revision_keeps_the_anchors_it_was_given():
     assert len(result["alt_text_photo_paths"]) == len(result["alt_texts"]), (
         "the anchors and the alt texts have to survive a revision together"
     )
+
+
+# -- a review pass must not permute the alt texts either (#1214) --------------
+#
+# The anchors above make an alt text resolvable to its own photograph, and every
+# reader downstream still indexes positionally into the list. Passes 2 and 3
+# hand the whole draft JSON back to the model to rewrite, carry no post type,
+# and had no validator, so a pass that reorders the entries, drops one, or
+# merges two shifts every alt text after that point onto the wrong photograph.
+# That is #1008's failure arriving by a different route, and invisible for the
+# same reason: each sentence is well written and true of SOME photograph in the
+# post, so a sighted read of the caption screen does not catch it.
+#
+# #1067 held the alt text out of the rewrite for the post types that take ONE
+# alt. This is the rest of that: the per-photo post types, where the damage is
+# worse because position is meaning.
+
+
+def _through_review_passes(replies, photos, **kwargs):
+    """Drive a generation where the draft and the voice pass each answer.
+
+    `run_review_pass` is left REAL and calls the module's own
+    `run_json_prompt`, so the merge the passes actually perform is exercised
+    rather than a stand-in for it.
+    """
+    answers = list(replies)
+
+    def stub(prompt, **_):
+        return dict(answers.pop(0)) if answers else dict(replies[-1])
+
+    with patch.object(generate_captions, "run_json_prompt", side_effect=stub):
+        return generate_captions.generate_caption(
+            event="Show", org="Org", venue="Hall", date="2026-04-05",
+            day="sunday", photo_paths=photos,
+            program={"performers": [], "pieces": []},
+            skip_humanizer=True, skip_voice_pass=False, **kwargs)
+
+
+def _carousel_draft():
+    return {
+        "caption": "Three frames from the second half.",
+        "hashtags": ["#dwphotony"],
+        "alt_texts": ["alt for one", "alt for two", "alt for three"],
+        "scene_labels": [None, None, None],
+    }
+
+
+def _three_photos(tmp_path):
+    return [_photo(tmp_path, "one.jpg", (120, 80, 60)),
+            _photo(tmp_path, "two.jpg", (60, 90, 120)),
+            _photo(tmp_path, "three.jpg", (90, 120, 60))]
+
+
+def test_a_review_pass_cannot_reorder_a_carousels_alt_texts(tmp_path):
+    draft = _carousel_draft()
+    swapped = dict(draft, alt_texts=["alt for two", "alt for one", "alt for three"])
+    result = _through_review_passes([draft, swapped], _three_photos(tmp_path),
+                                    post_type="carousel")
+    assert result["alt_texts"] == draft["alt_texts"], (
+        "a review pass swapped the first two alt texts, so both photographs "
+        "now carry each other's description while every sentence still reads "
+        "as correct")
+
+
+def test_a_review_pass_cannot_drop_one_and_shift_the_rest(tmp_path):
+    """The worse shape: everything after the hole moves up one photograph."""
+    draft = _carousel_draft()
+    short = dict(draft, alt_texts=["alt for two", "alt for three"])
+    result = _through_review_passes([draft, short], _three_photos(tmp_path),
+                                    post_type="carousel")
+    assert result["alt_texts"] == draft["alt_texts"]
+    assert len(result["alt_texts"]) == len(result["alt_text_photo_paths"]), (
+        "an alt text list a different length from its anchors cannot resolve "
+        "anything")
+
+
+def test_the_carousel_rewrite_is_reported_rather_than_only_undone(tmp_path):
+    # Putting them back destroys the only evidence the pass ignored the draft
+    # (L340), which is the same reason the single-alt case reports it.
+    draft = _carousel_draft()
+    swapped = dict(draft, alt_texts=["alt for two", "alt for one", "alt for three"])
+    result = _through_review_passes([draft, swapped], _three_photos(tmp_path),
+                                    post_type="carousel")
+    codes = [f["code"] for f in result["findings"]]
+    assert "alt_text_rewritten_by_review" in codes, result["findings"]
+
+
+def test_the_carousel_report_says_how_many_entries_moved(tmp_path):
+    # One entry rewritten and all of them rewritten want different responses,
+    # and quoting entry 0 alone cannot tell them apart on a per-photo post.
+    draft = _carousel_draft()
+    swapped = dict(draft, alt_texts=["alt for two", "alt for one", "alt for three"])
+    result = _through_review_passes([draft, swapped], _three_photos(tmp_path),
+                                    post_type="carousel")
+    finding = next(f for f in result["findings"]
+                   if f["code"] == "alt_text_rewritten_by_review")
+    assert "2" in finding["detail"], finding["detail"]
+
+
+def test_a_pass_that_left_the_carousels_alt_texts_alone_is_not_reported(tmp_path):
+    # The positive control. Without it the tests above are satisfied by a report
+    # raised on every carousel, which is a panel that cries wolf (L36, L159).
+    draft = _carousel_draft()
+    result = _through_review_passes(
+        [draft, dict(draft, caption="A tighter caption.")],
+        _three_photos(tmp_path), post_type="carousel")
+    codes = [f["code"] for f in result["findings"]]
+    assert "alt_text_rewritten_by_review" not in codes
+
+
+def test_the_passes_can_still_improve_a_carousels_caption(tmp_path):
+    # The other positive control: holding alt text out of the rewrite must not
+    # turn the review passes into no passes at all (L143).
+    draft = _carousel_draft()
+    result = _through_review_passes(
+        [draft, dict(draft, caption="A tighter caption.")],
+        _three_photos(tmp_path), post_type="carousel")
+    assert result["caption"] == "A tighter caption."
