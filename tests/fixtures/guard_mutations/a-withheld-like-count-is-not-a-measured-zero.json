@@ -1,0 +1,8 @@
+{
+  "name": "a-withheld-like-count-is-not-a-measured-zero",
+  "file": "PostRollApp/Sources/Services/CollaboratorPick.swift",
+  "find": "        if stats.likesAreHidden {",
+  "replace": "        if stats.likesAreHidden, false {",
+  "test": "PostRollTests/CollaboratorPickTests/testAnAccountThatWithholdsItsLikesIsNotScoredAsHavingNone",
+  "breaks": "an account that answered and kept its like count back is scored as though that figure had been measured at zero, so an account doing perfectly well ranks identically to one measured and found dead and the liveliness floor demotes it (#1032, L507)"
+}

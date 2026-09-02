@@ -1,0 +1,8 @@
+{
+  "name": "a-hidden-like-count-says-something-of-its-own",
+  "file": "PostRollApp/Sources/Services/CollaboratorPick.swift",
+  "find": "                parts.append(scored.likesHidden ? hiddenLikesLabel : assumedRateLabel)",
+  "replace": "                parts.append(assumedRateLabel)",
+  "test": "PostRollTests/CollaboratorPickTests/testAWithheldLikeCountSaysSomethingDifferentFromAnApiRefusal",
+  "breaks": "an account that hid one figure and an account Meta cannot report on at all render the same sentence, though the remedies differ: the first may start showing the figure and the second never will (#1032, L11)"
+}

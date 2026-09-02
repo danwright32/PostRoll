@@ -600,6 +600,126 @@ final class CollaboratorPickTests: XCTestCase {
         XCTAssertTrue(named.contains("private"), "the account vanished entirely")
     }
 
+    // MARK: - A withheld like count is not a measured zero (#1032)
+
+    /// Some accounts answer everything except their like count. Folded into the
+    /// score as zero, an account doing perfectly well is scored identically to
+    /// one measured and found dead, and the liveliness floor then demotes it.
+    ///
+    /// It is a THIRD thing, not a missing value and not a measurement: the
+    /// account answered and refused this one figure (L507). Measured on the
+    /// committed population: 2 of 122 accounts withhold it.
+    ///
+    /// Scored the way an account Meta refuses entirely is scored, on the
+    /// assumed rate. Estimating the hidden likes from the comments was the
+    /// obvious alternative and the population rules it out: likes per comment
+    /// spreads 11x between the 10th and 90th percentile across the 52 accounts
+    /// with both figures, so the estimate would be guesswork wearing a number.
+    /// The assumed rate lands within 5% of the median estimate for the two real
+    /// cases without inheriting that spread.
+
+    /// An account that answered, withheld its likes, and has real comments.
+    private func withheldLikes(followers: Int, comments: Int) -> AccountStats {
+        AccountStats(followers: followers, likes: nil, comments: comments,
+                     recordedOn: now, followersSource: .measured,
+                     likesSource: .hidden, commentsSource: .measured,
+                     outcome: .measured)
+    }
+
+    func testAnAccountThatWithholdsItsLikesIsNotScoredAsHavingNone() {
+        // 15,456 followers and 14 comments, one of the two real cases. On
+        // comments alone it scores 42; on the assumed rate it scores 422, which
+        // is what an account that size with 14 comments a post plausibly gets.
+        let table = ["hidden": withheldLikes(followers: 15_456, comments: 14),
+                     "b": stats(1_000, 50, 5)]
+            .merging(Dictionary(uniqueKeysWithValues:
+                ["c", "d", "e", "f"].map { ($0, stats(1_000, 40, 4)) })) { a, _ in a }
+        let result = CollaboratorPick.suggest(
+            handles: ["hidden", "b", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        XCTAssertEqual(result.suggested.first?.handle, "hidden",
+                       "an account withholding one figure was scored as though that "
+                       + "figure had been measured at zero")
+    }
+
+    func testAnAccountMeasuredAtGenuinelyZeroIsStillScoredAtZero() {
+        // The positive control the issue asks for, in the same fixture shape.
+        // Without it the assertion above is satisfied by scoring every account
+        // on the assumed rate, which would stop the ranking measuring anything.
+        let table = ["zero": AccountStats(followers: 15_456, likes: 0, comments: 0,
+                                          recordedOn: now, followersSource: .measured,
+                                          likesSource: .measured,
+                                          commentsSource: .measured, outcome: .measured),
+                     "b": stats(1_000, 50, 5)]
+            .merging(Dictionary(uniqueKeysWithValues:
+                ["c", "d", "e", "f"].map { ($0, stats(1_000, 40, 4)) })) { a, _ in a }
+        let result = CollaboratorPick.suggest(
+            handles: ["zero", "b", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        XCTAssertNotEqual(result.suggested.first?.handle, "zero",
+                          "an account measured and found dead was promoted as though "
+                          + "its figures had been withheld")
+    }
+
+    func testAWithheldLikeCountIsLabelledWhereverItRenders() {
+        // The same shape #1005 labels an assumed rate, and for the same reason:
+        // the score rests on an assumption, and a reason line reporting it as a
+        // measurement claims something nobody took.
+        let table = ["hidden": withheldLikes(followers: 15_456, comments: 14)]
+            .merging(Dictionary(uniqueKeysWithValues:
+                ["b", "c", "d", "e", "f"].map { ($0, stats(1_000, 1, 0)) })) { a, _ in a }
+        let result = CollaboratorPick.suggest(
+            handles: ["hidden", "b", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        let reason = result.suggested.first(where: { $0.handle == "hidden" })?.reason ?? ""
+        XCTAssertTrue(reason.lowercased().contains("hidden")
+                      || reason.lowercased().contains("withheld"), reason)
+        XCTAssertTrue(reason.lowercased().contains("assum"), reason)
+        XCTAssertFalse(reason.contains("0 likes"),
+                       "the reason line reports a zero nobody measured: \(reason)")
+
+        XCTAssertTrue(CollaboratorPick.captionBlock(result).lowercased().contains("hidden"),
+                      "CAPTIONS.txt says nothing about the figure that was withheld")
+    }
+
+    func testAWithheldLikeCountSaysSomethingDifferentFromAnApiRefusal() {
+        // Two causes, two messages (L11). One account answered and kept a
+        // figure back; the other was never reported on at all, and the remedies
+        // differ: the first may start answering, the second never will.
+        let hidden = ["hidden": withheldLikes(followers: 3_000, comments: 14)]
+            .merging(Dictionary(uniqueKeysWithValues:
+                ["b", "c", "d", "e", "f"].map { ($0, stats(1_000, 1, 0)) })) { a, _ in a }
+        let refused = ["refused": refusedByTheAPI(3_000)]
+            .merging(Dictionary(uniqueKeysWithValues:
+                ["b", "c", "d", "e", "f"].map { ($0, stats(1_000, 1, 0)) })) { a, _ in a }
+
+        let one = CollaboratorPick.suggest(handles: ["hidden", "b", "c", "d", "e", "f"],
+                                           firstPhoto: nil, stats: lookup(hidden), asOf: now)
+        let other = CollaboratorPick.suggest(handles: ["refused", "b", "c", "d", "e", "f"],
+                                             firstPhoto: nil, stats: lookup(refused), asOf: now)
+
+        let a = one.suggested.first(where: { $0.handle == "hidden" })?.reason ?? ""
+        let b = other.suggested.first(where: { $0.handle == "refused" })?.reason ?? ""
+        XCTAssertNotEqual(a, b, "both causes render the same sentence: \(a)")
+    }
+
+    func testAWithheldLikeCountWithNoFollowersIsStillNotScored() {
+        // The assumption is a RATE, so it needs a follower count to apply to,
+        // exactly as an API refusal does.
+        let table = ["hidden": AccountStats(likes: nil, comments: 14, recordedOn: now,
+                                            likesSource: .hidden, outcome: .measured)]
+            .merging(Dictionary(uniqueKeysWithValues:
+                ["b", "c", "d", "e", "f"].map { ($0, stats(1_000, 1, 0)) })) { a, _ in a }
+        let result = CollaboratorPick.suggest(
+            handles: ["hidden", "b", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        XCTAssertTrue(result.unranked.map(\.handle).contains("hidden"))
+    }
+
     // MARK: - The reason line describes the metric that exists (#1005)
 
     func testTheReasonLineNoLongerClaimsAPercentageIsTheScore() {
