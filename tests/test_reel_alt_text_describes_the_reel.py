@@ -33,8 +33,13 @@ one's: a single photo description, correctly formed, indistinguishable from a
 compliant reel level alt. That is the detection of a prompt violation being
 thrown away at the moment it is made (L340).
 
-The fourth cause, the voice and humanizer passes rewriting the alt text with no
-idea what a reel is, is not addressed here.
+**The voice and humanizer passes rewrote it with no idea what a reel is.**
+Passes 2 and 3 hand the whole draft back to the model, carrying the humanizer
+rules, the brand voice and a one line output shape, and neither carries the post
+type. So a compliant reel level alt could be condensed back into a single frame
+description by a later stage, while the stage that enforced the rule had already
+run (L280). The draft's alt text is now put back afterwards, and the rewrite is
+reported rather than only undone.
 """
 
 from __future__ import annotations
@@ -187,3 +192,101 @@ def test_a_carousel_with_one_alt_per_photo_is_not_reported(sample_photo):
                          post_type="collage_carousel")
     codes = [f["code"] for f in result["findings"]]
     assert "alt_text_per_frame" not in codes
+
+
+# -- the fourth cause: the review passes rewrite what they were never told ----
+#
+# Passes 2 and 3 hand the whole draft JSON back to the model to rewrite,
+# carrying the humanizer rules, the brand voice and a one line output shape.
+# Neither carries the post type or the reel alt rule, and neither had a
+# validator, so a compliant reel level alt could be condensed back into a
+# single frame description by a later stage while the stage that enforced the
+# rule had already run (L280).
+#
+# The rule is made structural rather than better worded: for a post type that
+# takes ONE post level alt, the alt text the draft pass produced is put back
+# verbatim afterwards. A rule that lives only in a prompt is a hope (L27), and
+# these passes are not asked to touch alt text at all.
+
+ONE_FRAME = "Four dancers on an outdoor stage at night, lit in blue and pink."
+
+
+def _capture_through_passes(replies, **kwargs):
+    """Run one generation where the draft and the review passes each answer.
+
+    `run_review_pass` is left REAL and calls the module's own
+    `run_json_prompt`, so this exercises the merge the passes actually do
+    rather than a stand-in for it.
+    """
+    answers = list(replies)
+
+    def stub(prompt, **_):
+        return dict(answers.pop(0)) if answers else dict(replies[-1])
+
+    with patch.object(gc, "run_json_prompt", side_effect=stub):
+        return gc.generate_caption(
+            event="Battery Dance Festival", org="Battery Dance",
+            venue="Rockefeller Park", date="2026-08-15", day="thursday",
+            program={"performers": [], "pieces": []},
+            skip_humanizer=True, skip_voice_pass=False, **kwargs)
+
+
+def test_the_voice_pass_cannot_condense_a_reel_alt_to_one_frame(sample_photo):
+    result = _capture_through_passes(
+        [COMPLIANT, dict(COMPLIANT, alt_texts=[ONE_FRAME])],
+        photo_paths=[sample_photo], post_type="scroll_reel", post_photo_count=234)
+    assert result["alt_texts"] == COMPLIANT["alt_texts"], (
+        "a later pass rewrote the reel's alt text into one frame's description "
+        "and shipped it")
+
+
+def test_a_clip_reel_is_covered_too(sample_photo):
+    # clip_reel is aliased to scroll_reel's instruction and is in
+    # SINGLE_ALT_POST_TYPES, so it has the same failure and needs the same
+    # cover. A fix that named only scroll_reel would leave Friday broken.
+    result = _capture_through_passes(
+        [COMPLIANT, dict(COMPLIANT, alt_texts=[ONE_FRAME])],
+        photo_paths=[sample_photo], post_type="clip_reel", post_photo_count=90)
+    assert result["alt_texts"] == COMPLIANT["alt_texts"]
+
+
+def test_the_rewrite_is_reported_rather_than_only_undone(sample_photo):
+    # Putting it back destroys the only evidence the pass ignored the draft: a
+    # pass that rewrote every alt and one that reproduced them all produce an
+    # identical result afterwards (L340). This repo has already shipped that
+    # exact shape once, which is cause three of this same issue.
+    result = _capture_through_passes(
+        [COMPLIANT, dict(COMPLIANT, alt_texts=[ONE_FRAME])],
+        photo_paths=[sample_photo], post_type="scroll_reel", post_photo_count=234)
+    codes = [f["code"] for f in result["findings"]]
+    assert "alt_text_rewritten_by_review" in codes, result["findings"]
+
+
+def test_a_pass_that_left_the_alt_alone_is_not_reported(sample_photo):
+    # The positive control. Without it the test above is satisfied by a report
+    # raised on every run, which is a panel that cries wolf (L36, L159).
+    result = _capture_through_passes(
+        [COMPLIANT, dict(COMPLIANT, caption="A tighter caption.")],
+        photo_paths=[sample_photo], post_type="scroll_reel", post_photo_count=234)
+    codes = [f["code"] for f in result["findings"]]
+    assert "alt_text_rewritten_by_review" not in codes
+
+
+def test_the_passes_can_still_improve_the_caption(sample_photo):
+    # The other positive control: holding alt text out of the rewrite must not
+    # turn the review passes into no passes at all (L143).
+    result = _capture_through_passes(
+        [COMPLIANT, dict(COMPLIANT, caption="A tighter caption.")],
+        photo_paths=[sample_photo], post_type="scroll_reel", post_photo_count=234)
+    assert result["caption"] == "A tighter caption."
+
+
+def test_a_per_frame_draft_is_still_collapsed_and_reported(sample_photo):
+    # Restoring the draft's alt text must not resurrect a list the draft pass
+    # should never have written: cause three still applies to what pass 1 said.
+    result = _capture_through_passes(
+        [PER_FRAME, dict(COMPLIANT, alt_texts=[ONE_FRAME])],
+        photo_paths=[sample_photo], post_type="scroll_reel", post_photo_count=234)
+    assert len(result["alt_texts"]) == 1
+    codes = [f["code"] for f in result["findings"]]
+    assert "alt_text_per_frame" in codes

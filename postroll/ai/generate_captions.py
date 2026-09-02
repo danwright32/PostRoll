@@ -875,6 +875,23 @@ def generate_caption(
         if not isinstance(data, dict):
             raise ClaudeError(f"Expected JSON object, got {type(data).__name__}")
 
+        # What the DRAFT pass wrote, kept before either review pass can touch
+        # it (#1067, the fourth cause).
+        #
+        # Passes 2 and 3 hand the whole draft JSON back to the model to
+        # rewrite, carrying the humanizer rules, the brand voice and a one line
+        # output shape. Neither carries the post type, so neither has any idea
+        # that a reel takes one alt text describing the whole reel. A compliant
+        # reel level alt could be condensed back into a single frame
+        # description by a later stage, and the stage that enforced the rule
+        # had already run (L280).
+        #
+        # Carrying the rule into both prompts was the other option and it is
+        # weaker: it is still a rule living in a prompt, on the two passes that
+        # are not asked to touch alt text at all (L27). Putting the draft's alt
+        # text back is structural, costs nothing, and cannot be talked out of.
+        draft_alt_texts = data.get("alt_texts")
+
         single_shape = (
             "{alt_texts: list of strings, scene_labels: list of strings or "
             "nulls, caption: string, hashtags: list of strings}"
@@ -908,6 +925,34 @@ def generate_caption(
     # collapse to the first entry defensively in case Claude wrote one
     # per photo anyway, and say so rather than swallowing it (#1067).
     per_frame_findings: list[Finding] = []
+
+    # The draft's alt text put back, for the post types that take ONE alt text
+    # describing the whole post (#1067).
+    #
+    # Reported as well as undone, because putting it back DESTROYS the only
+    # evidence the pass ignored it: a pass that rewrote the alt and one that
+    # reproduced it exactly leave an identical result behind (L340). This repo
+    # has already shipped that exact shape once, and it is cause three of this
+    # same issue.
+    #
+    # Restored even when the draft produced no alt text at all, so a pass can
+    # never invent one: an alt text written by a stage that never saw the
+    # photographs is the failure this is here to prevent, and a missing alt
+    # reads as missing rather than as plausibly wrong.
+    if post_type in SINGLE_ALT_POST_TYPES:
+        produced = data.get("alt_texts")
+        if produced != draft_alt_texts:
+            shipped = draft_alt_texts[0] if draft_alt_texts else "(none)"
+            attempted = produced[0] if produced else "(none)"
+            per_frame_findings.append(Finding(
+                code="alt_text_rewritten_by_review",
+                message=("A review pass rewrote this post's alt text. The "
+                         "draft's own alt text is what shipped."),
+                detail=(f"Shipped: {str(shipped)[:90]} | "
+                        f"The pass wanted: {str(attempted)[:90]}"),
+            ))
+        data = dict(data, alt_texts=draft_alt_texts)
+
     alt_texts = data.get("alt_texts") or []
     scene_labels = data.get("scene_labels") or []
     if not isinstance(alt_texts, list):
