@@ -1,0 +1,8 @@
+{
+  "name": "an-unmeasured-ffmpeg-major-is-refused",
+  "file": "tests/test_golden_frames.py",
+  "find": "    assert here in MEASURED_FFMPEG_MAJORS, (",
+  "replace": "    assert here is not None, (",
+  "test": "tests/test_golden_drift_is_reported.py::test_an_unmeasured_ffmpeg_major_is_still_refused",
+  "breaks": "the check accepts any ffmpeg that will say what version it is, so the list of majors there is a drift reading for stops being consulted at all. MEASURED_FFMPEG_MAJORS became a list rather than one value in #1226, because the runner went to ffmpeg 9 while Dan's Mac stayed on 8, and widening a guard is how one stops guarding: this is what holds the list to being a record of evidence rather than a place versions get added to make a run go green"
+}
