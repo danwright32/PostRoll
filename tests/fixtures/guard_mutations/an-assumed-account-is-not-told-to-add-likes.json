@@ -1,0 +1,8 @@
+{
+  "name": "an-assumed-account-is-not-told-to-add-likes",
+  "file": "PostRollApp/Sources/Services/AccountBook.swift",
+  "find": "        if likesAreHidden { return .counted }",
+  "replace": "        if likesAreHidden, false { return .counted }",
+  "test": "PostRollTests/AccountFreshnessTests/testAnAccountWithHiddenLikesIsNotCalledFollowersOnlyEither",
+  "breaks": "an account that IS ranked, on an assumption, is told to add likes it cannot supply, which names a remedy that changes nothing and reads as though the ranking had ignored it (#977, #1032, L111)"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "the-numbers-form-states-its-requirement",
+  "file": "PostRollApp/Sources/Views/CollaboratorPanel.swift",
+  "find": "                 + AccountStats.numbersFormRequirement)",
+  "replace": "                 + \"Leave a field empty if you do not know it.\")",
+  "test": "PostRollTests/AccountFreshnessTests/testTheDialogDrawsThatSentenceRatherThanSpellingIt",
+  "breaks": "the numbers form goes back to describing three independent optional fields and never says a follower count alone will not rank, so somebody fills in the one figure they have, saves, and gets nothing with no statement anywhere that the entry was insufficient (#977)"
+}
