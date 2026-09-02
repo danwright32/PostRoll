@@ -22,9 +22,9 @@ struct SettingsView: View {
         case keychain
         case fixed(String?)
 
-        func read() -> String? {
+        func read(_ secret: KeychainStore.Secret = .anthropic) -> String? {
             switch self {
-            case .keychain:          return KeychainStore.readAPIKey()
+            case .keychain:          return KeychainStore.read(secret)
             case .fixed(let value):  return value
             }
         }
@@ -51,41 +51,10 @@ struct SettingsView: View {
     /// it `.shared`. The app still passes the shared one.
     let book: HandleBook
 
-    @State private var apiKey: String
-
-    /// What the store held when it was last read (#935).
-    ///
-    /// Held beside the typed value rather than fetched to answer the Save
-    /// button's disabled state, which is what that modifier used to do: a
-    /// keychain read on every render pass, so typing one character re-read it.
-    /// A keychain read is a privileged call, not a cheap one.
-    ///
-    /// Read once here and moved only when a write actually LANDS, which is the
-    /// part that has to stay correct. A refused save or delete leaves it alone,
-    /// so the typed value still differs from it and the button stays live to be
-    /// retried; a button that went quiet there would leave somebody facing a
-    /// screen saying the write failed and no way to try again (#112, #448,
-    /// L109).
-    ///
-    /// What this deliberately gives up, said out loud rather than left as a gap
-    /// (L129): the screen no longer notices a key changed by something OTHER
-    /// than this app while Settings is open. The app is the only writer of this
-    /// entry, and the previous behaviour bought that at the price of a
-    /// privileged call per redraw.
-    @State private var storedKey: String
-
     init(keySource: KeySource = .keychain, book: HandleBook = .shared) {
         self.keySource = keySource
         self.book = book
-        let stored = keySource.read() ?? ""
-        _apiKey = State(initialValue: stored)
-        _storedKey = State(initialValue: stored)
     }
-
-    @State private var saved = false
-    /// Set when a save was refused by the keychain, so a write that did not
-    /// land cannot present as a successful one (#112).
-    @State private var saveError: String?
 
     // Default posting layout for new events (#66). Per-event overrides live on
     // the Export page; this is the fallback an event uses until it's overridden.
@@ -105,73 +74,13 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            Section {
-                // Placeholder shows the SHAPE of a whole key rather than just
-                // its prefix: "sk-ant-…" read as the field already accounting
-                // for the prefix, so only the part after it got pasted, and the
-                // result was the same generic "invalid x-api-key" as a wrong
-                // key with nothing to tell the two apart (#128).
-                SecureField("Paste the whole key, starting sk-ant-", text: $apiKey)
-                    .textFieldStyle(.automatic)
-                    .font(.system(.body, design: .monospaced))
-                    .frame(width: 380)
-                    .onChange(of: apiKey) { saved = false; saveError = nil }
+            SecretField(secret: .anthropic,
+                        footer: SettingsCopy.apiKeyFooter,
+                        source: keySource)
 
-                if let warning = KeychainStore.formatWarning(for: apiKey) {
-                    Label(warning, systemImage: "exclamationmark.triangle.fill")
-                        .foregroundStyle(PaintedSurfaces.stateWarningText)
-                        .font(.system(size: 11))
-                        .frame(width: 380, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                HStack {
-                    Button("Save") {
-                        // One implementation of what a press does, held in
-                        // KeychainStore so every branch of it can be exercised
-                        // with no keychain (#935). It decides what is stored,
-                        // whether to show the mark, and what to say when the
-                        // write was refused, together: three fields set
-                        // separately here is how a refused write came to
-                        // present as a successful one (#112, L53).
-                        let outcome = KeychainStore.save(typed: apiKey,
-                                                         stored: storedKey)
-                        storedKey = outcome.stored
-                        saved = outcome.saved
-                        saveError = outcome.error
-                    }
-                    .buttonStyle(.borderedProminent)
-                    // Unchanged, or not long enough to be a whole key (#348).
-                    // The warning above says which, so a disabled button is
-                    // never unexplained.
-                    //
-                    // Against the value held in state rather than one fetched
-                    // here (#935). This ran on every render pass and each run
-                    // was a keychain read.
-                    .disabled(!KeychainStore.canSave(typed: apiKey,
-                                                     stored: storedKey))
-
-                    if saved {
-                        Label("Saved", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(PaintedSurfaces.stateSuccessText)
-                            .font(.system(size: 13))
-                    }
-                }
-
-                if let saveError {
-                    Label(saveError, systemImage: "xmark.octagon.fill")
-                        .foregroundStyle(PaintedSurfaces.stateErrorText)
-                        .font(.system(size: 11))
-                        .frame(width: 380, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            } header: {
-                Text("Anthropic API Key")
-            } footer: {
-                Text(.init(SettingsCopy.apiKeyFooter))
-                    .foregroundStyle(PaintedSurfaces.readableSecondaryLabel)
-                    .font(.system(size: 11))
-            }
+            SecretField(secret: .meta,
+                        footer: SettingsCopy.metaTokenFooter,
+                        source: keySource)
 
             Section {
                 Picker("Default layout", selection: Binding(
@@ -274,6 +183,112 @@ struct SettingsView: View {
                     reclaimResult = "Failed: \(error.localizedDescription)"
                 }
             }
+        }
+    }
+}
+
+/// One stored secret's field, described rather than written out (#1002).
+///
+/// This was the Anthropic key's section, spelled out inline with its prefix,
+/// its placeholder and its heading typed into the view. A second secret added
+/// by copying that block would have carried the first one's prefix into its
+/// warning, which is exactly what would have told Dan a perfectly good Meta
+/// token "does not start with sk-ant-" while Save stayed live.
+///
+/// Owns its own typed and stored state rather than taking them from the
+/// screen. Two fields cannot share one pair, and a parent holding both would
+/// have to thread four values per secret through a `body` that is already the
+/// largest on this screen.
+struct SecretField: View {
+    let secret: KeychainStore.Secret
+    /// Markdown, so an address in it is a real link.
+    let footer: String
+    let source: SettingsView.KeySource
+
+    @State private var typed: String
+    @State private var stored: String
+    @State private var saved = false
+    /// Set when a save was refused by the keychain, so a write that did not
+    /// land cannot present as a successful one (#112).
+    @State private var saveError: String?
+
+    init(secret: KeychainStore.Secret, footer: String,
+         source: SettingsView.KeySource) {
+        self.secret = secret
+        self.footer = footer
+        self.source = source
+        let held = source.read(secret) ?? ""
+        _typed = State(initialValue: held)
+        _stored = State(initialValue: held)
+    }
+
+    var body: some View {
+        Section {
+            // The placeholder shows the SHAPE of a whole value rather than just
+            // its prefix: "sk-ant-…" read as the field already accounting for
+            // the prefix, so only the part after it got pasted, and the result
+            // was the same generic authentication error as a wrong key with
+            // nothing to tell the two apart (#128).
+            SecureField(secret.placeholder, text: $typed)
+                .textFieldStyle(.automatic)
+                .font(.system(.body, design: .monospaced))
+                .frame(width: 380)
+                .onChange(of: typed) { saved = false; saveError = nil }
+
+            if let warning = KeychainStore.warning(for: secret, typed: typed) {
+                Label(warning, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(PaintedSurfaces.stateWarningText)
+                    .font(.system(size: 11))
+                    .frame(width: 380, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack {
+                Button("Save") {
+                    // One implementation of what a press does, held in
+                    // KeychainStore so every branch of it can be exercised with
+                    // no keychain (#935). It decides what is stored, whether to
+                    // show the mark, and what to say when the write was
+                    // refused, together: three fields set separately here is
+                    // how a refused write came to present as a successful one
+                    // (#112, L53).
+                    let outcome = KeychainStore.save(secret: secret, typed: typed,
+                                                     stored: stored)
+                    stored = outcome.stored
+                    saved = outcome.saved
+                    saveError = outcome.error
+                }
+                .buttonStyle(.borderedProminent)
+                // Unchanged, or not long enough to be a whole value (#348). The
+                // warning above says which, so a disabled button is never
+                // unexplained.
+                //
+                // Against the value held in state rather than one fetched here
+                // (#935). This ran on every render pass and each run was a
+                // keychain read.
+                .disabled(!KeychainStore.canSave(secret: secret, typed: typed,
+                                                 stored: stored))
+
+                if saved {
+                    Label("Saved", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(PaintedSurfaces.stateSuccessText)
+                        .font(.system(size: 13))
+                }
+            }
+
+            if let saveError {
+                Label(saveError, systemImage: "xmark.octagon.fill")
+                    .foregroundStyle(PaintedSurfaces.stateErrorText)
+                    .font(.system(size: 11))
+                    .frame(width: 380, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } header: {
+            Text(secret.heading)
+        } footer: {
+            Text(.init(footer))
+                .foregroundStyle(PaintedSurfaces.readableSecondaryLabel)
+                .font(.system(size: 11))
         }
     }
 }

@@ -2370,16 +2370,39 @@ actor PythonBridge {
         "Running [\(marker)] (\(CheckoutRevision.describe(revision))):"
     }
 
-    static func apiKeyDelivery(_ key: String?) -> (environment: [String: String], scriptLines: String) {
-        let carrier = "POSTROLL_ANTHROPIC_API_KEY"
-        guard let key, !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return ([:], "")
+    /// One delivery for every secret the subprocess needs (#1002).
+    ///
+    /// Was `apiKeyDelivery`, taking the one key. A second secret added by
+    /// copying that shape is how one of the two ends up interpolated into the
+    /// script text, which is the whole of #81: the script is handed to zsh as
+    /// a process ARGUMENT, and argv is readable by any process running as the
+    /// same user, and is captured in sysdiagnose bundles and crash logs.
+    ///
+    /// Each value travels in the environment under its OWN carrier name and is
+    /// promoted by the script after the profile is sourced. A shared carrier
+    /// would have the second secret overwrite the first, and the symptom would
+    /// be an authentication failure in whichever feature ran second.
+    ///
+    /// A secret with no value contributes NOTHING, rather than an empty export.
+    /// That is the live case while one is set up and the other is not, and an
+    /// exported blank reads to the reader as a value that was rejected rather
+    /// than one nobody has provided (L138).
+    static func secretDelivery(_ secrets: [(variable: String, value: String?)])
+        -> (environment: [String: String], scriptLines: String) {
+        var environment: [String: String] = [:]
+        var lines: [String] = []
+        for secret in secrets {
+            guard let value = secret.value,
+                  !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { continue }
+            let carrier = "POSTROLL_\(secret.variable)"
+            environment[carrier] = value
+            lines.append("""
+                export \(secret.variable)="$\(carrier)"
+                unset \(carrier)
+                """)
         }
-        let lines = """
-            export ANTHROPIC_API_KEY="$\(carrier)"
-            unset \(carrier)
-            """
-        return ([carrier: key], lines)
+        return (environment, lines.joined(separator: "\n"))
     }
 
     // MARK: - Private
@@ -2452,7 +2475,13 @@ actor PythonBridge {
         // `exec` replaces the shell with the Python process so that terminating
         // this Process object directly kills the Python subprocess, not just the
         // shell wrapper.
-        let apiKey = Self.apiKeyDelivery(KeychainStore.readAPIKey())
+        // Both secrets, through one delivery (#1002). The Meta token is what
+        // `postroll.ai.account_numbers` reads to fetch audience figures; it is
+        // absent until Dan has minted one, and absent is not the same as blank.
+        let apiKey = Self.secretDelivery([
+            (variable: "ANTHROPIC_API_KEY", value: KeychainStore.read(.anthropic)),
+            (variable: "META_SYSTEM_USER_TOKEN", value: KeychainStore.read(.meta)),
+        ])
 
         let script = """
             export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"

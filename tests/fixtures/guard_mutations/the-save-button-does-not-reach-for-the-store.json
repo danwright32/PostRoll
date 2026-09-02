@@ -1,8 +1,8 @@
 {
   "name": "the-save-button-does-not-reach-for-the-store",
   "file": "PostRollApp/Sources/Views/SettingsView.swift",
-  "find": "                    .disabled(!KeychainStore.canSave(typed: apiKey,\n                                                     stored: storedKey))",
-  "replace": "                    .disabled(!KeychainStore.canSave(typed: apiKey,\n                                                     stored: keySource.read() ?? \"\"))",
+  "find": "                .disabled(!KeychainStore.canSave(secret: secret, typed: typed,\n                                                 stored: stored))",
+  "replace": "                .disabled(!KeychainStore.canSave(secret: secret, typed: typed,\n                                                 stored: source.read(secret) ?? \"\"))",
   "test": "PostRollTests/SaveButtonStateTests/testTheSaveButtonsDisabledStateDoesNotReachForTheStore",
   "breaks": "the Save button's disabled state reads the stored key again, and that modifier runs on every render pass, so typing one character into the field re-reads the keychain. A keychain read is a privileged call that can prompt and can be slow (#935)"
 }
