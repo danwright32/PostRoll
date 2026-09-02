@@ -1,0 +1,8 @@
+{
+  "name": "a-day-with-nothing-to-rank-is-not-an-empty-ranking",
+  "file": "PostRollApp/Sources/Services/CollaboratorPick.swift",
+  "find": "            return Result(coverage: .nothingToRank, suggested: [], fallbacks: [],",
+  "replace": "            return Result(coverage: .ranked, suggested: [], fallbacks: [],",
+  "test": "PostRollTests/CollaboratorPickTests/testTheCaptionsFileSaysThereIsNothingToRankRatherThanInviteThese",
+  "breaks": "a day whose tagged accounts are all uncounted goes back to printing \"Invite these:\" over nobody, in CAPTIONS.txt and on the review screen, which is what every reel day on every real event did before #1115"
+}

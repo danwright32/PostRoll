@@ -66,7 +66,7 @@ enum CollaboratorPick {
     /// What kind of answer this day has, which decides what every surface says
     /// about it (#964).
     ///
-    /// The three are genuinely different answers and must never render alike.
+    /// The four are genuinely different answers and must never render alike.
     /// Before this existed the first two were both silence, so a day whose
     /// every tagged account should be invited looked exactly like a day nobody
     /// had considered (L11, L98).
@@ -76,6 +76,19 @@ enum CollaboratorPick {
         /// There are no more candidates than slots, so all of them go.
         /// Nobody was cut, so nothing here may read as a ranking.
         case allFit
+        /// More candidates than slots, and no figures to choose between them
+        /// (#1115).
+        ///
+        /// Not a ranking that happened to come back empty. That is what this
+        /// day used to be: `.ranked` with an empty `suggested`, so both
+        /// surfaces printed "Invite these:" and then named nobody. The
+        /// condition is its own answer and says what would change it.
+        ///
+        /// It is the live case rather than an edge one. Measured 2026-08-31,
+        /// the account book held nine records, six with a follower count and
+        /// none with likes or comments, so every reel day on every real event
+        /// took this path.
+        case nothingToRank
         /// More candidates than slots, so this is an editorial decision and
         /// the list is ordered, with the fallbacks and the exclusion named.
         case ranked
@@ -187,6 +200,20 @@ enum CollaboratorPick {
         // though the account had been counted and found wanting.
         let rankable = candidates.compactMap(Rankable.init)
         let unranked = candidates.filter { $0.rate == nil }
+
+        // More candidates than slots and nothing to choose between them
+        // (#1115). Returned as its own answer rather than as a ranking with an
+        // empty result: "here are the five worth the slots" followed by nobody
+        // is a promise the data cannot keep, and it is what every real event
+        // produced.
+        //
+        // Every candidate is named as unranked, which is `candidates` itself
+        // here: a rate cannot exist without a follower count above zero, so
+        // nothing rankable means nothing with a rate.
+        guard !rankable.isEmpty else {
+            return Result(coverage: .nothingToRank, suggested: [], fallbacks: [],
+                          strongestExcluded: nil, unranked: candidates, notes: notes)
+        }
 
         let ranked = rankable.sorted { better($0, than: $1, respectingFirstPhoto: true) }
         let suggested = ranked.prefix(maxPerPost).map(\.candidate)
@@ -344,6 +371,39 @@ enum CollaboratorPick {
              + "\(maxPerPost) collaborator slots, so invite every one of them."
     }
 
+    /// Said when there are more candidates than slots and none of them has any
+    /// figures at all (#1115).
+    ///
+    /// Names the condition and the way out, in the shape the other three use.
+    /// The count is always above `maxPerPost` by the time this is reached, so
+    /// there is no singular form to write.
+    static func nothingToRankLine(_ count: Int) -> String {
+        "\(count) accounts are tagged and Instagram allows \(maxPerPost) "
+        + "collaborators per post, but none of them has any numbers yet, so "
+        + "there is nothing to rank. Add numbers and this will name \(maxPerPost)."
+    }
+
+    /// The sentence the review screen puts under its heading, for any answer.
+    ///
+    /// Here rather than in the view so the screen and CAPTIONS.txt cannot come
+    /// to describe the same day differently. Two of the four already read from
+    /// this file and two were typed into the view, which is the drift this
+    /// closes; `CollaboratorPickTests` holds the view to it.
+    static func panelSubtitle(for result: Result) -> String {
+        switch result.coverage {
+        case .nothingTagged:
+            return nobodyTaggedLine
+        case .allFit:
+            return everyoneFitsLine(result.suggested.count)
+                 + " A collaborator invite puts this post on their own grid."
+        case .nothingToRank:
+            return nothingToRankLine(result.unranked.count)
+        case .ranked:
+            return "Instagram allows \(maxPerPost) per post. "
+                 + "A collaborator invite puts this post on their own grid."
+        }
+    }
+
     /// One day's collaborator section.
     ///
     /// Built from the same `Result` the review screen renders, so the names in
@@ -353,8 +413,8 @@ enum CollaboratorPick {
     /// numbers at all. An account silently dropped looks like one that was
     /// considered and rejected.
     ///
-    /// Three shapes, one per `Coverage`, because the three are different
-    /// answers (#964). Under `.allFit` the names carry no position numbers:
+    /// Four shapes, one per `Coverage`, because the four are different
+    /// answers (#964, #1115). Under `.allFit` the names carry no position numbers:
     /// a numbered list is a ranking however the sentence above it is worded.
     static func captionBlock(_ result: Result) -> String {
         var lines = [captionHeader]
@@ -366,6 +426,12 @@ enum CollaboratorPick {
             for candidate in result.suggested {
                 lines.append("\(candidate.handle) (\(candidate.reason))")
             }
+        case .nothingToRank:
+            lines.append(nothingToRankLine(result.unranked.count))
+            // Named rather than counted, so it is visible WHO is waiting on
+            // figures and the remedy can be acted on without opening the app.
+            lines.append("Not counted yet, so not ranked: "
+                         + result.unranked.map(\.handle).joined(separator: ", "))
         case .ranked:
             lines.append("Instagram allows \(maxPerPost) collaborators per post. Invite these:")
             for (index, candidate) in result.suggested.enumerated() {

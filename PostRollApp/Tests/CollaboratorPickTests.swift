@@ -522,6 +522,106 @@ final class CollaboratorPickTests: XCTestCase {
         XCTAssertTrue(note.contains("~/Library/Application Support/PostRoll"), note)
     }
 
+    // MARK: - More candidates than slots and nothing to choose between them (#1115)
+
+    /// The fourth answer. Before it, this day came back `.ranked` with an EMPTY
+    /// `suggested`, so both surfaces promised a decision and then named nobody:
+    /// "Invite these:" over nothing at all.
+    ///
+    /// It is the live case rather than an edge one. Measured 2026-08-31, the
+    /// account book held nine records, six with a follower count and none with
+    /// likes or comments, so `hasEngagementData` was false for every one of
+    /// them and every reel day on every real event took this path.
+
+    /// Seven tagged accounts, none of them counted.
+    private var nothingCountable: CollaboratorPick.Result {
+        CollaboratorPick.suggest(handles: ["a", "b", "c", "d", "e", "f", "g"],
+                                 firstPhoto: nil, stats: lookup([:]), asOf: now)
+    }
+
+    /// The same seven, with one account counted. The positive control for every
+    /// assertion below: without it they are all satisfied by a `suggest` that
+    /// never ranks anything at all (L159).
+    private var oneOfSevenCounted: CollaboratorPick.Result {
+        CollaboratorPick.suggest(handles: ["a", "b", "c", "d", "e", "f", "g"],
+                                 firstPhoto: nil,
+                                 stats: lookup(["d": stats(1_000, 50, 5)]), asOf: now)
+    }
+
+    func testADayWithMoreTagsThanSlotsAndNoFiguresIsItsOwnAnswer() {
+        let result = nothingCountable
+        XCTAssertEqual(result.coverage, .nothingToRank)
+        XCTAssertTrue(result.suggested.isEmpty,
+                      "there is nothing to invite, so nothing may be offered as an invite")
+        XCTAssertEqual(result.unranked.map(\.handle),
+                       ["a", "b", "c", "d", "e", "f", "g"],
+                       "every tagged account is named, so it is visible who is waiting "
+                       + "on figures")
+    }
+
+    func testOneCountedAccountOutOfSevenStillRanks() {
+        // The positive control (L159). The refusal above must be a refusal
+        // about THIS condition, not a `suggest` that cannot rank at all.
+        let result = oneOfSevenCounted
+        XCTAssertEqual(result.coverage, .ranked)
+        XCTAssertEqual(result.suggested.map(\.handle), ["d"])
+    }
+
+    func testTheCaptionsFileSaysThereIsNothingToRankRatherThanInviteThese() {
+        let block = CollaboratorPick.captionBlock(nothingCountable)
+        XCTAssertFalse(block.contains("Invite these"), """
+            CAPTIONS.txt promises a decision and then names nobody:
+
+            \(block)
+            """)
+        XCTAssertTrue(block.contains("nothing to rank"), block)
+        XCTAssertTrue(block.contains("7 accounts are tagged"), block)
+        XCTAssertTrue(block.contains("a, b, c, d, e, f, g"),
+                      "the accounts waiting on figures are named: \(block)")
+
+        // The same assertion the other way round, so "Invite these" is proved
+        // to be what this file says when there IS something to rank.
+        XCTAssertTrue(CollaboratorPick.captionBlock(oneOfSevenCounted)
+                        .contains("Invite these"))
+    }
+
+    func testTheScreenSaysThereIsNothingToRankRatherThanPromisingAList() {
+        let line = CollaboratorPick.panelSubtitle(for: nothingCountable)
+        XCTAssertTrue(line.contains("nothing to rank"), line)
+        XCTAssertTrue(line.contains("7 accounts are tagged"), line)
+        XCTAssertTrue(line.contains("Add numbers"),
+                      "the way out is named on the screen that reports the state: \(line)")
+
+        XCTAssertNotEqual(CollaboratorPick.panelSubtitle(for: oneOfSevenCounted), line,
+                          "a day that can be ranked and a day that cannot must not read "
+                          + "alike")
+    }
+
+    func testThePanelDrawsItsSentenceFromTheSharedWording() {
+        // Naming the sentence where a check can read it proves nothing on its
+        // own: typed back into the view it would leave the constant correct,
+        // unread and passing (#622, L3, L46). So the panel may hold no subtitle
+        // literal of its own.
+        let relative = "Sources/Views/CollaboratorPanel.swift"
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // Tests
+            .deletingLastPathComponent()   // PostRollApp
+            .appendingPathComponent(relative)
+        let code = SwiftSourceText.withoutComments(
+            try! String(contentsOf: url, encoding: .utf8))
+
+        for phrase in ["Instagram allows", "nothing to rank", "collaborator invite"] {
+            XCTAssertFalse(code.lowercased().contains(phrase.lowercased()), """
+                \(relative) spells "\(phrase)" itself. The four answers are worded in \
+                CollaboratorPick so the screen and CAPTIONS.txt cannot disagree, and a \
+                sentence typed back in here is the drift that guard exists to prevent.
+                """)
+        }
+
+        XCTAssertTrue(code.contains("CollaboratorPick.panelSubtitle"),
+                      "\(relative) does not draw the shared sentence at all")
+    }
+
     func testTheSortCannotDefaultAMissingFigureToZero() {
         // Derived from the source, not from behaviour: the two tests above pass
         // whether or not a `?? 0` exists, because the caller filters first. This
