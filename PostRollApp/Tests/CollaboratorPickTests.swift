@@ -703,7 +703,18 @@ final class CollaboratorPickTests: XCTestCase {
 
         let a = one.suggested.first(where: { $0.handle == "hidden" })?.reason ?? ""
         let b = other.suggested.first(where: { $0.handle == "refused" })?.reason ?? ""
-        XCTAssertNotEqual(a, b, "both causes render the same sentence: \(a)")
+
+        // Asserted on the LABEL, not on the two sentences differing. They also
+        // differ by the comment count, which the hidden case names and the
+        // refused case has none of, so a plain inequality passed with both
+        // causes carrying the same label and the mutation sweep said SURVIVED
+        // (L178).
+        XCTAssertTrue(a.contains(CollaboratorPick.hiddenLikesLabel), a)
+        XCTAssertFalse(a.contains(CollaboratorPick.assumedRateLabel),
+                       "the hidden case also claims Meta gave no figures at all: \(a)")
+        XCTAssertTrue(b.contains(CollaboratorPick.assumedRateLabel), b)
+        XCTAssertFalse(b.contains(CollaboratorPick.hiddenLikesLabel),
+                       "an account Meta refused is described as hiding a figure: \(b)")
     }
 
     func testAWithheldLikeCountWithNoFollowersIsStillNotScored() {
