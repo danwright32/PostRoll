@@ -73,15 +73,9 @@ final class CollaboratorBlockTests: XCTestCase {
     func testTheBlockCarriesTheReasonsNotJustTheNames() throws {
         // An ordered list with no figures is not something anyone can disagree
         // with, and disagreeing is the point: the swap is Dan's call.
-        //
-        // "interactions" rather than "engagement" since #1005. The reason line
-        // used to render "X% engagement", which described the metric the
-        // ranking then used; the score is now total weighted interactions, and
-        // a line naming a percentage nothing sorts on is a figure Dan cannot
-        // check the order against.
         let block = CollaboratorPick.captionBlock(suggestion())
         XCTAssertTrue(block.contains("followers"), block)
-        XCTAssertTrue(block.contains("interactions"), block)
+        XCTAssertTrue(block.contains("engagement"), block)
         XCTAssertTrue(block.lowercased().contains("first photo"), block)
     }
 
