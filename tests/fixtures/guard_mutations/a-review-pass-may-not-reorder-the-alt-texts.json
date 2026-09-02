@@ -1,8 +1,0 @@
-{
-  "name": "a-review-pass-may-not-reorder-the-alt-texts",
-  "file": "postroll/ai/generate_captions.py",
-  "find": "    if produced != draft and sorted(produced, key=str) == sorted(draft, key=str):",
-  "replace": "    if False:",
-  "test": "tests/test_alt_text_photo_anchor.py::test_a_review_pass_cannot_reorder_a_carousels_alt_texts",
-  "breaks": "a pure reorder by a review pass is accepted, so every description sits beside somebody else's photograph while each sentence still reads as correct and true of some photo in the post, which is exactly why a sighted read never catches it (#1214, #1008)"
-}

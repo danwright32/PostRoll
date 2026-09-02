@@ -3,6 +3,6 @@
   "file": "postroll/ai/generate_captions.py",
   "find": "        data = dict(data, alt_texts=draft_alt_texts)",
   "replace": "        pass",
-  "test": "tests/test_reel_alt_text_describes_the_reel.py::test_a_reel_alt_condensed_under_its_own_floor_is_still_refused",
-  "breaks": "a refused review pass keeps its own alt text anyway, so the refusal is a message with no effect: a reel level description condensed into one frame's still ships, and a per photo post's reordered alt texts still sit beside the wrong photographs (#1067, #1214)"
+  "test": "tests/test_alt_text_photo_anchor.py::test_a_shape_fault_still_refuses_the_whole_list",
+  "breaks": "a shape fault is named on the review screen and then ignored, so a review pass that dropped an alt text ships its shortened list anyway and every description after the hole sits beside a different photograph. The refusal becomes a message with no effect (#1214, #1008)"
 }

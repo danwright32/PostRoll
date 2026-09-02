@@ -3,6 +3,6 @@
   "file": "postroll/ai/generate_captions.py",
   "find": "    if len(produced) != len(draft):",
   "replace": "    if False:",
-  "test": "tests/test_alt_text_photo_anchor.py::test_a_review_pass_cannot_drop_one_and_shift_the_rest",
-  "breaks": "a review pass that drops one alt text has every entry after the hole move up onto a different photograph, and the alt text list is left a different length from the anchor list that says which photo each belongs to, so nothing can resolve any of them (#1214, #1008, L237)"
+  "test": "tests/test_alt_text_photo_anchor.py::test_a_review_pass_that_adds_an_alt_text_is_refused",
+  "breaks": "a review pass may return MORE alt texts than the post has photographs and they are accepted, which the alignment rule cannot see because the entries it does have still line up. The alt text list then has no matching anchor for its last entries and nothing downstream can resolve them (#1214, L237)"
 }

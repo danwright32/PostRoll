@@ -695,38 +695,35 @@ def _alt_word_floor(post_type: str) -> int | None:
     return _word_floor_in(_alt_text_instruction_for(post_type))
 
 
-def _review_alt_change_refused(post_type: str, draft: object,
-                               produced: object) -> str | None:
-    """Why a review pass's alt texts are refused, or None to accept them.
+def _word_overlap(left: str, right: str) -> float:
+    """How much two alt texts share, 0 to 1, as a fraction of all their words.
 
-    Both review prompts ask the passes to "preserve count and order, clean each
-    item in place". Cleaning is the humanizer's job and is wanted; the other two
-    are the damage. So the ACTION is allowed and the RESULT is judged, which
-    needs a check that can tell a clean from the damage.
+    Deliberately crude. It only has to separate "this is the same description
+    with a few words changed" from "this is somebody else's description", and
+    those sit at opposite ends of the range.
+    """
+    a = {w for w in str(left).lower().split() if w}
+    b = {w for w in str(right).lower().split() if w}
+    if not a or not b:
+        return 1.0 if a == b else 0.0
+    return len(a & b) / len(a | b)
 
-    Three things are checkable and each gets its own sentence (L11):
 
-    * a changed COUNT, which shifts every later entry onto a different
-      photograph, and is the worst of the three;
-    * a pure REORDER, the same entries in a different order, which puts each
-      description beside somebody else's photograph;
-    * a CONDENSATION, an entry cleaned down under the word floor its own
-      instruction sets. That is the reel failure: #1067 measured 7 of 21 shipped
-      Thursday alt texts under the floor and every one of them describing a
-      single moment, while none of the 9 reel level ones fell under it.
+#: How much a returned alt text must resemble one of the draft's OTHER entries
+#: before that counts as a swap rather than as noise. A real swap lands near 1,
+#: because a clean in place changes a few words; unrelated descriptions of the
+#: same event share only the small words and sit far below this.
+_SWAP_RESEMBLANCE = 0.5
 
-    What is NOT checkable is an entry rewritten in place into a description of
-    something else at the same length. Nothing cheap can see that, and this does
-    not pretend to.
 
-    The condensation rule needs the entry to be BOTH under the floor and shorter
-    than the draft's, so a clean that leaves an already short alt alone, or one
-    that lengthens it towards the floor, is not refused for a fault it did not
-    commit.
+def _alt_shape_fault(post_type: str, draft: object, produced: object) -> str | None:
+    """A fault in the SHAPE of the returned alt texts, or None.
+
+    These are whole list faults: what is wrong is the alignment between the
+    list and the photographs, so there is no good entry to keep and the draft's
+    list stands entire.
     """
     if not isinstance(produced, list) or not isinstance(draft, list):
-        # Either side not being a list is a shape nothing downstream indexes
-        # into safely, so the draft stands.
         return (f"returned {type(produced).__name__} where the draft had "
                 f"{type(draft).__name__}")
 
@@ -735,20 +732,60 @@ def _review_alt_change_refused(post_type: str, draft: object,
                 f"{len(draft)}, which moves every entry after the change onto "
                 f"a different photograph")
 
-    if produced != draft and sorted(produced, key=str) == sorted(draft, key=str):
-        return ("reordered the alt texts, so each description now sits beside "
-                "a different photograph")
-
-    floor = _alt_word_floor(post_type)
-    if floor is not None:
-        for index, (was, now) in enumerate(zip(draft, produced)):
-            words = len(str(now).split())
-            if words < floor and words < len(str(was).split()):
-                return (f"cut alt text {index + 1} to {words} words, under the "
-                        f"{floor} word floor a {post_type} asks for, which is "
-                        f"what condensing a whole post into one frame's "
-                        f"description looks like")
+    # A reorder, whether or not the entries were also reworded.
+    #
+    # This first shipped as a multiset comparison, which only saw a swap when
+    # the entries came back byte identical. A pass that reordered AND cleaned
+    # defeated it: the count was unchanged and every entry cleared its word
+    # floor, so every other rule passed and the post shipped with each
+    # description beside the wrong photograph. Found by running the check
+    # rather than by reading it, the day after it shipped.
+    #
+    # The multiset comparison is GONE rather than kept alongside this, because
+    # this catches everything it caught: two byte identical entries swapped
+    # resemble each other's slots perfectly, and swapping two entries that are
+    # identical to each other is not a change at all (L29).
+    #
+    # A clean in place changes a few words, so a returned entry still resembles
+    # its OWN draft far more than a neighbour's. A swap is the opposite, and the
+    # two cases are nowhere near each other.
+    #
+    # Zipped rather than indexed, so this cannot raise when the lists are
+    # different lengths. The count rule above returns first in the shipped code,
+    # but a guard that only holds while the rule ABOVE it is intact is a guard
+    # whose mutation crashes instead of failing (L140).
+    for index, (now, _mine_draft) in enumerate(zip(produced, draft)):
+        mine = _word_overlap(now, draft[index])
+        for other, was in enumerate(draft):
+            if other == index:
+                continue
+            theirs = _word_overlap(now, was)
+            if theirs > mine and theirs >= _SWAP_RESEMBLANCE:
+                return (f"moved alt text {other + 1} into slot {index + 1} while "
+                        f"rewording it, so each description now sits beside a "
+                        f"different photograph")
     return None
+
+
+def _alt_entries_below_floor(post_type: str, draft: list,
+                             produced: list) -> list[int]:
+    """Which returned entries were cut under their own instruction's word floor.
+
+    Per entry, not the whole list, because this fault is confined to the entry
+    that has it: on a twenty photo carousel one description cut too short is no
+    reason to throw away the cleaning on the other nineteen. The shape faults
+    above are the opposite, and are handled as a whole.
+
+    An entry must be BOTH under the floor and shorter than the draft's, so a
+    clean that leaves an already short alt alone, or lengthens it towards the
+    floor, is not refused for a fault it did not commit.
+    """
+    floor = _alt_word_floor(post_type)
+    if floor is None:
+        return []
+    return [index for index, (was, now) in enumerate(zip(draft, produced))
+            if len(str(now).split()) < floor
+            and len(str(now).split()) < len(str(was).split())]
 
 
 def _rewritten_alt_detail(draft: object, produced: object) -> str:
@@ -1051,31 +1088,55 @@ def generate_caption(
     #
     # #1067 and #1214 first held alt text out of the rewrite entirely, which
     # stopped the damage and also stopped the cleaning the humanizer is there
-    # to do. So the action is allowed and the RESULT is judged instead:
-    # `_review_alt_change_refused` says which of the three checkable faults a
-    # pass committed, and only then does the draft's alt text stand.
+    # to do. So the action is allowed and the RESULT is judged instead.
     #
-    # Refusing rather than repairing, deliberately: the pass's whole answer for
-    # this field is discarded, so a refusal costs the cleaning and never the
-    # correctness. A rule that lives only in a prompt is a hope (L27); this is
-    # the same rule with something reading the answer.
+    # Two kinds of fault, handled differently because they are different sizes.
+    # A SHAPE fault (a changed count, a reorder, a reorder hiding inside a
+    # reword) is wrong about the whole list's alignment to the photographs, so
+    # the draft's list stands entire. An entry CUT under its own word floor is
+    # wrong about one entry, so only that one falls back and the cleaning on
+    # every other photograph survives.
+    #
+    # Refusing rather than repairing: the pass's answer for the offending field
+    # is discarded, so a refusal costs the cleaning and never the correctness.
+    # A rule that lives only in a prompt is a hope (L27); this is the same rule
+    # with something reading the answer.
     #
     # Reported, because a refusal is evidence a pass ignored an instruction and
     # putting the draft back destroys it (L340). Not reported when the pass is
     # accepted: this fires on real weeks, and a finding on every tidied post is
     # a panel that gets skimmed (L36).
     produced = data.get("alt_texts")
-    refusal = _review_alt_change_refused(post_type, draft_alt_texts, produced)
-    if refusal is not None:
+    shape_fault = _alt_shape_fault(post_type, draft_alt_texts, produced)
+    if shape_fault is not None:
         per_frame_findings.append(Finding(
             code="alt_text_rewritten_by_review",
             message=("A review pass changed this post's alt text in a way it "
                      "was not asked to. The draft's own alt text is what "
                      "shipped."),
-            detail=(f"The pass {refusal}. "
+            detail=(f"The pass {shape_fault}. "
                     + _rewritten_alt_detail(draft_alt_texts, produced)),
         ))
         data = dict(data, alt_texts=draft_alt_texts)
+    else:
+        cut = _alt_entries_below_floor(post_type, draft_alt_texts, produced)
+        if cut:
+            floor = _alt_word_floor(post_type)
+            kept = [draft_alt_texts[i] if i in set(cut) else produced[i]
+                    for i in range(len(produced))]
+            where = ", ".join(str(i + 1) for i in cut)
+            per_frame_findings.append(Finding(
+                code="alt_text_rewritten_by_review",
+                message=("A review pass cut this post's alt text shorter than "
+                         "it should be. The draft's own alt text is what "
+                         "shipped for the ones it cut."),
+                detail=(f"The pass cut alt text {where} under the {floor} word "
+                        f"floor a {post_type} asks for, which is what "
+                        f"condensing a post into one frame's description looks "
+                        f"like. "
+                        + _rewritten_alt_detail(draft_alt_texts, produced)),
+            ))
+            data = dict(data, alt_texts=kept)
 
     alt_texts = data.get("alt_texts") or []
     scene_labels = data.get("scene_labels") or []

@@ -1,0 +1,8 @@
+{
+  "name": "one-bad-alt-text-does-not-discard-the-others",
+  "file": "postroll/ai/generate_captions.py",
+  "find": "            data = dict(data, alt_texts=kept)",
+  "replace": "            data = dict(data, alt_texts=draft_alt_texts)",
+  "test": "tests/test_alt_text_photo_anchor.py::test_only_the_entry_that_failed_falls_back_to_the_draft",
+  "breaks": "one alt text cut under its word floor throws away the humanizer's cleaning on every other photograph in the post, so a twenty photo carousel loses nineteen good cleans to one bad one. Letting the tidy run at all was the point of allowing it back (#1067)"
+}
