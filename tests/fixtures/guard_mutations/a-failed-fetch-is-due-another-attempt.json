@@ -1,0 +1,8 @@
+{
+  "name": "a-failed-fetch-is-due-another-attempt",
+  "file": "PostRollApp/Sources/Services/AccountFetchDue.swift",
+  "find": "        case .some(let outcome) where outcome.isWorthRetrying:",
+  "replace": "        case .some(let outcome) where outcome.isWorthRetrying && false:",
+  "test": "PostRollTests/AccountFetchDueTests/testAFailedFetchIsDueAnotherAttempt",
+  "breaks": "a record left behind by a network failure is never asked about again, because freshness answers unknown without engagement data and unknown is not stale, so the account is stuck with no figures for good (#1004)"
+}

@@ -108,7 +108,13 @@ struct PostRollApp: App {
         // surface to be presented on.
         Window("PostRoll", id: PostRollApp.mainWindowID) {
             MainWindowView()
-                .task { wireQuitGuard() }
+                .task {
+                    wireQuitGuard()
+                    // Join the handle lookups to the figures fetch (#1004).
+                    // Here rather than at either end, because this is the one
+                    // place that already knows about both.
+                    owners.connectTheHandleTrigger()
+                }
                 .environment(appState)
                 .environment(hashtagStore)
                 .environment(analyticsStore)

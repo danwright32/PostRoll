@@ -310,6 +310,11 @@ final class PerformerLookupManager {
         live.ocrResult = stored
         appState.updateEvent(live)
         dropSuggestion(named: suggestion.name, for: eventID)
+        // The handle list just changed (#1004). Coalesced by the manager, not
+        // refused: Dan accepts these one at a time and the median event has
+        // six, so this fires six times and has to end in ONE fetch about all
+        // six rather than one fetch about the first.
+        onHandlesSettled?(AccountFetchDue.accounts(in: live))
     }
 
     // MARK: - Reading the event page
@@ -353,6 +358,13 @@ final class PerformerLookupManager {
         tracker(.fromWeb).remove(eventID)
     }
 
+    /// Told when this event's handle list has changed (#1004).
+    ///
+    /// A callback rather than a reference to the fetch manager, so this one
+    /// keeps knowing nothing about audience figures and the suite can watch
+    /// the trigger without a subprocess anywhere near it.
+    var onHandlesSettled: (([String]) -> Void)?
+
     private func replacePerformers(with fetched: [Performer], on eventID: Event.ID,
                                    in appState: AppState) {
         guard var live = appState.events.first(where: { $0.id == eventID }),
@@ -361,6 +373,9 @@ final class PerformerLookupManager {
         stored.performers = fetched
         live.ocrResult = stored
         appState.updateEvent(live)
+        // The second of the three moments the list settles (#1004). A web
+        // fetch REPLACES the list, so this is the largest change of the three.
+        onHandlesSettled?(AccountFetchDue.accounts(in: live))
     }
 
     // MARK: - Shared bookkeeping

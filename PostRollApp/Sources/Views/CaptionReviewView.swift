@@ -6,6 +6,10 @@ import UniformTypeIdentifiers
 struct CaptionReviewView: View {
     let event: Event
     @Environment(AppState.self) private var appState
+    /// The automatic figures fetch (#1004), for the note it leaves when one
+    /// failed. Read here rather than folded into the book's own note, which
+    /// answers a different question.
+    @Environment(AccountNumbersManager.self) private var accountNumbers
     @Environment(HashtagStore.self) private var hashtagStore
 
     /// The two shared stores this screen reads while it DRAWS (#937).
@@ -1369,7 +1373,15 @@ struct CaptionReviewView: View {
                                  preset: live.effectivePostingPreset,
                                  stats: { accounts.stats(for: $0) },
                                  asOf: suggestionsAsOf,
-                                 notes: [accounts.recoveryNote].compactMap { $0 })
+                                 // Two independent conditions, two elements
+                                 // (#1004). "The account file could not be
+                                 // read" and "the last figures fetch failed"
+                                 // are different problems with different
+                                 // remedies, and folding the second into
+                                 // `recoveryNote` would have one silence the
+                                 // other (L53).
+                                 notes: [accounts.recoveryNote,
+                                         accountNumbers.failureNote].compactMap { $0 })
     }
 
     private func applyCollageLayout(day: DayName, seed: Int) {

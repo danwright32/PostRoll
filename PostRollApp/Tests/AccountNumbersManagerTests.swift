@@ -1,0 +1,297 @@
+import XCTest
+
+/// The automatic figures fetch, and when it runs (#1004).
+///
+/// Its own manager rather than a third `Kind` on `PerformerLookupManager`.
+/// #1049 made that lock opt in, so a third kind would no longer disable the two
+/// buttons Dan did not press, but `workPhrase` and the unconditional failure
+/// notification are still shared, and neither is right for a fetch nobody
+/// asked for: "a performer lookup is still running" is not what this is, and a
+/// system notification for a background refresh that failed is noise.
+@MainActor
+final class AccountNumbersManagerTests: XCTestCase {
+
+    private var root: URL!
+    private var book: AccountBook!
+
+    override func setUp() async throws {
+        root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("numbers-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        book = AccountBook(fileURL: root.appendingPathComponent("accounts.json"))
+    }
+
+    override func tearDown() async throws {
+        try? FileManager.default.removeItem(at: root)
+    }
+
+    private let now = Date(timeIntervalSince1970: 1_775_000_000)
+
+    nonisolated private static func figures(
+        _ handle: String, outcome: String = "measured",
+        followers: Int? = 1_000, likes: Int? = 50,
+        comments: Int? = 5) -> PythonBridge.AccountFigures {
+        PythonBridge.AccountFigures(
+            handle: handle, outcome: outcome, followers: followers, likes: likes,
+            comments: comments, likesHidden: false, followersFromPage: false,
+            instagramID: "17841400000000000", reels: 2, feed: 4, detail: "")
+    }
+
+    /// A manager with the subprocess replaced, so nothing here spends Dan's
+    /// Meta allowance or waits on the network (L2).
+    private func manager(_ answer: @escaping @Sendable ([String]) async throws
+                         -> [PythonBridge.AccountFigures]) -> AccountNumbersManager {
+        let made = AccountNumbersManager(book: book)
+        made.fetch = answer
+        // No wait at all by default. The two coalescing tests below install a
+        // gate instead, because zeroing a delay removes the coalescing along
+        // with it and the behaviour under test stops existing.
+        made.waitForSettle = { }
+        return made
+    }
+
+    private func settle() async {
+        for _ in 0..<200 { await Task.yield() }
+    }
+
+    // MARK: - What it asks about
+
+    func testFiguresLandInTheBook() async {
+        let m = manager { handles in handles.map { Self.figures($0) } }
+
+        m.handlesSettled(["janecellist"], asOf: now)
+        await settle()
+
+        XCTAssertEqual(book.stats(for: "janecellist")?.followers, 1_000)
+        XCTAssertEqual(book.stats(for: "janecellist")?.outcome, .measured)
+    }
+
+    func testAnAccountAlreadyMeasuredIsNotAskedAboutAgain() async {
+        book.write(AccountStats(followers: 2_000, likes: 9, comments: 1, recordedOn: now,
+                                followersSource: .measured, likesSource: .measured,
+                                commentsSource: .measured, outcome: .measured),
+                   for: "known")
+        let asked = Counter()
+        let m = manager { handles in asked.add(handles.count); return [] }
+
+        m.handlesSettled(["known"], asOf: now)
+        await settle()
+
+        XCTAssertEqual(asked.value, 0, "the allowance was spent on an account nothing "
+                       + "has changed about")
+    }
+
+    func testNothingDueStartsNoSubprocessAtAll() async {
+        // A run that shells out to Python to ask about nothing still pays for
+        // the interpreter, and it happens on every keystroke.
+        let started = Counter()
+        let m = manager { _ in started.add(1); return [] }
+        book.write(AccountStats(followers: 2_000, likes: 9, comments: 1, recordedOn: now,
+                                outcome: .measured), for: "known")
+
+        m.handlesSettled(["known"], asOf: now)
+        await settle()
+
+        XCTAssertEqual(started.value, 0)
+    }
+
+    // MARK: - Coalescing, not refusing (#1004)
+
+    func testSuggestionsAcceptedOneAtATimeAreOneFetch() async {
+        // Dan accepts handle suggestions one at a time, and the median event
+        // has six. Refusing the second onward would drop five of six with
+        // nothing recording it, and they could never be recovered: an account
+        // with no record has no stamp, so it can never be stale, so nothing
+        // would ever refetch it.
+        let batches = Batches()
+        let m = manager { handles in batches.record(handles); return [] }
+        let gate = Gate()
+        m.waitForSettle = { await gate.held() }
+
+        m.handlesSettled(["a"], asOf: now)
+        m.handlesSettled(["a", "b"], asOf: now)
+        m.handlesSettled(["a", "b", "c"], asOf: now)
+        gate.open()
+        await settle()
+
+        XCTAssertEqual(batches.all.count, 1, "each acceptance started its own fetch")
+        XCTAssertEqual(batches.all.first, ["a", "b", "c"],
+                       "the coalesced fetch asked about the handles as they finally "
+                       + "stood, not as they were when the first one arrived")
+    }
+
+    func testASecondSettleWhileAFetchIsRunningIsNotLost() async {
+        // The other half of coalescing: a handle added while the first fetch is
+        // in flight has to be picked up, or it is exactly the dropped account
+        // the comment above describes.
+        let batches = Batches()
+        // Answers, so the first fetch's result is actually recorded. With a
+        // fake that returned nothing, the second fetch would ask about "a"
+        // again for a correct reason and the assertion would be about the
+        // fake rather than about the manager.
+        let m = manager { handles in
+            batches.record(handles)
+            return handles.map { Self.figures($0) }
+        }
+
+        m.handlesSettled(["a"], asOf: now)
+        await settle()
+        m.handlesSettled(["a", "b"], asOf: now)
+        await settle()
+
+        XCTAssertEqual(batches.all.count, 2)
+        XCTAssertEqual(batches.all.last, ["b"], "the second fetch re-asked about an "
+                       + "account the first had already answered for")
+    }
+
+    // MARK: - Failure is recorded, not swallowed
+
+    func testAFailedFetchLeavesANoteRatherThanNothing() async {
+        struct Boom: Error {}
+        let m = manager { _ in throw Boom() }
+
+        m.handlesSettled(["janecellist"], asOf: now)
+        await settle()
+
+        XCTAssertNotNil(m.failureNote, "a fetch that failed said nothing at all, which "
+                        + "reads exactly like one that was never triggered")
+    }
+
+    func testASuccessfulFetchClearsTheNote() async {
+        struct Boom: Error {}
+        let m = manager { _ in throw Boom() }
+        m.handlesSettled(["a"], asOf: now)
+        await settle()
+        XCTAssertNotNil(m.failureNote)
+
+        m.fetch = { handles in handles.map { Self.figures($0) } }
+        m.handlesSettled(["b"], asOf: now)
+        await settle()
+
+        XCTAssertNil(m.failureNote, "the note outlived the failure it described")
+    }
+
+    func testTheNoteIsNotTheBooksRecoveryNote() async {
+        // Two independent conditions sharing one field means one silences the
+        // other (L53). "The account file could not be read" and "the last fetch
+        // failed" are different problems with different remedies.
+        struct Boom: Error {}
+        let m = manager { _ in throw Boom() }
+
+        m.handlesSettled(["a"], asOf: now)
+        await settle()
+
+        XCTAssertNil(book.recoveryNote, "the book loaded fine")
+        XCTAssertNotNil(m.failureNote, "and the fetch failure still has somewhere to go")
+    }
+
+    // MARK: - Helpers
+
+    private final class Counter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var count = 0
+        func add(_ n: Int) { lock.withLock { count += n } }
+        var value: Int { lock.withLock { count } }
+    }
+
+    /// Holds the settle wait open until the test lets go.
+    private final class Gate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var waiting: CheckedContinuation<Void, Never>?
+        private var opened = false
+
+        func held() async {
+            await withCheckedContinuation { continuation in
+                lock.lock()
+                if opened { lock.unlock(); continuation.resume() }
+                else { waiting = continuation; lock.unlock() }
+            }
+        }
+
+        func open() {
+            lock.lock()
+            opened = true
+            let continuation = waiting
+            waiting = nil
+            lock.unlock()
+            continuation?.resume()
+        }
+    }
+
+    private final class Batches: @unchecked Sendable {
+        private let lock = NSLock()
+        private var batches: [[String]] = []
+        func record(_ handles: [String]) { lock.withLock { batches.append(handles) } }
+        var all: [[String]] { lock.withLock { batches } }
+    }
+
+    // MARK: - The trigger is actually connected (#1004, L3)
+
+    func testAcceptingAHandleSuggestionTellsTheFetch() async {
+        // Through the real lookup manager, not a stub of it: this is the
+        // moment the issue names first, and a callback nothing invokes is
+        // indistinguishable from one that works (L46).
+        let event = Event(name: "Spring Gala", org: "Decoda", venue: "Merkin Hall",
+                          date: Date(), shootType: .fullShow)
+        var seeded = event
+        seeded.ocrResult = OCRResult(performers: [Performer(name: "Jenna Robison")])
+        let state = AppState(events: [seeded],
+                             storeURL: root.appendingPathComponent("events.json"),
+                             dataRoot: root)
+        let lookup = PerformerLookupManager()
+        let told = Told()
+        lookup.onHandlesSettled = { told.record($0) }
+
+        lookup.apply(PythonBridge.HandleSuggestion(
+            name: "Jenna Robison", handle: "@jennarobison", profileURL: nil,
+            confidence: "high", note: nil), to: seeded.id, in: state)
+
+        XCTAssertTrue(told.handles.contains { $0.contains("jennarobison") },
+                      "accepting a suggestion did not tell the fetch: \(told.handles)")
+    }
+
+    func testTheAppJoinsTheLookupToTheFetch() {
+        // The wiring itself. Both managers are correct in isolation and the
+        // feature does nothing at all unless somebody connects them, which is
+        // one line in one place and therefore one line to forget.
+        let owners = AppOwners()
+        XCTAssertNil(owners.lookup.onHandlesSettled,
+                     "something else already connected this, so the assertion "
+                     + "below would pass whether connectTheHandleTrigger works or not")
+
+        owners.connectTheHandleTrigger()
+
+        XCTAssertNotNil(owners.lookup.onHandlesSettled)
+        XCTAssertNotNil(owners.accountNumbers.onNoteChanged)
+    }
+
+    func testSavingATokenAsksAgainAboutEverythingThatFailed() async {
+        // The remedy `token_rejected` names has to change the state Dan is
+        // stuck in, or it is a message he can obey with no effect (L111).
+        book.write(AccountStats(followers: 900, recordedOn: now, outcome: .tokenRejected),
+                   for: "stuck")
+        let batches = Batches()
+        let m = manager { handles in batches.record(handles); return [] }
+
+        m.credentialChanged(asOf: now)
+        await settle()
+
+        XCTAssertEqual(batches.all.first, ["stuck"])
+    }
+
+    func testSavingATokenDoesNotReaskAboutTerminalAccounts() {
+        // The positive control (L159). A refetch of everything would spend the
+        // whole allowance on accounts Meta will never answer differently for.
+        book.write(AccountStats(followers: 900, recordedOn: now, outcome: .notProfessional),
+                   for: "personal")
+
+        XCTAssertFalse(AccountFetchDue.isDue(book.stats(for: "personal"), asOf: now))
+    }
+
+    private final class Told: @unchecked Sendable {
+        private let lock = NSLock()
+        private var seen: [[String]] = []
+        func record(_ handles: [String]) { lock.withLock { seen.append(handles) } }
+        var handles: [[String]] { lock.withLock { seen } }
+    }
+}
