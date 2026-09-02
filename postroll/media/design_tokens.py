@@ -127,7 +127,14 @@ MEDIA_DESIGN_VERSIONS: dict[str, int] = {
     # enough to be clamped, and the caption of a 3:2 landscape does not move at
     # all. program_plate.MAX_PRINT_H carries that reading.
     "reel_morph": 3,
-    "reel_slider": 3,
+    # 4 is the sweep no longer changing speed in a step (#1073).
+    #
+    # Its easing was three formulas stitched together, and the divider
+    # accelerated by 75% of its average speed between one frame and the
+    # next at 30% of the way across the print, then dropped back the same
+    # way at 70%. Every slider reel ever made carries both lurches, so
+    # every one of them moves differently from one rendered now.
+    "reel_slider": 4,
     # 3 is the gallery moving BELOW the chrome rather than under it (#898).
     #
     # 2 was the taller header that keeps the title out of the band the phone
@@ -227,7 +234,7 @@ MEDIA_DESIGN_CHANGED: dict[str, "DesignChange"] = {
     "before_after": DesignChange(version=2, day="2026-08-21"),
     "reel_screen": DesignChange(version=2, day="2026-08-21"),
     "reel_morph": DesignChange(version=3, day="2026-08-21"),
-    "reel_slider": DesignChange(version=3, day="2026-08-21"),
+    "reel_slider": DesignChange(version=4, day="2026-09-02"),
     "reel_scroll": DesignChange(version=4, day="2026-08-31"),
     "reel_preview": DesignChange(version=3, day="2026-08-27"),
     "reel_clip": DesignChange(version=2, day="2026-08-22"),

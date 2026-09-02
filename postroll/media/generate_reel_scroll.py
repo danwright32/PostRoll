@@ -29,6 +29,7 @@ from PIL import Image, ImageDraw
 
 # Reuse the collage's pan/zoom-aware crop so per-photo offsets produce
 # identical output in both the strip preview PNG and the final encoded reel.
+from .easing import trapezoid_ease
 from .generate_collage import DEFAULT_CROP_OFFSET, crop_to_fill as _crop_to_fill
 
 from .design_tokens import (
@@ -182,40 +183,20 @@ def load_logo(logo_path: str | None) -> Image.Image | None:
 EASE_RAMP = 0.15
 
 
-def _smoothstep_area(u: float) -> float:
-    """Area under smoothstep from 0 to `u`, both in units of the ramp width."""
-    return u ** 3 - u ** 4 / 2
-
-
 def ease_in_out(t: float) -> float:
     """How far through the strip the scroll has travelled at `t` in [0, 1].
 
-    A trapezoidal speed profile: smoothstep up over the first `EASE_RAMP`,
-    constant through the middle, smoothstep down over the last `EASE_RAMP`.
-    Smoothstep rather than a straight ramp because its own slope is zero at
-    both ends, so the speed is continuous everywhere the three pieces meet.
+    The shared trapezoid at this template's own ramp. It replaced three
+    formulas stitched together whose speed jumped about 8% at each seam.
+    Measured in the delivered reel on 2026-08-30: 33px a frame either side of
+    t=0.12, dropping instantly to 30, and the mirror of it at t=0.88. Two
+    lurches per reel, both visible, and neither of them intended.
 
-    It replaced three formulas stitched together whose speed jumped about 8% at
-    each seam. Measured in the delivered reel on 2026-08-30: 33px a frame
-    either side of t=0.12, dropping instantly to 30, and the mirror of it at
-    t=0.88. Two lurches per reel, both visible, and neither of them intended.
-
-    Peak speed is 1/(1 - EASE_RAMP) of the average, which at 0.15 is 1.18. The
-    old curve cruised at 1.16, so the reel still moves the way it did: what
-    changes is that it gets there without a step.
+    Peak speed is `cruise_factor(EASE_RAMP)` times the average, which at 0.15
+    is 1.18. The old curve cruised at 1.16, so the reel still moves the way it
+    did: what changed is that it gets there without a step.
     """
-    if t <= 0.0:
-        return 0.0
-    if t >= 1.0:
-        return 1.0
-
-    a = EASE_RAMP
-    total = 1.0 - a  # area under the speed profile, which normalises position
-    if t < a:
-        return a * _smoothstep_area(t / a) / total
-    if t <= 1.0 - a:
-        return (a * 0.5 + (t - a)) / total
-    return 1.0 - a * _smoothstep_area((1.0 - t) / a) / total
+    return trapezoid_ease(t, EASE_RAMP)
 
 
 def build_collage_strip(
