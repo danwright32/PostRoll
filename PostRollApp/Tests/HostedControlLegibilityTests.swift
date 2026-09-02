@@ -1652,10 +1652,12 @@ extension HostedControlLegibilityTests {
             SettingsView(keySource: .fixed(key), book: book)
                 // Every owner from the shared list, then the scratch preset
                 // store over the top. This harness named its own injections,
-                // which is the second list `AppOwners` exists to remove: the
-                // screen gained an owner in #1004 and this crashed rather than
-                // failed, because a view reading a missing `@Environment`
-                // TRAPS (L41, L96).
+                // which is the second list `AppOwners` exists to remove.
+                //
+                // Found by adding an owner the Settings screen reads: this
+                // CRASHED rather than failed, because a view reading a missing
+                // `@Environment` traps, and a crash reports zero tests
+                // executed rather than a named failure (L41, L96).
                 //
                 // The preset store still has to be the scratch one, or
                 // rendering this screen reads Dan's real preference, so it is
