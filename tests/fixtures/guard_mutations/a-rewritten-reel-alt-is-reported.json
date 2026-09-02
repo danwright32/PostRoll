@@ -1,0 +1,8 @@
+{
+  "name": "a-rewritten-reel-alt-is-reported",
+  "file": "postroll/ai/generate_captions.py",
+  "find": "        if produced != draft_alt_texts:",
+  "replace": "        if False:",
+  "test": "tests/test_reel_alt_text_describes_the_reel.py::test_the_rewrite_is_reported_rather_than_only_undone",
+  "breaks": "putting the draft's alt text back becomes silent, and a pass that rewrote the alt is then indistinguishable from one that reproduced it exactly, because both leave the same result behind. That is the same evidence destroying shape as the collapse this issue's third cause was filed for (#1067, L340)"
+}
