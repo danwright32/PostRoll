@@ -1,0 +1,8 @@
+{
+  "name": "a-percentile-interpolates-between-its-neighbours",
+  "file": "postroll/ai/collaborator_metric.py",
+  "find": "    return ordered[low] + (ordered[high] - ordered[low]) * (position - low)",
+  "replace": "    return ordered[low]",
+  "test": "tests/test_collaborator_metric.py::test_the_percentile_interpolates_the_way_the_tools_people_check_with_do",
+  "breaks": "the percentile stops matching the one anybody checks it against in numpy or a spreadsheet, so the floor and the assumed rate cannot be verified by the person who has to trust them, which is the whole reason the population was committed (#1114)"
+}

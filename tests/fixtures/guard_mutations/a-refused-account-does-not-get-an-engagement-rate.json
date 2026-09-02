@@ -1,0 +1,8 @@
+{
+  "name": "a-refused-account-does-not-get-an-engagement-rate",
+  "file": "postroll/ai/collaborator_metric.py",
+  "find": "        if not self.measured:\n            return None",
+  "replace": "        if self.measured is None:\n            return None",
+  "test": "tests/test_collaborator_metric.py::test_unmeasured_accounts_do_not_drag_the_floor_down",
+  "breaks": "an account Meta refused is scored on whatever half figures happen to be stored against it, so the liveliness floor is a percentile of a population that includes accounts nobody measured, and #1005's whole premise that an unmeasured account is never scored is gone (#1114)"
+}
