@@ -24,6 +24,22 @@ enum SettingsCopy {
         "Used to call Claude directly, bypassing the CLI for faster generation. "
         + "Get a key at [console.anthropic.com](\(consoleURL))."
 
+    /// The Meta token footer (#1002).
+    ///
+    /// Says what the token BUYS rather than what it is, because that is what
+    /// decides whether it is worth setting up: without it every follower and
+    /// engagement figure is typed in by hand, which is what the collaborator
+    /// ranking ran on before this.
+    ///
+    /// Points at the document rather than repeating the steps. They involve a
+    /// business portfolio, a system user and four permissions, and a shortened
+    /// version here would be the version somebody follows and gets wrong.
+    static let metaTokenFooter =
+        "Reads follower, like and comment figures for the accounts you tag, so "
+        + "the collaborator ranking does not need them typed in. Minting one "
+        + "takes a few minutes in Meta's business settings: the steps are in "
+        + "docs/META-APP.md."
+
     /// The keychain refused to remove the key (#448).
     ///
     /// Says the key is still there, because that is the part that costs money:

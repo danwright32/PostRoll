@@ -25,7 +25,7 @@ final class SaveButtonStateTests: XCTestCase {
     // MARK: - Nothing to do
 
     func testAValueMatchingWhatIsStoredCannotBeSaved() {
-        XCTAssertFalse(KeychainStore.canSave(typed: whole, stored: whole),
+        XCTAssertFalse(KeychainStore.canSave(secret: .anthropic, typed: whole, stored: whole),
                        "the button is live with nothing to write, so pressing it "
                        + "reports Saved for a write that changed nothing")
     }
@@ -34,11 +34,11 @@ final class SaveButtonStateTests: XCTestCase {
         // The field is a paste target and a pasted key routinely carries a
         // trailing newline. Judged on the sanitised value, or a stray space
         // makes an unchanged key look like a new one.
-        XCTAssertFalse(KeychainStore.canSave(typed: "  \(whole)\n", stored: whole))
+        XCTAssertFalse(KeychainStore.canSave(secret: .anthropic, typed: "  \(whole)\n", stored: whole))
     }
 
     func testAnEmptyFieldOnAMachineWithNothingStoredCannotBeSaved() {
-        XCTAssertFalse(KeychainStore.canSave(typed: "", stored: ""),
+        XCTAssertFalse(KeychainStore.canSave(secret: .anthropic, typed: "", stored: ""),
                        "a first run offers a live Save button that would delete "
                        + "a key that is not there")
     }
@@ -46,17 +46,17 @@ final class SaveButtonStateTests: XCTestCase {
     // MARK: - Something to do
 
     func testAWholeNewKeyCanBeSaved() {
-        XCTAssertTrue(KeychainStore.canSave(typed: whole, stored: ""))
+        XCTAssertTrue(KeychainStore.canSave(secret: .anthropic, typed: whole, stored: ""))
     }
 
     func testReplacingOneKeyWithAnotherCanBeSaved() {
-        XCTAssertTrue(KeychainStore.canSave(typed: other, stored: whole))
+        XCTAssertTrue(KeychainStore.canSave(secret: .anthropic, typed: other, stored: whole))
     }
 
     func testClearingTheFieldWithAKeyStoredCanBeSaved() {
         // Empty means remove the stored key, which is a real action rather
         // than a malformed value, and the only way to perform it.
-        XCTAssertTrue(KeychainStore.canSave(typed: "", stored: whole))
+        XCTAssertTrue(KeychainStore.canSave(secret: .anthropic, typed: "", stored: whole))
     }
 
     // MARK: - Too short to be a whole key (#348)
@@ -65,11 +65,11 @@ final class SaveButtonStateTests: XCTestCase {
         // The commonest accident, and the one that looks exactly like success:
         // most of a key, prefix intact. The warning beside the field says
         // which, so a disabled button here is never unexplained.
-        XCTAssertFalse(KeychainStore.canSave(typed: "sk-ant-abc", stored: whole))
+        XCTAssertFalse(KeychainStore.canSave(secret: .anthropic, typed: "sk-ant-abc", stored: whole))
     }
 
     func testAPartialPasteCannotBeSavedOnAnEmptyMachineEither() {
-        XCTAssertFalse(KeychainStore.canSave(typed: "sk-ant-abc", stored: ""))
+        XCTAssertFalse(KeychainStore.canSave(secret: .anthropic, typed: "sk-ant-abc", stored: ""))
     }
 
     // MARK: - The transitions the redraw read used to answer (#112, #448)
@@ -77,11 +77,11 @@ final class SaveButtonStateTests: XCTestCase {
     func testAfterASaveThatLandedThereIsNothingLeftToDo() {
         // What the screen holds once a write succeeded: the stored value moves
         // up to the typed one, so the button falls quiet.
-        XCTAssertFalse(KeychainStore.canSave(typed: whole, stored: whole))
+        XCTAssertFalse(KeychainStore.canSave(secret: .anthropic, typed: whole, stored: whole))
     }
 
     func testAfterADeleteThatLandedThereIsNothingLeftToDo() {
-        XCTAssertFalse(KeychainStore.canSave(typed: "", stored: ""))
+        XCTAssertFalse(KeychainStore.canSave(secret: .anthropic, typed: "", stored: ""))
     }
 
     func testAfterARefusedSaveTheButtonStaysLiveSoItCanBeRetried() {
@@ -89,11 +89,11 @@ final class SaveButtonStateTests: XCTestCase {
         // old value and the typed one is still the new. A button that went
         // quiet here would leave the person facing a screen that says the write
         // failed and no way to try again (L109).
-        XCTAssertTrue(KeychainStore.canSave(typed: other, stored: whole))
+        XCTAssertTrue(KeychainStore.canSave(secret: .anthropic, typed: other, stored: whole))
     }
 
     func testAfterARefusedDeleteTheButtonStaysLiveSoItCanBeRetried() {
-        XCTAssertTrue(KeychainStore.canSave(typed: "", stored: whole))
+        XCTAssertTrue(KeychainStore.canSave(secret: .anthropic, typed: "", stored: whole))
     }
 
     // MARK: - What a press of Save leaves behind (#112, #448, #935)
@@ -116,7 +116,7 @@ final class SaveButtonStateTests: XCTestCase {
     }
 
     func testASaveThatLandedMovesWhatTheScreenBelievesIsStored() {
-        let outcome = KeychainStore.save(typed: "  \(other)\n", stored: whole,
+        let outcome = KeychainStore.save(secret: .anthropic, typed: "  \(other)\n", stored: whole,
                                          write: accepting().write,
                                          remove: accepting().remove)
 
@@ -124,12 +124,12 @@ final class SaveButtonStateTests: XCTestCase {
                        + "written, so it is what the screen must now hold")
         XCTAssertTrue(outcome.saved)
         XCTAssertNil(outcome.error)
-        XCTAssertFalse(KeychainStore.canSave(typed: other, stored: outcome.stored),
+        XCTAssertFalse(KeychainStore.canSave(secret: .anthropic, typed: other, stored: outcome.stored),
                        "the button is still live after a save that landed")
     }
 
     func testASaveTheKeychainRefusedLeavesTheStoredValueAlone() {
-        let outcome = KeychainStore.save(typed: other, stored: whole,
+        let outcome = KeychainStore.save(secret: .anthropic, typed: other, stored: whole,
                                          write: refusing().write,
                                          remove: refusing().remove)
 
@@ -140,23 +140,23 @@ final class SaveButtonStateTests: XCTestCase {
             """)
         XCTAssertFalse(outcome.saved, "a refused write reported as a successful one")
         XCTAssertNotNil(outcome.error)
-        XCTAssertTrue(KeychainStore.canSave(typed: other, stored: outcome.stored),
+        XCTAssertTrue(KeychainStore.canSave(secret: .anthropic, typed: other, stored: outcome.stored),
                       "the button went quiet after a refused save, so the screen "
                       + "says the write failed and offers no way to try again")
     }
 
     func testADeleteThatLandedLeavesNothingStored() {
-        let outcome = KeychainStore.save(typed: "", stored: whole,
+        let outcome = KeychainStore.save(secret: .anthropic, typed: "", stored: whole,
                                          write: accepting().write,
                                          remove: accepting().remove)
 
         XCTAssertEqual(outcome.stored, "")
         XCTAssertTrue(outcome.saved)
-        XCTAssertFalse(KeychainStore.canSave(typed: "", stored: outcome.stored))
+        XCTAssertFalse(KeychainStore.canSave(secret: .anthropic, typed: "", stored: outcome.stored))
     }
 
     func testADeleteTheKeychainRefusedSaysTheKeyIsStillThere() {
-        let outcome = KeychainStore.save(typed: "", stored: whole,
+        let outcome = KeychainStore.save(secret: .anthropic, typed: "", stored: whole,
                                          write: refusing().write,
                                          remove: refusing().remove)
 
@@ -166,14 +166,14 @@ final class SaveButtonStateTests: XCTestCase {
         // place and costs money on every run, the other leaves the PREVIOUS
         // key in place (L11).
         XCTAssertEqual(outcome.error, SettingsCopy.keyNotRemoved)
-        XCTAssertTrue(KeychainStore.canSave(typed: "", stored: outcome.stored))
+        XCTAssertTrue(KeychainStore.canSave(secret: .anthropic, typed: "", stored: outcome.stored))
     }
 
     func testTheTwoRefusalsDoNotShareASentence() {
-        let refusedSave = KeychainStore.save(typed: other, stored: whole,
+        let refusedSave = KeychainStore.save(secret: .anthropic, typed: other, stored: whole,
                                              write: refusing().write,
                                              remove: refusing().remove)
-        let refusedDelete = KeychainStore.save(typed: "", stored: whole,
+        let refusedDelete = KeychainStore.save(secret: .anthropic, typed: "", stored: whole,
                                                write: refusing().write,
                                                remove: refusing().remove)
 
@@ -190,7 +190,7 @@ final class SaveButtonStateTests: XCTestCase {
         // trailing newline stored verbatim is the corruption #128 is about, and
         // every later call fails with a generic authentication error.
         var written: String?
-        _ = KeychainStore.save(typed: "  \(whole)\n", stored: "",
+        _ = KeychainStore.save(secret: .anthropic, typed: "  \(whole)\n", stored: "",
                                write: { written = $0; return true },
                                remove: { true })
 
@@ -220,24 +220,29 @@ final class SaveButtonStateTests: XCTestCase {
     }
 
     func testTheScreenReadsTheStoreExactlyOnce() throws {
+        // One read, in the field's init. There are two fields now (#1002), and
+        // that is exactly why this counts the CALL rather than the fields: a
+        // second secret added by copying the block is how a read gets copied
+        // into a body along with everything else.
         let code = try settingsViewCode()
-        let reads = code.components(separatedBy: "keySource.read()").count - 1
+        let reads = code.components(separatedBy: "source.read(").count - 1
 
         XCTAssertEqual(reads, 1, """
-            SettingsView reads the stored key \(reads) times. It has to be \
-            exactly one, in init: any read in the body runs on every render pass, \
-            and a keychain read is a privileged call that can prompt and can be \
-            slow. Hold the value in state and move it when a write lands.
+            SettingsView reads a stored secret \(reads) times. It has to be \
+            exactly one, in SecretField's init: any read in a body runs on every \
+            render pass, and a keychain read is a privileged call that can prompt \
+            and can be slow. Hold the value in state and move it when a write \
+            lands.
             """)
     }
 
     func testTheOnlyKeychainCallIsInsideTheSourceItself() throws {
         // The count above follows the SEAM, so it would miss a second route
-        // that went straight to the store. `KeychainStore.readAPIKey()` belongs
-        // in exactly one place, the KeySource enum's own `read()`, which is what
+        // that went straight to the store. `KeychainStore.read(secret)` belongs
+        // in exactly one place, the KeySource enum's own `read(_:)`, which is what
         // makes the screen renderable at all (#918).
         let code = try settingsViewCode()
-        let direct = code.components(separatedBy: "KeychainStore.readAPIKey()").count - 1
+        let direct = code.components(separatedBy: "KeychainStore.read(secret)").count - 1
         XCTAssertEqual(direct, 1, """
             SettingsView names the keychain directly \(direct) times rather than \
             once. Every read goes through the KeySource, or a render points half \
@@ -247,7 +252,7 @@ final class SaveButtonStateTests: XCTestCase {
         let start = try XCTUnwrap(code.range(of: "enum KeySource"))
         let end = try XCTUnwrap(code.range(of: "let keySource: KeySource"))
         XCTAssertTrue(code[start.lowerBound..<end.lowerBound]
-                        .contains("KeychainStore.readAPIKey()"),
+                        .contains("KeychainStore.read(secret)"),
                       "the one keychain call is outside the KeySource enum, so "
                       + "the seam is not the only way the screen reaches the store")
     }
@@ -256,17 +261,18 @@ final class SaveButtonStateTests: XCTestCase {
         // A single read is not enough on its own: one read sitting in the body
         // is still one read per redraw, and this test would pass on it.
         let code = try settingsViewCode()
-        let start = try XCTUnwrap(code.range(of: "init(keySource:"),
-                                  "SettingsView no longer declares the init this "
+        let start = try XCTUnwrap(code.range(of: "init(secret: KeychainStore.Secret"),
+                                  "SecretField no longer declares the init this "
                                   + "is about, so nothing here is being read")
-        let end = try XCTUnwrap(code.range(of: "var body: some View"),
-                                "SettingsView has no body, so this is not the "
+        let end = try XCTUnwrap(code.range(of: "var body: some View", range:
+                                           start.upperBound..<code.endIndex),
+                                "SecretField has no body, so this is not the "
                                 + "file this check was written against")
         let beforeTheBody = code[start.lowerBound..<end.lowerBound]
 
-        XCTAssertTrue(beforeTheBody.contains("keySource.read()"), """
-            the one read of the stored key is not in init, so it happens while \
-            the screen is being drawn rather than once when it is built.
+        XCTAssertTrue(beforeTheBody.contains("source.read("), """
+            the one read of the stored secret is not in init, so it happens while \
+            the screen is being drawn rather than once when the field is built.
             """)
     }
 
