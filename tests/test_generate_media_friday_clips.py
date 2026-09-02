@@ -27,17 +27,21 @@ from conftest import HAVE_FFMPEG, needs_ffmpeg  # noqa: F401
 # reel and, since #824, really composites a title card onto it, so it is one of
 # the more expensive files in the suite.
 #
-# Whether it is expensive ENOUGH has now gone back and forth eight times, and
-# this file has decided where the floor sits every one of them: readings of
-# 5.0%, 5.8%, 4.5%, 4.99%, 6.18%, 4.37%, 5.97% and, an hour later on the same
-# machine, 5.17%. Nothing about the file has changed on any of those occasions.
-# The suite around it did, and a share is a ratio. At 5.17% it sits below the
-# 6.9% floor, so `make test-python-fast` pays for it again. CI and
-# `make test-python` run it either way throughout (#826, #840, #932).
+# This file decided where the old share threshold sat NINE times, on readings of
+# 5.0%, 5.8%, 4.5%, 4.99%, 6.18%, 4.37%, 5.97%, 5.17% and 5.96%, the last three
+# within a few hours of each other on one machine. Nothing about it changed on
+# any of those occasions; the suite around it did, and a share is a ratio.
+#
+# Since #1196 the fast run skips the five DEAREST files rather than everything
+# over a share, and this file has been the fifth dearest in all eight recorded
+# versions of the record. So the marker stops moving: its rank is what decides,
+# and its rank has never changed. CI and `make test-python` run it either way
+# throughout (#826, #840, #932).
 #
 # The marker is not a judgement kept here. It is derived from the recorded
 # distribution in tests/file_durations.py, and tests/test_fast_subset_stays_honest.py
-# fails if this line and that record disagree. That this one file has flipped
+# fails if this line and that record disagree.
+pytestmark = pytest.mark.slow That this one file has flipped
 # the marker eight times is what #1196 is about: the share it is measured in
 # moves when unrelated files do, so the reading is noise for this file in
 # particular.
