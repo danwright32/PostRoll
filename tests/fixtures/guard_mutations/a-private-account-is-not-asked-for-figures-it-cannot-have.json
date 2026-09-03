@@ -1,0 +1,8 @@
+{
+  "name": "a-private-account-is-not-asked-for-figures-it-cannot-have",
+  "file": "PostRollApp/Sources/Services/AccountBook.swift",
+  "find": "        if isPrivate { return .privateAccount }",
+  "replace": "        if isPrivate, false { return .privateAccount }",
+  "test": "PostRollTests/AccountFreshnessTests/testAPrivateAccountWithFollowersOnlyIsNotAskedForFiguresItCannotHave",
+  "breaks": "an account Dan marked private falls back into the followers-only state, so every surface asks him to add likes or comments that are visible only to approved followers and never will be, which is a remedy nobody can carry out printed again every week with nothing able to clear it (#982, L111)"
+}

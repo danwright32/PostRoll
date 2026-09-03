@@ -600,6 +600,73 @@ final class CollaboratorPickTests: XCTestCase {
         XCTAssertTrue(named.contains("private"), "the account vanished entirely")
     }
 
+    func testAPrivateAccountFillsASlotNoPublicAccountCanFill() {
+        // Demote, do not exclude (#982). Four public candidates leave a fifth
+        // slot that no public account can fill, and an empty slot reaches
+        // nobody at all, so the private account is worth more in it than the
+        // gap it would otherwise leave.
+        var marked = stats(50_000, 5_000, 1_000)
+        marked.isPrivate = true
+        var table = ["private": marked]
+        for handle in ["b", "c", "d", "e"] { table[handle] = stats(1_000, 50, 5) }
+        // A sixth candidate nobody has counted, so this is the ranking path
+        // rather than the everybody-fits one.
+        let result = CollaboratorPick.suggest(
+            handles: ["private", "b", "c", "d", "e", "uncounted"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        XCTAssertEqual(result.coverage, .ranked)
+        XCTAssertEqual(result.suggested.map(\.handle).last, "private",
+                       "the fifth slot was left empty rather than filled by the "
+                       + "only account that could fill it")
+    }
+
+    func testAPrivateAccountInTheFirstPhotoLosesToAPublicOneOutsideIt() {
+        // Private is the OUTERMOST key, ahead of the first photo bias. Being in
+        // the visible image is worth nothing when the invite cannot put the
+        // post in front of anybody new.
+        var marked = stats(50_000, 5_000, 1_000)
+        marked.isPrivate = true
+        let table = ["private": marked, "public": stats(1_000, 50, 5)]
+        let result = CollaboratorPick.suggest(
+            handles: ["private", "public", "f", "g", "h", "i"],
+            firstPhoto: ["private"], stats: lookup(table), asOf: now)
+
+        XCTAssertEqual(result.suggested.first?.handle, "public",
+                       "the first photo bias outranked the private mark")
+    }
+
+    func testAPrivateAccountIsNeverOfferedAsTheFirstPhotoSwap() {
+        // That line means "left out ONLY by the first photo rule", and a
+        // private account is not: it is last on merit too. Offering it would
+        // invite Dan to spend a slot on the one account that cannot repay it.
+        //
+        // Nothing enforces this separately. It holds because private is the
+        // outermost key in both orderings the swap is computed from, which is
+        // behaviour that is correct as a side effect of another rule and so has
+        // no test of its own until this one (L281).
+        // Five weaker public accounts fill the first photo, so the slots are
+        // all spoken for and something IS excluded. On merit alone the private
+        // account is the strongest thing outside the photo, which is exactly
+        // the shape that puts a name on this line.
+        var marked = stats(50_000, 5_000, 1_000)
+        marked.isPrivate = true
+        var table = ["private": marked]
+        let inPhoto = ["p1", "p2", "p3", "p4", "p5"]
+        for handle in inPhoto { table[handle] = stats(1_000, 50, 5) }
+        let result = CollaboratorPick.suggest(
+            handles: ["private"] + inPhoto,
+            firstPhoto: Set(inPhoto), stats: lookup(table), asOf: now)
+
+        XCTAssertEqual(result.suggested.count, CollaboratorPick.maxPerPost,
+                       "nothing was excluded, so this fixture cannot show the line "
+                       + "at all and the assertion below would pass vacuously")
+        XCTAssertNotEqual(result.strongestExcluded?.handle, "private",
+                          "a private account was offered as the swap worth making, "
+                          + "and spending a slot on it is the one trade that can "
+                          + "never repay")
+    }
+
     // MARK: - A withheld like count is not a measured zero (#1032)
 
     /// Some accounts answer everything except their like count. Folded into the
@@ -781,6 +848,26 @@ final class CollaboratorPickTests: XCTestCase {
         let reason = result.unranked.first?.reason ?? ""
         XCTAssertFalse(reason.contains("0%"), reason)
         XCTAssertTrue(reason.lowercased().contains("not counted"), reason)
+    }
+
+    func testAPrivateAccountSaysSoInTheSuggestionLine() {
+        // The same defect one state along (#982). A private account has a
+        // follower count and can never have the rest, so the followers-only
+        // remedy is the wrong sentence to put beside it: it names a step Dan
+        // cannot take, on a row that will come back every week (L111).
+        var marked = AccountStats(followers: 169, recordedOn: now, followersSource: .typed)
+        marked.isPrivate = true
+        let table = ["closedcircle": marked, "b": stats(1_000, 50, 5)]
+        let result = CollaboratorPick.suggest(
+            handles: ["closedcircle", "b", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        let reason = result.unranked.first(where: { $0.handle == "closedcircle" })?.reason ?? ""
+        XCTAssertTrue(reason.lowercased().contains("private"), reason)
+        XCTAssertFalse(reason.lowercased().contains("not counted yet"),
+                       "a permanent property reads as an outstanding job: \(reason)")
+        XCTAssertFalse(reason.lowercased().contains("add likes"),
+                       "the row asks for figures the account can never give: \(reason)")
     }
 
     func testAFollowersOnlyAccountSaysWhatIsMissingInTheSuggestionLine() {

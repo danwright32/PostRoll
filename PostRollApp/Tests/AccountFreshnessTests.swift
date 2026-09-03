@@ -206,6 +206,42 @@ final class AccountFreshnessTests: XCTestCase {
                                     recordedOn: Date()).countedness, .counted)
     }
 
+    // MARK: - Private is a fourth state, not a fourth kind of missing (#982)
+
+    func testAPrivateAccountWithFollowersOnlyIsNotAskedForFiguresItCannotHave() {
+        // The follower count is on the profile page. The per post likes and
+        // comments are visible only to approved followers and never will be,
+        // so "add likes or comments to rank" names a step Dan cannot take,
+        // and a remedy that cannot change the state it describes is worse
+        // than none (L111).
+        var marked = followersOnly
+        marked.isPrivate = true
+        XCTAssertEqual(marked.countedness, .privateAccount)
+    }
+
+    func testAPrivateAccountSaysWhyRatherThanAskingForNumbers() {
+        let now = Date(timeIntervalSince1970: 1_775_000_000)
+        var marked = followersOnly
+        marked.isPrivate = true
+        let label = marked.freshnessLabel(asOf: now)
+
+        XCTAssertNotEqual(label, followersOnly.freshnessLabel(asOf: now),
+                          "a permanent property reads as an outstanding job")
+        XCTAssertNotEqual(label, AccountStats().freshnessLabel(asOf: now))
+        XCTAssertFalse(label.lowercased().contains("add "),
+                       "the label asks for figures the account can never give")
+    }
+
+    func testAPrivateAccountThatDanCountedHimselfIsStillCounted() {
+        // Marked private and counted anyway, because he is an approved
+        // follower. It ranks, last, rather than falling out of the ranking
+        // into a list of accounts waiting on numbers it already has.
+        var marked = AccountStats(followers: 1_000, likes: 50, comments: 5,
+                                  recordedOn: Date())
+        marked.isPrivate = true
+        XCTAssertEqual(marked.countedness, .counted)
+    }
+
     func testTheThreeStatesDoNotShareALabel() {
         // The defect itself. Two of these were the same string, so the surface
         // reported that nothing was entered immediately after something was.

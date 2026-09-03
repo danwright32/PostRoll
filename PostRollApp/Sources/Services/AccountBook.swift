@@ -354,6 +354,11 @@ extension AccountStats {
         case followersOnly
         /// Enough to rank, whether measured or assumed.
         case counted
+        /// Marked private by hand (#982). A permanent property of the account,
+        /// not a job waiting to be done: the per post figures the other states
+        /// ask for are visible only to approved followers, so the remedy
+        /// `followersOnly` names cannot be carried out here (L111).
+        case privateAccount
     }
 
     var countedness: Countedness {
@@ -365,6 +370,11 @@ extension AccountStats {
         if outcome == .notProfessional || outcome == .noSuchAccount {
             return followers ?? 0 > 0 ? .counted : .neverCounted
         }
+        // After every state that can still rank, before the two that ask for a
+        // figure (#982). What reaches here can never be counted: the per post
+        // likes and comments are visible only to approved followers, so
+        // `followersOnly`'s remedy names a step nobody can take (L111).
+        if isPrivate { return .privateAccount }
         if let followers, followers > 0 { return .followersOnly }
         return .neverCounted
     }
@@ -395,6 +405,7 @@ extension AccountStats {
         switch countedness {
         case .neverCounted:  return "Not counted yet"
         case .followersOnly: return "Followers only, add likes or comments to rank"
+        case .privateAccount: return "Private, so its posts cannot be counted"
         case .counted:       break
         }
         guard let recordedOn else { return "Not counted yet" }
@@ -697,7 +708,7 @@ final class AccountBook {
     /// and it would produce a negative engagement rate that sorts above every
     /// real account.
     func record(handle: String, followers: Int?, likes: Int?, comments: Int?,
-                on date: Date) {
+                isPrivate: Bool? = nil, on date: Date) {
         let key = Self.key(handle)
         guard !key.isEmpty else { return }
         var entry = records[key] ?? AccountRecord(handle: CaptionBlocks.bareUsername(handle))
@@ -729,6 +740,11 @@ final class AccountBook {
         stats.commentsSource = Self.sourceAfterTyping(
             was: was.comments, now: stats.comments, previous: was.commentsSource)
         stats.recordedOn = date
+        // nil is not false (#982). The form states the mark on every save, but
+        // every other caller is saving FIGURES and says nothing about privacy,
+        // so an unstated mark is left exactly as it was rather than cleared to
+        // the unmarked state a plain Bool default would write (L168).
+        if let isPrivate { stats.isPrivate = isPrivate }
         entry.stats = stats
         records[key] = entry
         save()

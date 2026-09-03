@@ -159,6 +159,24 @@ final class RecurringAccountsTests: XCTestCase {
         XCTAssertEqual(items.first?.need, .neverCounted)
     }
 
+    func testAPrivateAccountIsNotAskedForNumbersItCanNeverHave() {
+        // The same defect as the caption block, on the screen before it (#982,
+        // L30). This banner exists to name accounts a number would make
+        // rankable. A private account can never become rankable, so every
+        // appearance it makes here is a job nobody can finish, and a list that
+        // always holds an item nobody can clear stops being read (L36).
+        let events = [event("a", eventHandles: "closedcircle"),
+                      event("b", eventHandles: "closedcircle")]
+        var marked = AccountStats()
+        marked.isPrivate = true
+
+        let items = RecurringAccounts.needingAttention(
+            events: events, taggedOn: events[0], stats: { _ in marked }, asOf: Date())
+
+        XCTAssertTrue(items.isEmpty,
+                      "a private account is asked for figures it cannot give")
+    }
+
     func testARecurringAccountWithStaleNumbersIsSurfaced() {
         let events = [event("a", eventHandles: "dciny"), event("b", eventHandles: "dciny")]
 

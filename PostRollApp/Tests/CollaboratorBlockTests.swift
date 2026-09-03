@@ -100,6 +100,33 @@ final class CollaboratorBlockTests: XCTestCase {
         XCTAssertTrue(block.lowercased().contains("not counted"), block)
     }
 
+    func testAPrivateAccountIsNamedUnderItsOwnSentenceNotAsOneNobodyCounted() throws {
+        // The defect this issue was filed on. A private account has a follower
+        // count and can never have the rest, so it fell into the unranked list
+        // and CAPTIONS.txt asked for numbers that do not exist, every week,
+        // with no action that could ever clear it. A permanent property and an
+        // outstanding job have to read differently (L11).
+        var marked = AccountStats(followers: 169, recordedOn: now)
+        marked.isPrivate = true
+        var table = ["closedcircle": marked]
+        for handle in ["a", "b", "c", "d"] { table[handle] = stats(1_000, 50, 5) }
+        let result = CollaboratorPick.suggest(
+            handles: ["closedcircle", "a", "b", "c", "d", "uncounted"],
+            firstPhoto: nil, stats: { table[AccountBook.key($0)] }, asOf: now)
+        let block = CollaboratorPick.captionBlock(result)
+
+        let line = try XCTUnwrap(block.split(separator: "\n")
+                                      .first { $0.contains("closedcircle") },
+                                 "the account vanished from the block entirely")
+        XCTAssertTrue(line.lowercased().contains("private"), String(line))
+        XCTAssertFalse(line.contains("Not counted"),
+                       "a permanent property is reported as an outstanding job: "
+                       + String(line))
+        XCTAssertTrue(block.split(separator: "\n")
+                           .contains { $0.contains("uncounted") && $0.contains("Not counted") },
+                      "an account genuinely waiting on numbers lost its own line")
+    }
+
     func testTheBlockNamesInstagramsLimitSoTheNumberFiveIsNotAMystery() throws {
         let block = CollaboratorPick.captionBlock(suggestion())
         XCTAssertTrue(block.contains("\(CollaboratorPick.maxPerPost)"), block)
