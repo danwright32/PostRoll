@@ -119,6 +119,31 @@ struct AccountStats: Codable, Equatable, Sendable {
     /// remembers nothing.
     var fetchAttempts: Int = 0
 
+    // MARK: - What came of the invites actually sent (#986)
+    //
+    // The ranking predicted reach and then never learned what came of it, so an
+    // account that declines every week went on consuming one of only five slots
+    // with nowhere to record that it had declined.
+    //
+    // Counts rather than a single verdict: one refusal is not a policy, and an
+    // account that accepted twice and declined once has said something
+    // different from one that has only ever refused. Entered by hand on the
+    // numbers form, because Instagram tells Dan days after the post and no API
+    // reports it.
+
+    /// How many collaborator invites this account has accepted.
+    var acceptedInvites: Int = 0
+    /// How many it has declined, or left unanswered long enough to count as one.
+    var declinedInvites: Int = 0
+
+    /// Whether the record says this account tends to refuse.
+    ///
+    /// Deliberately a comparison rather than a threshold. Nobody has recorded a
+    /// single outcome yet, so a fixed number would be one measured against
+    /// nothing (L172); this is inert while both counts are zero, fires on the
+    /// first unanswered invite, and is undone by one acceptance.
+    var declinesOutweighAccepts: Bool { declinedInvites > acceptedInvites }
+
     /// Marked as never worth inviting, by hand (#1271).
     ///
     /// Not a ranking problem. However good the figures, Dan has decided the
@@ -185,6 +210,8 @@ struct AccountStats: Codable, Equatable, Sendable {
         feed            = try c.decodeIfPresent(Int.self, forKey: .feed)
         isPrivate       = try c.decodeIfPresent(Bool.self, forKey: .isPrivate) ?? false
         neverInvite     = try c.decodeIfPresent(Bool.self, forKey: .neverInvite) ?? false
+        acceptedInvites = try c.decodeIfPresent(Int.self, forKey: .acceptedInvites) ?? 0
+        declinedInvites = try c.decodeIfPresent(Int.self, forKey: .declinedInvites) ?? 0
         fetchAttempts   = try c.decodeIfPresent(Int.self, forKey: .fetchAttempts) ?? 0
     }
 
@@ -198,6 +225,8 @@ struct AccountStats: Codable, Equatable, Sendable {
          reels: Int? = nil, feed: Int? = nil,
          isPrivate: Bool = false,
          neverInvite: Bool = false,
+         acceptedInvites: Int = 0,
+         declinedInvites: Int = 0,
          fetchAttempts: Int = 0) {
         self.followers = followers
         self.likes = likes
@@ -212,6 +241,8 @@ struct AccountStats: Codable, Equatable, Sendable {
         self.feed = feed
         self.isPrivate = isPrivate
         self.neverInvite = neverInvite
+        self.acceptedInvites = acceptedInvites
+        self.declinedInvites = declinedInvites
         self.fetchAttempts = fetchAttempts
     }
 
@@ -723,6 +754,7 @@ final class AccountBook {
     /// real account.
     func record(handle: String, followers: Int?, likes: Int?, comments: Int?,
                 isPrivate: Bool? = nil, neverInvite: Bool? = nil,
+                acceptedInvites: Int? = nil, declinedInvites: Int? = nil,
                 on date: Date) {
         let key = Self.key(handle)
         guard !key.isEmpty else { return }
@@ -761,6 +793,12 @@ final class AccountBook {
         // the unmarked state a plain Bool default would write (L168).
         if let isPrivate { stats.isPrivate = isPrivate }
         if let neverInvite { stats.neverInvite = neverInvite }
+        // Same rule as the marks (#986): the form states them, and a fetch or
+        // any other writer says nothing, so an unstated count is left as it was
+        // rather than reset to zero, which would put an account that always
+        // refuses straight back at the top of the ranking.
+        if let acceptedInvites { stats.acceptedInvites = max(0, acceptedInvites) }
+        if let declinedInvites { stats.declinedInvites = max(0, declinedInvites) }
         entry.stats = stats
         records[key] = entry
         save()

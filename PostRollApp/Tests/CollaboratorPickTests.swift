@@ -850,6 +850,100 @@ final class CollaboratorPickTests: XCTestCase {
         XCTAssertTrue(reason.lowercased().contains("not counted"), reason)
     }
 
+    // MARK: - What actually happened to the invites (#986)
+    //
+    // The ranking predicted reach and then never learned what came of it. An
+    // account that declines every week went on consuming one of only five
+    // slots, and there was nowhere to record that it had declined.
+    //
+    // The rule needs no constant: more declines than accepts. Nobody has
+    // recorded a single outcome yet, so any fixed number would be a threshold
+    // measured against nothing (L172), and 0 against 0 is false, so this is
+    // inert until there is evidence and reversible by one acceptance.
+
+    /// Engagement PROPORTIONATE to the follower count, so a big account here is
+    /// not quietly demoted by the liveliness floor instead of by the rule under
+    /// test. The first version used a flat 50 likes, which put a 50,000
+    /// follower account at 0.13% and under the floor, so the test passed and
+    /// failed for reasons that had nothing to do with invites (L48).
+    private func answered(_ followers: Int, accepted: Int, declined: Int) -> AccountStats {
+        var made = stats(followers, followers / 20, followers / 200)
+        made.acceptedInvites = accepted
+        made.declinedInvites = declined
+        return made
+    }
+
+    func testAnAccountThatDeclinesMoreThanItAcceptsRanksBelowOneThatDoesNot() {
+        let table = ["refuser": answered(50_000, accepted: 0, declined: 2),
+                     "willing": answered(1_000, accepted: 0, declined: 0)]
+            .merging(Dictionary(uniqueKeysWithValues:
+                ["c", "d", "e", "f"].map { ($0, stats(900, 10, 1)) })) { a, _ in a }
+        let result = CollaboratorPick.suggest(
+            handles: ["refuser", "willing", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+        let order = result.suggested.map(\.handle)
+
+        XCTAssertTrue(order.contains("willing"), order.description)
+        XCTAssertFalse(order.contains("refuser"),
+                       "the account that keeps declining still took a slot, and "
+                       + "on the largest figures in the list: \(order)")
+    }
+
+    func testOneAcceptanceCancelsOneDecline() {
+        // Reversible by evidence rather than a state Dan has to clear by hand.
+        // An account that has accepted as often as it declined has told us
+        // nothing either way, so it ranks on its figures like anybody else.
+        let table = ["evens": answered(50_000, accepted: 1, declined: 1),
+                     "willing": answered(1_000, accepted: 0, declined: 0)]
+            .merging(Dictionary(uniqueKeysWithValues:
+                ["c", "d", "e", "f"].map { ($0, stats(900, 10, 1)) })) { a, _ in a }
+        let result = CollaboratorPick.suggest(
+            handles: ["evens", "willing", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+        let order = result.suggested.map(\.handle)
+
+        XCTAssertEqual(order.first, "evens",
+                       "an account with an even record was demoted on its history "
+                       + "rather than ranked on its figures: \(order)")
+    }
+
+    func testAnAccountNobodyHasInvitedYetIsNotJudged() {
+        // The whole book is in this state today, so a rule that fired here
+        // would be reordering every account on no evidence at all.
+        let table = ["strong": answered(50_000, accepted: 0, declined: 0),
+                     "weak": answered(1_000, accepted: 0, declined: 0)]
+            .merging(Dictionary(uniqueKeysWithValues:
+                ["c", "d", "e", "f"].map { ($0, stats(900, 10, 1)) })) { a, _ in a }
+        let result = CollaboratorPick.suggest(
+            handles: ["strong", "weak", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        XCTAssertEqual(result.suggested.first?.handle, "strong",
+                       "an account nobody has invited was demoted for it")
+    }
+
+    func testMeasuredRefusalOutranksTheAssumedOne() {
+        // The first photo bias exists PRECISELY because somebody not in the
+        // visible image usually declines. That is an assumption; this is a
+        // record of what happened, so it has to win where the two disagree.
+        var refuser = answered(50_000, accepted: 0, declined: 3)
+        refuser.isPrivate = false
+        let table = ["refuser": refuser,
+                     "outside": answered(1_000, accepted: 0, declined: 0)]
+            .merging(Dictionary(uniqueKeysWithValues:
+                ["c", "d", "e", "f"].map { ($0, stats(900, 10, 1)) })) { a, _ in a }
+        // The refuser IS in the first photo and the willing account is not.
+        let result = CollaboratorPick.suggest(
+            handles: ["refuser", "outside", "c", "d", "e", "f"],
+            firstPhoto: ["refuser"], stats: lookup(table), asOf: now)
+        let order = result.suggested.map(\.handle)
+
+        XCTAssertTrue(order.contains("outside"), order.description)
+        XCTAssertFalse(order.contains("refuser"),
+                       "being in the first photo outranked a measured record of "
+                       + "refusing: \(order)")
+    }
+
     // MARK: - Accounts Dan will never invite (#1271)
     //
     // Some accounts are not a ranking problem. However good the figures, he

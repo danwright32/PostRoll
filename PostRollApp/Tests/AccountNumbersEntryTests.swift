@@ -116,6 +116,10 @@ final class AccountNumbersEntryTests: XCTestCase {
             XCTAssertTrue(handler.contains("neverInvite: neverInvite"),
                           "\(file) drops the never invite mark on the way to "
                           + "the book, so ticking the box does nothing")
+            XCTAssertTrue(handler.contains("acceptedInvites: accepted")
+                          && handler.contains("declinedInvites: declined"),
+                          "\(file) drops what came of the invites on the way to "
+                          + "the book, so the ranking never learns anything")
         }
     }
 

@@ -391,6 +391,8 @@ enum CollaboratorPick {
         let rate: Double
         let followers: Int
         let isPrivate: Bool
+        /// The account has declined more invites than it has accepted (#986).
+        let refuses: Bool
 
         init?(_ candidate: Candidate) {
             guard let scored = score(candidate.stats),
@@ -401,6 +403,7 @@ enum CollaboratorPick {
             self.rate = scored.rate
             self.followers = followers
             self.isPrivate = candidate.stats?.isPrivate ?? false
+            self.refuses = candidate.stats?.declinesOutweighAccepts ?? false
         }
 
         /// Whether this account's audience is alive enough to be ranked on its
@@ -727,6 +730,15 @@ enum CollaboratorPick {
     static let privateLine =
         "Private, so an invite reaches only their own approved followers: "
 
+    /// What the two invite history fields are called (#986).
+    ///
+    /// Here with the rest of the wording rather than typed into the form. The
+    /// guard on that file forbids it spelling these sentences itself, and it is
+    /// right to: a label written in the view is one the screen and CAPTIONS.txt
+    /// can come to disagree about.
+    static let acceptedInvitesLabel = "Collaborator invites accepted"
+    static let declinedInvitesLabel = "Collaborator invites declined"
+
     /// What the never invite mark means, beside the control that makes it.
     ///
     /// Worded here with the rest of them, so the sentence Dan reads while
@@ -974,6 +986,16 @@ enum CollaboratorPick {
         // cannot put the post on a grid anybody can see, so the slot is wasted
         // however good the figures are.
         if a.isPrivate != b.isPrivate { return !a.isPrivate }
+        // What actually happened beats what we assume will (#986). The first
+        // photo bias below exists PRECISELY because somebody not in the visible
+        // image usually declines, which is an assumption; this is a record of
+        // what an account did, so it wins wherever the two disagree.
+        //
+        // Above the event-account key too, so a person who keeps refusing falls
+        // below an organisation that does not. That only ever reorders accounts
+        // with a recorded history: with both counts zero the comparison is
+        // false, which is every account in the book today.
+        if a.refuses != b.refuses { return !a.refuses }
         // The event's own account under the people, and over a private one
         // (#985). The order of these two keys is the whole decision: a private
         // account cannot put the post in front of anybody new at all, while an

@@ -135,11 +135,14 @@ struct ExportView: View {
             AccountNumbersSheet(
                 handle: target.handle,
                 stats: accounts.stats(for: target.handle),
-                onSave: { followers, likes, comments, isPrivate, neverInvite in
+                onSave: { followers, likes, comments, isPrivate, neverInvite,
+                          accepted, declined in
                     accounts.record(handle: target.handle, followers: followers,
                                               likes: likes, comments: comments,
                                               isPrivate: isPrivate,
-                                              neverInvite: neverInvite, on: Date())
+                                              neverInvite: neverInvite,
+                                              acceptedInvites: accepted,
+                                              declinedInvites: declined, on: Date())
                     editingRecurringAccount = nil
                     // The banner is a claim about the book, so it has to stop
                     // making it the moment the number lands. Without this the
