@@ -28,6 +28,16 @@ struct CollagePreviewThumbnail: View {
 
     @State private var image: NSImage?
     @State private var cells: [CollageCell] = []
+
+    /// Where the branded strip sat in the layout Python drew (#970).
+    ///
+    /// Read from the sidecar beside the base PNG rather than inferred from the
+    /// cells being judged, so a row dragged down over the strip is refused
+    /// instead of carrying the inferred band down with it.
+    ///
+    /// Nil for a collage rendered before the sidecar recorded one. Those are
+    /// still refused at the render, where the band is replayed from the seed.
+    @State private var stripBand: (top: Int, height: Int)?
     @State private var selectedCellIndex: Int? = nil
     @State private var dropTargetIdx: Int? = nil
     // Sampled from the loaded PNG's left-margin pixel so divider-drag fill
@@ -232,9 +242,11 @@ struct CollagePreviewThumbnail: View {
                                     // (#967, #970). A refused drag keeps the
                                     // previous layout rather than storing one
                                     // the export would draw over the branding.
-                                    if let saved = CollageCell.saving(applyCollageDividerDelta(
+                                    if let saved = CollageCell.saving(
+                                        applyCollageDividerDelta(
                                             to: baseCells, divider: div,
-                                            delta: Int(finalDeltaPx / sy))) {
+                                            delta: Int(finalDeltaPx / sy)),
+                                        stripBand: stripBand) {
                                         cellOverride.wrappedValue = saved
                                     }
                                 }
@@ -252,9 +264,11 @@ struct CollagePreviewThumbnail: View {
                                     // See the horizontal handle above: persist
                                     // only, no regen, and only a layout that
                                     // can be drawn (#967, #970).
-                                    if let saved = CollageCell.saving(applyCollageDividerDelta(
+                                    if let saved = CollageCell.saving(
+                                        applyCollageDividerDelta(
                                             to: baseCells, divider: div,
-                                            delta: Int(finalDeltaPx / sx))) {
+                                            delta: Int(finalDeltaPx / sx)),
+                                        stripBand: stripBand) {
                                         cellOverride.wrappedValue = saved
                                     }
                                 }
@@ -493,14 +507,15 @@ struct CollagePreviewThumbnail: View {
         .task(id: url) {
             async let bytes   = ImageLoad.bytes(url)
             async let decoded = Task.detached {
-                LayoutSidecar.read(at: layoutURL).cells
+                LayoutSidecar.read(at: layoutURL)
             }.value
-            let (loadedBytes, loadedCells) = await (bytes, decoded)
+            let (loadedBytes, sidecar) = await (bytes, decoded)
             let loadedImage = loadedBytes.flatMap { NSImage(data: $0) }
             let sampledGap = Self.sampleGapColor(from: loadedImage)
             await MainActor.run {
                 image = loadedImage
-                cells = rebasedToCurrentPhotos(loadedCells)
+                cells = rebasedToCurrentPhotos(sidecar.cells)
+                stripBand = sidecar.strip.map { (top: $0.y, height: $0.h) }
                 gapColor = sampledGap
                 discardUnusableOverride()
             }
@@ -512,15 +527,16 @@ struct CollagePreviewThumbnail: View {
                 Task {
                     async let bytes   = ImageLoad.bytes(url)
                     async let decoded = Task.detached {
-                        LayoutSidecar.read(at: layoutURL).cells
+                        LayoutSidecar.read(at: layoutURL)
                     }.value
-                    let (loadedBytes, loadedCells) = await (bytes, decoded)
+                    let (loadedBytes, sidecar) = await (bytes, decoded)
                     let loadedImage = loadedBytes.flatMap { NSImage(data: $0) }
                     let sampledGap = Self.sampleGapColor(from: loadedImage)
                     // Commit image, cells, and override-clear in one render cycle.
                     await MainActor.run {
                         image = loadedImage
-                        cells = rebasedToCurrentPhotos(loadedCells)
+                        cells = rebasedToCurrentPhotos(sidecar.cells)
+                        stripBand = sidecar.strip.map { (top: $0.y, height: $0.h) }
                         gapColor = sampledGap
                         cellOverride.wrappedValue = nil
                     }

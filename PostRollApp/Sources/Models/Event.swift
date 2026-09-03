@@ -593,7 +593,8 @@ extension CollageCell {
     ///
     /// Usable means a one to one match: every cell resolves to a current photo and
     /// every current photo has a cell, so no photo is dropped or drawn twice.
-    static func usable(_ cells: [CollageCell]?, forPhotos photoURLs: [URL]) -> [CollageCell]? {
+    static func usable(_ cells: [CollageCell]?, forPhotos photoURLs: [URL],
+                       stripBand: (top: Int, height: Int)? = nil) -> [CollageCell]? {
         guard let cells, !cells.isEmpty, !photoURLs.isEmpty,
               cells.count == photoURLs.count
         else { return nil }
@@ -605,8 +606,9 @@ extension CollageCell {
         // that draws a photograph over the branding or off the canvas. nil
         // falls back to the automatic masonry, which is the same answer this
         // already gives a layout that no longer describes the day's photos.
-        // No strip band, for the reason `saving` gives below.
-        guard layoutProblems(rebased).isEmpty else { return nil }
+        // The band it was built on when the caller has one, for the reason
+        // `saving` gives below.
+        guard layoutProblems(rebased, stripBand: stripBand).isEmpty else { return nil }
         return rebased
     }
 
@@ -618,15 +620,21 @@ extension CollageCell {
     /// export drew it. Refusing here keeps the previous layout, which is a
     /// state the editor already handles, rather than storing one that cannot
     /// be drawn.
-    /// No strip band is passed, deliberately. `brandedStripBand` INFERS where
-    /// the strip is from these same cells, so a `covers_strip` verdict here
-    /// could only confirm that the inference agrees with itself (L70): grow a
-    /// row down over the strip and the inferred band moves down with it.
-    /// Checking it needs the position the layout was BUILT with, which nothing
-    /// records; #970 stays open for that. The predicate is written and tested
-    /// against an explicit band so it is ready when there is one to give it.
-    static func saving(_ cells: [CollageCell]) -> [CollageCell]? {
-        layoutProblems(cells).isEmpty ? cells : nil
+    /// `stripBand` is where the strip sat in the layout this collage was BUILT
+    /// on, read from the sidecar Python writes beside the base PNG (#970).
+    ///
+    /// It has to be passed IN. `brandedStripBand` infers the band from the same
+    /// cells being judged, so a verdict computed from it could only confirm
+    /// that the inference agrees with itself (L70): grow a row down over the
+    /// strip and the inferred band moves down with it, which is the shape #965
+    /// reported.
+    ///
+    /// Nil still means "do not judge the band", which is honest for every
+    /// collage rendered before the sidecar recorded one. Those are refused at
+    /// the render instead, where the band can be replayed from the seed.
+    static func saving(_ cells: [CollageCell],
+                       stripBand: (top: Int, height: Int)? = nil) -> [CollageCell]? {
+        layoutProblems(cells, stripBand: stripBand).isEmpty ? cells : nil
     }
 
     /// Every reason this set of cells cannot be rendered, or an empty list.

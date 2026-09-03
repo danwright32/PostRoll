@@ -792,10 +792,38 @@ def _strip_y_of(cell_layout: list[dict]) -> int:
     return strip_y
 
 
+def plan_base_layout(
+    photo_ratios: list[float], seed: int | None
+) -> tuple[list[int], list[int], list[dict], int]:
+    """The masonry layout a collage is BUILT on: (top, bottom, cells, strip_y).
+
+    Extracted so the override path can recover where the branded strip sat
+    without re-deriving it from the cells it is about to judge (#970). Both
+    callers go through this, so the arrangement the renderer draws and the band
+    the check measures against cannot come from two different walks of the same
+    rng (L107).
+
+    Deterministic for a given seed, including no seed at all: with none, the
+    first fitting arrangement is the default rather than a fresh draw every
+    render.
+    """
+    count = len(photo_ratios)
+    rng = random.Random(0 if seed is None else seed)
+    if seed is None:
+        top_pattern, bottom_pattern = [list(p) for p in
+                                       distinct_collage_splits(count, photo_ratios)[0]]
+    else:
+        top_pattern, bottom_pattern = choose_collage_split(count, rng, photo_ratios)
+
+    planned, strip_y = plan_collage_cells(photo_ratios, top_pattern, bottom_pattern, rng)
+    return top_pattern, bottom_pattern, planned, strip_y
+
+
 def render_cell_layout_override(
     canvas: Image.Image,
     cell_layout: list[dict],
     offsets_by_path: dict[str, tuple[float, float, float]],
+    strip_band: tuple[int, int] | None = None,
 ) -> int:
     """Render cells at exact (x,y,w,h) positions from cell_layout.
 
@@ -808,15 +836,21 @@ def render_cell_layout_override(
     # photograph over the branded strip, off the canvas, or on top of another
     # photograph, and the export is what Dan posts.
     #
-    # No strip band is passed, deliberately. Where the strip sits is INFERRED
-    # from these same cells (`_strip_y_of` takes the largest inter-row gap), so
-    # a `covers_strip` verdict computed here could only ever confirm that the
-    # inference agrees with itself (L70): grow a row down over the strip and
-    # the inference moves the strip down with it. Checking it needs the
-    # position the layout was BUILT with, which nothing records. #970 stays
-    # open for that, and the predicate is written and tested against an
-    # explicit band so it is ready when there is one to give it.
-    problems = layout_problems(cell_layout)
+    # `strip_band` is where the strip sat in the layout this collage was BUILT
+    # on, and it has to be passed IN (#970). Inferring it here from these same
+    # cells (`_strip_y_of` takes the largest inter-row gap) could only ever
+    # confirm that the inference agrees with itself (L70): grow a row down over
+    # the strip and the inference moves the strip down with it, which is the
+    # shape #965 reported and which rendered happily.
+    #
+    # `plan_base_layout` recovers it from the photographs and the seed, so the
+    # answer depends on nothing the person has since dragged.
+    #
+    # None still means "do not judge the band". A caller with no seed to replay
+    # cannot produce an honest one, and a made up band would refuse layouts for
+    # a position nobody chose (L11).
+    band_y, band_h = strip_band if strip_band else (None, 0)
+    problems = layout_problems(cell_layout, strip_y=band_y, strip_h=band_h)
     if problems:
         raise ValueError(
             f"this saved collage layout cannot be rendered ({', '.join(problems)}). "
@@ -917,25 +951,19 @@ def generate_collage(
                     t = crop_offsets[i]
                     offsets_by_path[path] = (float(t[0]), float(t[1]), float(t[2]))
 
-        strip_y = render_cell_layout_override(canvas, cell_layout, offsets_by_path)
+        # The band comes from the layout this day was built on, replayed from
+        # its own photographs and seed, rather than from the override.
+        built_on = plan_base_layout([p.width / p.height for p in all_photos], seed)[3]
+        strip_y = render_cell_layout_override(
+            canvas, cell_layout, offsets_by_path,
+            strip_band=(built_on, STRIP_H))
         canvas = draw_branded_strip(canvas, strip_y, event_name, org, venue, logo_path)
         cells = list(cell_layout)
         mode_desc = f"override ({len(cell_layout)} cells)"
     else:
         # ── Masonry mode: compute layout from photo ratios + pattern ───────
-        n = len(all_photos)
         ratios = [p.width / p.height for p in all_photos]
-        options = distinct_collage_splits(n, ratios)
-
-        # With no stored seed the collage must be deterministic, not a fresh draw
-        # every render. The first fitting arrangement is the default.
-        rng = random.Random(0 if seed is None else seed)
-        if seed is None:
-            top_pattern, bottom_pattern = [list(p) for p in options[0]]
-        else:
-            top_pattern, bottom_pattern = choose_collage_split(n, rng, ratios)
-
-        planned, strip_y = plan_collage_cells(ratios, top_pattern, bottom_pattern, rng)
+        top_pattern, bottom_pattern, planned, strip_y = plan_base_layout(ratios, seed)
 
         cells = paste_planned_cells(
             canvas, all_photos, list(photo_paths), planned, crop_offsets
@@ -953,7 +981,10 @@ def generate_collage(
     # crop controls. Suppressed on final export since nothing in the
     # export folder consumes it.
     if write_layout_sidecar:
-        _write_sidecar(layout_sidecar_path(output), cells)
+        # With the band it was drawn against (#970), so the editor judges a
+        # dragged layout against where the strip WAS rather than where the
+        # dragged cells imply it is.
+        _write_sidecar(layout_sidecar_path(output), cells, strip=(strip_y, STRIP_H))
 
     print(f"Collage generated: {output} ({CANVAS_W}x{CANVAS_H}, {mode_desc})")
     return str(output)

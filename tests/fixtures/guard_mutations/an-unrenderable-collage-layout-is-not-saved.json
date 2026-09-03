@@ -1,8 +1,8 @@
 {
   "name": "an-unrenderable-collage-layout-is-not-saved",
   "file": "PostRollApp/Sources/Models/Event.swift",
-  "find": "        layoutProblems(cells).isEmpty ? cells : nil",
+  "find": "        layoutProblems(cells, stripBand: stripBand).isEmpty ? cells : nil",
   "replace": "        cells",
   "test": "PostRollTests/CollageLayoutValidityTests/testAnUnrenderableLayoutIsNotSaved",
-  "breaks": "the editor stores a collage layout that cannot be drawn again: a cell under the 80px floor, off the canvas, or on top of another cell. CollageRenderer composites the saved cells over the base PNG, so it is the export and the stored event that carry it, not just the preview (#967)"
+  "breaks": "the editor stores a collage layout that cannot be drawn again: a cell under the 80px floor, off the canvas, on top of another cell, or over the branded centre strip. CollageRenderer composites the saved cells over the base PNG, so it is the export and the stored event that carry it, not just the preview (#967, #970)"
 }

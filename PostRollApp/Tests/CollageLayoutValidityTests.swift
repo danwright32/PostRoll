@@ -168,28 +168,63 @@ final class CollageLayoutValidityTests: XCTestCase {
         XCTAssertEqual(CollageCell.saving(good), good)
     }
 
-    /// #970 is NOT closed by this file, and the reason is worth pinning.
+    /// #970, and why the band has to be passed in rather than inferred.
     ///
-    /// `brandedStripBand` infers where the strip is from the same cells being
-    /// judged, so a `covers_strip` verdict taken from it could only confirm the
-    /// inference agrees with itself (L70). Grow a row down over the strip and
-    /// the inferred band moves down with it, which is exactly the layout #965
-    /// reported. Checking it needs the position the layout was BUILT with, and
-    /// nothing records that.
-    func testTheStripBandCannotBeJudgedFromTheCellsAlone() {
+    /// `brandedStripBand` reads the band out of the same cells being judged, so
+    /// a verdict taken from it can only confirm the inference agrees with
+    /// itself (L70). Grow a row down over the strip and the inferred band moves
+    /// down with it, which is exactly the layout #965 reported.
+    ///
+    /// The band now comes from the sidecar Python writes beside the base PNG,
+    /// recording where the strip SAT, so the same cells are refused.
+    func testALayoutGrownOverTheStripIsRefusedAgainstTheBandItWasBuiltWith() {
         let overTheStrip = [
             CollageCell(photoPath: "/a.jpg", x: 0, y: 0, w: 1080, h: 600),
             CollageCell(photoPath: "/b.jpg", x: 0, y: 690, w: 536, h: 100),
             CollageCell(photoPath: "/c.jpg", x: 544, y: 690, w: 536, h: 100),
         ]
-        let band = CollageCell.brandedStripBand(in: overTheStrip)
-        XCTAssertEqual(band?.top, 600, "the inference followed the damage")
-        XCTAssertEqual(CollageCell.layoutProblems(overTheStrip, stripBand: band), [],
-                       "so no cell can be found to cover it")
-        // And the predicate itself is live: given the band the layout was BUILT
-        // with, it says so. That is what #970 needs a record of.
-        XCTAssertEqual(CollageCell.layoutProblems(overTheStrip, stripBand: (top: 400, height: 90)),
+
+        // The inference still follows the damage, which is the whole reason it
+        // cannot be the source.
+        let inferred = CollageCell.brandedStripBand(in: overTheStrip)
+        XCTAssertEqual(inferred?.top, 600)
+        XCTAssertEqual(CollageCell.layoutProblems(overTheStrip, stripBand: inferred), [])
+
+        // Told where the strip actually was, the save is refused.
+        let built = (top: 400, height: 90)
+        XCTAssertEqual(CollageCell.layoutProblems(overTheStrip, stripBand: built),
                        ["covers_strip"])
+        XCTAssertNil(CollageCell.saving(overTheStrip, stripBand: built),
+                     "a layout that covers the branding must not be stored")
+        XCTAssertNil(CollageCell.usable(overTheStrip,
+                                        forPhotos: [URL(fileURLWithPath: "/a.jpg"),
+                                                    URL(fileURLWithPath: "/b.jpg"),
+                                                    URL(fileURLWithPath: "/c.jpg")],
+                                        stripBand: built))
+    }
+
+    /// The positive half. A band is only worth passing if a layout that
+    /// respects it still saves, or this refuses every drag (L159).
+    func testAnHonestLayoutStillSavesAgainstTheSameBand() {
+        let honest = [
+            CollageCell(photoPath: "/a.jpg", x: 0, y: 0, w: 1080, h: 400),
+            CollageCell(photoPath: "/b.jpg", x: 0, y: 490, w: 536, h: 300),
+            CollageCell(photoPath: "/c.jpg", x: 544, y: 490, w: 536, h: 300),
+        ]
+        XCTAssertEqual(CollageCell.saving(honest, stripBand: (top: 400, height: 90)), honest)
+    }
+
+    /// A collage rendered before the sidecar recorded a band passes nil, and
+    /// nil has to mean "do not judge the band" rather than "there is none at
+    /// zero", or every existing layout would be refused on the spot.
+    func testAnUnrecordedBandDoesNotRefuseEverySavedLayout() {
+        let honest = [
+            CollageCell(photoPath: "/a.jpg", x: 0, y: 0, w: 1080, h: 400),
+            CollageCell(photoPath: "/b.jpg", x: 0, y: 490, w: 536, h: 300),
+            CollageCell(photoPath: "/c.jpg", x: 544, y: 490, w: 536, h: 300),
+        ]
+        XCTAssertEqual(CollageCell.saving(honest, stripBand: nil), honest)
+        XCTAssertEqual(CollageCell.layoutProblems(honest, stripBand: nil), [])
     }
 
     func testTheLayoutTheStripDragUsedToProduceIsRefused() {

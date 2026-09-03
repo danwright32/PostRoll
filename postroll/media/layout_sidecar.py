@@ -30,16 +30,50 @@ def layout_sidecar_path(preview: Path | str) -> Path:
 
 
 def write_layout_sidecar(path: Path | str, cells: list[dict[str, Any]],
-                         version: int = COLLAGE_DESIGN_VERSION) -> None:
+                         version: int = COLLAGE_DESIGN_VERSION,
+                         strip: tuple[int, int] | None = None) -> None:
     """Write the cells plus the design version that produced them (#160).
 
     The file used to be a bare array. The envelope is what lets the app tell a
     collage rendered by the current design from one rendered by an older one,
     which it previously could not, so a redesign left every existing collage
     showing the old look until somebody happened to regenerate that day.
+
+    `strip` is where the branded centre strip SAT in this layout, as (y, height)
+    (#970). It is recorded rather than left to be inferred because the editor
+    otherwise reads it back out of the cells it is about to judge, and a row
+    dragged down over the strip carries the inferred band down with it, so the
+    check agrees with itself while the branding is being covered (L70). A layout
+    with no strip, which is the reel's, records none.
     """
-    Path(path).write_text(
-        json.dumps({"version": version, "cells": cells}), encoding="utf-8")
+    document: dict[str, Any] = {"version": version, "cells": cells}
+    if strip is not None:
+        document["strip"] = {"y": strip[0], "h": strip[1]}
+    Path(path).write_text(json.dumps(document), encoding="utf-8")
+
+
+def read_layout_strip(path: Path | str) -> tuple[int, int] | None:
+    """Where the branded strip sat in this layout, or None if it records no strip.
+
+    Separate from `read_layout_sidecar` rather than widening its tuple, because
+    every existing caller wants the cells and none of them wants this: adding a
+    third element would have meant touching four call sites to ignore it.
+
+    Never raises, for the same reason the reader below does not: a sidecar
+    without a strip is every one written before #970, and the answer for those
+    is honestly "not recorded" rather than a guess.
+    """
+    try:
+        doc = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return None
+    strip = doc.get("strip") if isinstance(doc, dict) else None
+    if not isinstance(strip, dict):
+        return None
+    y, height = strip.get("y"), strip.get("h")
+    if not isinstance(y, int) or not isinstance(height, int) or height <= 0:
+        return None
+    return y, height
 
 
 def read_layout_sidecar(path: Path | str) -> tuple[int | None, list[dict[str, Any]]]:

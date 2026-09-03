@@ -97,3 +97,55 @@ def test_a_corrupt_sidecar_is_not_an_error(tmp_path):
     path = tmp_path / "collage_layout.json"
     path.write_text("{not json")
     assert read_layout_sidecar(path) == (None, [])
+
+
+# ── the band the strip was drawn at (#970) ──────────────────────────────────
+
+def test_the_sidecar_records_where_the_strip_sat(tmp_path, sample_photo):
+    """Built is not wired (L3).
+
+    The editor judges a dragged layout against this, and inferring it from the
+    dragged cells is what let a row grow over the branding unchallenged, so the
+    sidecar has to actually carry it.
+    """
+    from postroll.media.generate_collage import (
+        STRIP_H, generate_collage, plan_base_layout)
+    from postroll.media.layout_sidecar import read_layout_strip
+
+    photos = [str(sample_photo)] * 7
+    out = tmp_path / "collage.png"
+    generate_collage(photos, str(out), event_name="E", org="O", venue="V", seed=7)
+
+    band = read_layout_strip(layout_sidecar_path(out))
+    assert band is not None, "the sidecar records no strip, so the editor infers one"
+
+    strip_y, height = band
+    assert height == STRIP_H
+    from PIL import Image
+    ratio = Image.open(sample_photo).width / Image.open(sample_photo).height
+    assert strip_y == plan_base_layout([ratio] * 7, 7)[3], (
+        "the recorded band is not where this layout actually put the strip")
+
+
+def test_a_sidecar_without_a_band_reads_as_not_recorded(tmp_path):
+    """Every collage rendered before #970 has no `strip`, and the honest answer
+    for those is None rather than a band at zero: the checks that read it
+    decline to judge rather than refusing layouts for a position nobody chose
+    (L214)."""
+    import json
+
+    from postroll.media.layout_sidecar import read_layout_strip
+
+    path = tmp_path / "old_layout.json"
+    path.write_text(json.dumps({"version": 1, "cells": []}), encoding="utf-8")
+    assert read_layout_strip(path) is None
+
+    path.write_text(json.dumps([{"photo_path": "/a.jpg", "x": 0, "y": 0, "w": 1, "h": 1}]),
+                    encoding="utf-8")
+    assert read_layout_strip(path) is None, "a bare array predates the envelope"
+
+    path.write_text(json.dumps({"version": 1, "cells": [], "strip": {"y": 400, "h": 0}}),
+                    encoding="utf-8")
+    assert read_layout_strip(path) is None, (
+        "a band with no thickness is a malformed record, and reading it as a "
+        "real band would judge every cell against a line rather than a band")
