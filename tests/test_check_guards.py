@@ -127,6 +127,39 @@ SWIFT_BUILD_BROKE = (
     "** TEST FAILED **\n"
 )
 
+# A mutation that made the code TRAP rather than fail an assertion (#1186).
+#
+# Transcribed from the real run on 2026-09-01, #1164: the mutation crossed the
+# ends of a ClosedRange and `best...worst` trapped. The xctest process dies, so
+# xcodebuild prints a grand total of zero, and the verdict was indistinguishable
+# from a test path naming nothing. The discriminator is in the transcript: a
+# crash prints a `Test Case ... started.` line and then a trap, where a spec
+# matching nothing prints no `Test Case` line at all.
+SWIFT_CODE_TRAPPED = (
+    "Test Suite 'Selected tests' started at 2026-09-01 11:02:03.123.\n"
+    "Test Suite 'ThursdayCoverPickTests' started at 2026-09-01 11:02:03.124.\n"
+    "Test Case '-[PostRollTests.ThursdayCoverPickTests testTheBandIsClamped]'"
+    " started.\n"
+    "PostRollApp/Sources/Services/CoverPick.swift:88: Fatal error: Range "
+    "requires lowerBound <= upperBound\n"
+    "Restarting after unexpected exit, crash, or test timeout in "
+    "ThursdayCoverPickTests.testTheBandIsClamped(); summary will include totals "
+    "from previous launches.\n"
+    "\t Executed 0 tests, with 0 failures (0 unexpected) in 0.001 (0.002) seconds\n"
+    "** TEST FAILED **\n"
+)
+
+# The same crash, arriving before xcodebuild printed any total at all. That
+# lands in the OTHER branch, the one that blames the build or the test path.
+SWIFT_CODE_TRAPPED_NO_TOTAL = (
+    "Test Suite 'Selected tests' started at 2026-09-01 11:02:03.123.\n"
+    "Test Case '-[PostRollTests.ThursdayCoverPickTests testTheBandIsClamped]'"
+    " started.\n"
+    "PostRollApp/Sources/Services/CoverPick.swift:88: Fatal error: Range "
+    "requires lowerBound <= upperBound\n"
+    "** TEST FAILED **\n"
+)
+
 
 def a_runner(returncode: int, output: str):
     """A runner that records what it was asked to do."""
@@ -417,6 +450,76 @@ def test_a_broken_build_is_an_error_not_a_kill():
     verdict = classify_swift(65, SWIFT_BUILD_BROKE)
     assert verdict.outcome is Outcome.ERROR
     assert "never ran" in verdict.detail
+
+
+def test_a_mutation_that_crashed_the_runner_is_not_reported_as_a_bad_test_path():
+    """#1186: two causes had one message, and it named the wrong one.
+
+    Measured 2026-09-01 on #1164. A mutation crossed the ends of a ClosedRange,
+    `best...worst` trapped, the xctest process died, and xcodebuild printed
+    `Executed 0 tests`. The verdict said the spec matched nothing, so the reader
+    went to check a test path that was correct all along. Distinct causes get
+    distinct messages (L11).
+    """
+    verdict = classify_swift(65, SWIFT_CODE_TRAPPED)
+
+    assert verdict.outcome is Outcome.ERROR
+    assert "crash" in verdict.detail.lower(), verdict.detail
+    # The trap itself, quoted: it is the finding. A crash means the code under
+    # test is not total, which is a defect in it rather than noise in the sweep.
+    assert "Range requires lowerBound <= upperBound" in verdict.detail
+    # And it must stop sending the reader to the test path.
+    assert "matched nothing" not in verdict.detail, verdict.detail
+
+
+def test_the_crash_verdict_names_the_test_that_was_running():
+    """A sweep entry runs one test, but the transcript is the only place that
+    says WHICH one died, and a reader reproducing this needs it."""
+    detail = classify_swift(65, SWIFT_CODE_TRAPPED).detail
+    assert "testTheBandIsClamped" in detail, detail
+
+
+def test_a_crash_before_any_total_is_printed_is_still_reported_as_a_crash():
+    """The other branch blames the build or a missing test, and a trap that
+    arrives before xcodebuild prints a total lands there (L173: a remedy scoped
+    to the flavour of failure that was observed is absent in the neighbour)."""
+    verdict = classify_swift(65, SWIFT_CODE_TRAPPED_NO_TOTAL)
+
+    assert verdict.outcome is Outcome.ERROR
+    assert "crash" in verdict.detail.lower(), verdict.detail
+    assert "Range requires lowerBound <= upperBound" in verdict.detail
+
+
+def test_a_spec_that_really_matched_nothing_still_says_so():
+    """The positive control for the pair. A transcript with no test case and no
+    trap has to keep the message it had, or the new branch has simply moved the
+    ambiguity rather than removing it (L159)."""
+    verdict = classify_swift(0, SWIFT_NOTHING_RAN)
+
+    assert verdict.outcome is Outcome.ERROR
+    assert "matched nothing" in verdict.detail
+    assert "crash" not in verdict.detail.lower(), verdict.detail
+
+
+def test_a_red_run_whose_own_output_says_fatal_error_is_still_a_kill():
+    """The words are ordinary content, not only a trap.
+
+    A guard's test can assert ABOUT a fatal error, print one in a message, or
+    carry it in its name, and a run that really executed and really failed is a
+    KILL whatever its text says (L104: check the filter against what it has to
+    preserve, not only what it has to catch).
+    """
+    output = (
+        "Test Case '-[PostRollTests.CrashReportTests testFatalErrorIsQuoted]'"
+        " started.\n"
+        "CrashReportTests.swift:31: error: -[PostRollTests.CrashReportTests "
+        "testFatalErrorIsQuoted] : XCTAssertTrue failed - the report drops "
+        "\"Fatal error: Range requires lowerBound <= upperBound\"\n"
+        "\t Executed 1 test, with 1 failure (0 unexpected) in 0.1 (0.1) seconds\n"
+        "** TEST FAILED **\n"
+    )
+
+    assert classify_swift(65, output).outcome is Outcome.KILLED
 
 
 def test_the_grand_total_line_is_the_one_that_counts():

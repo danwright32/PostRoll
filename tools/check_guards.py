@@ -578,18 +578,56 @@ def python_for(repo_root: Path) -> str:
     return str(venv) if venv.exists() else sys.executable
 
 
+#: A Swift runtime trap in an xcodebuild transcript (#1186).
+#:
+#: Keyed on the trap itself rather than on the word "crash", and read only in
+#: the two branches below where nothing executed: a run that produced a real
+#: total is judged by that total, so a guard whose test legitimately talks about
+#: a fatal error is unaffected.
+TRAP = re.compile(
+    r"((?:Fatal error|Precondition failed|Assertion failed|"
+    r"Swift runtime failure)[^\n]*)")
+
+#: The test xcodebuild had started when the process died. A crash prints this
+#: line and then the trap; a spec that matched nothing prints no such line at
+#: all, which is the discriminator measured on 2026-09-01.
+STARTED = re.compile(r"Test Case '-\[\S+ (\w+)\]' started\.")
+
+
+def crash_verdict(output: str) -> Verdict | None:
+    """The verdict for a transcript whose process TRAPPED, or None.
+
+    Returns a verdict rather than a boolean so the trap is quoted once, where it
+    is read, instead of at both call sites.
+    """
+    trap = TRAP.search(output)
+    if trap is None:
+        return None
+    started = STARTED.findall(output)
+    where = f" while running {started[-1]}" if started else ""
+    return Verdict(Outcome.ERROR,
+                   f"the mutated code CRASHED the test runner{where}: "
+                   f"{trap.group(1).strip()}. xcodebuild reports no executed "
+                   "tests after a trap, so this is not a verdict on the guard. "
+                   "The trap is itself a finding: the code under test is not "
+                   "total on the mutated input, and fixing that is what lets "
+                   "the mutation land as a failing assertion (#1186)")
+
+
 def classify_swift(returncode: int, output: str) -> Verdict:
     totals = EXECUTED.findall(output)
     if not totals:
-        return Verdict(Outcome.ERROR,
-                       "the test never ran: no executed-tests total in the "
-                       "transcript, so the build broke or the test does not "
-                       "exist, and neither is a verdict on the guard")
+        return crash_verdict(output) or Verdict(
+            Outcome.ERROR,
+            "the test never ran: no executed-tests total in the "
+            "transcript, so the build broke or the test does not "
+            "exist, and neither is a verdict on the guard")
     executed, failures = (int(n) for n in totals[-1])
     if executed == 0:
-        return Verdict(Outcome.ERROR,
-                       "0 tests executed: the spec matched nothing, which is "
-                       "not a green run (L98)")
+        return crash_verdict(output) or Verdict(
+            Outcome.ERROR,
+            "0 tests executed: the spec matched nothing, which is "
+            "not a green run (L98)")
     if failures > 0:
         # xcodebuild counts assertion failures, so this can exceed the number
         # of tests when one test records several.
