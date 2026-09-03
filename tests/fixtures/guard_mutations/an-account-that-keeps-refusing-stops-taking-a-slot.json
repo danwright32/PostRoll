@@ -1,0 +1,8 @@
+{
+  "name": "an-account-that-keeps-refusing-stops-taking-a-slot",
+  "file": "PostRollApp/Sources/Services/CollaboratorPick.swift",
+  "find": "        if a.refuses != b.refuses { return !a.refuses }",
+  "replace": "        if a.refuses != b.refuses, false { return !a.refuses }",
+  "test": "PostRollTests/CollaboratorPickTests/testAnAccountThatDeclinesMoreThanItAcceptsRanksBelowOneThatDoesNot",
+  "breaks": "an account that has declined more invites than it has accepted goes on taking one of the five collaborator slots on its figures alone, so the ranking keeps predicting reach and never learns what came of it, which is the whole of #986"
+}

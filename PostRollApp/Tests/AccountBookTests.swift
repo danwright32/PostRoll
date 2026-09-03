@@ -82,6 +82,30 @@ final class AccountBookTests: XCTestCase {
                        "a refreshed follower count started offering the account again")
     }
 
+    func testTheFormRecordsWhatCameOfTheInvites() {
+        // Entered by hand because Instagram tells Dan days after the post and
+        // no API reports it (#986).
+        book.record(handle: "dciny", followers: 12_000, likes: 600, comments: 60,
+                    acceptedInvites: 2, declinedInvites: 1, on: stamp)
+
+        XCTAssertEqual(book.stats(for: "dciny")?.acceptedInvites, 2)
+        XCTAssertEqual(book.stats(for: "dciny")?.declinedInvites, 1)
+    }
+
+    func testRefreshingFiguresLeavesTheInviteHistoryAlone() {
+        // A fetch says nothing about invites, and a history silently reset to
+        // zero would put an account that always refuses back at the top of the
+        // ranking (L168).
+        book.record(handle: "dciny", followers: 12_000, likes: 600, comments: 60,
+                    acceptedInvites: 0, declinedInvites: 3, on: stamp)
+        book.record(handle: "dciny", followers: 13_000, likes: 700, comments: 70,
+                    on: stamp)
+
+        XCTAssertEqual(book.stats(for: "dciny")?.followers, 13_000)
+        XCTAssertEqual(book.stats(for: "dciny")?.declinedInvites, 3,
+                       "a refreshed follower count erased what came of the invites")
+    }
+
     func testARecordWrittenBeforeTheMarkExistedReadsAsNotPrivate() {
         // Every record in the live book predates the field. A decoder that
         // refused one of them would turn a downgrade into an app that cannot
@@ -94,6 +118,8 @@ final class AccountBookTests: XCTestCase {
         XCTAssertEqual(decoded?.followers, 2_000)
         XCTAssertEqual(decoded?.isPrivate, false)
         XCTAssertEqual(decoded?.neverInvite, false)
+        XCTAssertEqual(decoded?.acceptedInvites, 0)
+        XCTAssertEqual(decoded?.declinedInvites, 0)
     }
 
     // MARK: - One record per account, however it was spelled
