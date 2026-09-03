@@ -78,6 +78,11 @@ enum CollaboratorPick {
         let handle: String
         let stats: AccountStats?
         let inFirstPhoto: Bool
+        /// The event's own organisation or venue account, rather than somebody
+        /// tagged in the day's photos (#985). Ranked below the people: an
+        /// invite puts the post on their grid, so somebody actually in the
+        /// pictures is the better ask, and this fills a slot they did not.
+        var isEventAccount: Bool = false
         /// Interactions per follower, comments weighted. Nil when the account
         /// has no numbers: an unmeasured account must never be scored as zero,
         /// which would sort it to the bottom as though it had been measured and
@@ -182,6 +187,7 @@ enum CollaboratorPick {
     ///   - stats: what is known about one account. Passed as a lookup rather
     ///     than the book itself, so this stays a pure function.
     static func suggest(handles: [String], firstPhoto: Set<String>?,
+                        eventAccounts: Set<String> = [],
                         stats: (String) -> AccountStats?, asOf now: Date,
                         notes: [String] = []) -> Result {
         // Deduplicated on the account book's key, so three spellings of one
@@ -207,11 +213,13 @@ enum CollaboratorPick {
         }
 
         let firstPhotoKeys = firstPhoto.map { Set($0.map(AccountBook.key)) }
+        let eventKeys = Set(eventAccounts.map(AccountBook.key))
         let everyone = keys.map { key -> Candidate in
             let stats = stats(key)
             let inFirstPhoto = firstPhotoKeys?.contains(key) ?? false
             let scored = score(stats)
             return Candidate(handle: key, stats: stats, inFirstPhoto: inFirstPhoto,
+                             isEventAccount: eventKeys.contains(key),
                              rate: scored?.rate,
                              rateIsAssumed: scored?.assumed ?? false,
                              reason: reasonText(stats: stats, scored: scored,
@@ -562,6 +570,9 @@ enum CollaboratorPick {
         return suggest(handles: CaptionBlocks.dayTagCandidates(event: event, day: day,
                                                                preset: preset),
                        firstPhoto: membership.handles.map(Set.init),
+                       eventAccounts: Set(EventHandleSuggestions
+                                            .accounts(in: event.eventHandles)
+                                            .map(CaptionBlocks.bareUsername)),
                        stats: stats, asOf: now, notes: notes + membership.notes)
     }
 
@@ -867,6 +878,14 @@ enum CollaboratorPick {
         // cannot put the post on a grid anybody can see, so the slot is wasted
         // however good the figures are.
         if a.isPrivate != b.isPrivate { return !a.isPrivate }
+        // The event's own account under the people, and over a private one
+        // (#985). The order of these two keys is the whole decision: a private
+        // account cannot put the post in front of anybody new at all, while an
+        // org can, so private stays outermost and this sits between it and the
+        // people who are actually in the pictures.
+        if a.candidate.isEventAccount != b.candidate.isEventAccount {
+            return !a.candidate.isEventAccount
+        }
         if respectingFirstPhoto, a.candidate.inFirstPhoto != b.candidate.inFirstPhoto {
             return a.candidate.inFirstPhoto
         }

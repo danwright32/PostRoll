@@ -51,6 +51,111 @@ final class CollaboratorPickForDayTests: XCTestCase {
 
     private let everyone = ["first1", "first2", "other1", "other2", "other3", "other4"]
 
+    // MARK: - The event's own accounts (#985)
+    //
+    // On a collage carousel the pool was only the people tagged in that day's
+    // own photos, so the organisation and the venue could never be suggested
+    // anywhere in the app, even though the posts tag them. They are the
+    // accounts that come back: of the 38 tagged across one measured archive the
+    // 6 that recur are all org or venue handles, and a recurring account is the
+    // likeliest to accept.
+    //
+    // Below the people, though, decided with Dan on 2026-09-03. A collaborator
+    // invite puts the post on their grid, so somebody actually in the pictures
+    // is the better ask, and the org fills a slot the people did not.
+
+    private func eventAccountEvent() -> Event {
+        var event = carouselEvent()
+        event.eventHandles = "@dciny, @carnegiehall"
+        return event
+    }
+
+    func testTheOrganisationAndVenueAreCandidatesOnACarouselDay() {
+        let candidates = CaptionBlocks.dayTagCandidates(
+            event: eventAccountEvent(), day: .wednesday, preset: .balanced)
+
+        XCTAssertTrue(candidates.contains("dciny"),
+                      "the organisation cannot be suggested anywhere: \(candidates)")
+        XCTAssertTrue(candidates.contains("carnegiehall"),
+                      "the venue cannot be suggested anywhere: \(candidates)")
+    }
+
+    func testThePeopleInThePhotosStillComeFirst() {
+        // The org outscores every person here, and still ranks under them. An
+        // invite puts the post on their grid, so somebody actually in the
+        // pictures is the better ask whatever the figures say.
+        let table = ["first1": stats(1_000, 50, 5), "first2": stats(1_000, 40, 4),
+                     "other1": stats(1_000, 30, 3), "other2": stats(1_000, 20, 2),
+                     "other3": stats(1_000, 10, 1), "other4": stats(900, 5, 1),
+                     "dciny": stats(50_000, 5_000, 900)]
+        let result = CollaboratorPick.suggest(
+            event: eventAccountEvent(), day: .wednesday, preset: .balanced,
+            stats: { table[AccountBook.key($0)] }, asOf: now)
+
+        XCTAssertEqual(result.coverage, .ranked)
+        // Six people for five slots, so the org takes none of them. The first
+        // version of this asserted it filled the LAST slot, which described a
+        // day with a spare one; that day is the test below.
+        XCTAssertFalse(result.suggested.map(\.handle).contains("dciny"),
+                       "the event's own account took a slot off somebody in the "
+                       + "photos: \(result.suggested.map(\.handle))")
+        XCTAssertEqual(result.suggested.count, CollaboratorPick.maxPerPost,
+                       "with fewer than five people this fixture cannot show "
+                       + "that the org was held under them")
+    }
+
+    func testTheEventAccountStillFillsASlotThePeopleCannot() {
+        // Below is not excluded. With four people tagged there is a fifth slot
+        // no one in the photos can fill, and an empty slot reaches nobody.
+        var event = carouselEvent()
+        event.eventHandles = "@dciny"
+        var wed = event.days[DayName.wednesday.rawValue]!
+        let photos = wed.photoPaths
+        wed.photoTags = [photos[0].absoluteString: ["first1", "first2"],
+                         photos[1].absoluteString: ["other1", "other2"]]
+        event.days[DayName.wednesday.rawValue] = wed
+        let table = ["first1": stats(1_000, 50, 5), "first2": stats(1_000, 40, 4),
+                     "other1": stats(1_000, 30, 3), "other2": stats(1_000, 20, 2),
+                     "dciny": stats(50_000, 5_000, 900)]
+
+        let result = CollaboratorPick.suggest(
+            event: event, day: .wednesday, preset: .balanced,
+            stats: { table[AccountBook.key($0)] }, asOf: now)
+
+        XCTAssertTrue(result.suggested.map(\.handle).contains("dciny"),
+                      "a slot was left empty rather than filled by the only "
+                      + "account that could fill it")
+    }
+
+    func testAPrivatePersonStillRanksBelowTheEventAccount() {
+        // The two keys have to compose in the right order. A private account
+        // cannot put the post in front of anybody new at all, while the org
+        // can, so private stays the outermost key and the event account sits
+        // between it and the people.
+        var closed = stats(50_000, 5_000, 900)
+        closed.isPrivate = true
+        var event = carouselEvent()
+        event.eventHandles = "@dciny"
+        var wed = event.days[DayName.wednesday.rawValue]!
+        let photos = wed.photoPaths
+        wed.photoTags = [photos[0].absoluteString: ["first1"],
+                         photos[1].absoluteString: ["other1", "other2", "other3", "other4"]]
+        event.days[DayName.wednesday.rawValue] = wed
+        let table = ["first1": closed,
+                     "other1": stats(1_000, 30, 3), "other2": stats(1_000, 20, 2),
+                     "other3": stats(1_000, 10, 1), "other4": stats(900, 5, 1),
+                     "dciny": stats(4_000, 200, 30)]
+
+        let result = CollaboratorPick.suggest(
+            event: event, day: .wednesday, preset: .balanced,
+            stats: { table[AccountBook.key($0)] }, asOf: now)
+        let order = result.suggested.map(\.handle)
+
+        XCTAssertTrue(order.contains("dciny"))
+        XCTAssertFalse(order.contains("first1"),
+                       "a private account outranked the event's own: \(order)")
+    }
+
     // MARK: - Promoting a stronger photo to the front (#983)
     //
     // On a collage carousel only the FIRST photo appears in the feed, and the
