@@ -120,6 +120,64 @@ def readings_of(paths: list[Path]) -> tuple[dict[str, float], dict[str, bool],
     return seconds, kinds, sorted(cold, key=lambda c: c["entry"]), runs.pop()
 
 
+class NoSweepFound(Exception):
+    """No sweep could be named to record from. Distinct from a sweep that found
+    nothing, which would read as a healthy record (L98)."""
+
+
+#: Which workflow, and which of its triggers, the readings come from.
+#:
+#: Scheduled runs only. The per-pull-request `changed` job proves the entries
+#: one diff touched, and `--from` REPLACES the record, so folding a `changed`
+#: run in would price the whole registry from a handful of entries.
+SWEEP_WORKFLOW = "guards.yml"
+SWEEP_EVENT = "schedule"
+
+
+def _gh(args: list[str]) -> tuple[int, str]:
+    try:
+        done = subprocess.run(args, capture_output=True, text=True)
+    except FileNotFoundError as missing:
+        raise NoSweepFound(
+            "the gh CLI is not on PATH, so no run could be looked up"
+        ) from missing
+    return done.returncode, done.stdout + done.stderr
+
+
+def newest_sweep_run(run=_gh) -> str:
+    """The newest successful scheduled sweep, as a run id.
+
+    Every way of not finding one is its own refusal rather than an empty
+    answer, because the caller acts on the answer: a job that reported "nothing
+    to record" on a broken token would say it every day and read as a record
+    that is up to date (L11, L98).
+    """
+    code, output = run([
+        "gh", "run", "list",
+        "--workflow", SWEEP_WORKFLOW,
+        "--event", SWEEP_EVENT,
+        "--status", "success",
+        "--limit", "1",
+        "--json", "databaseId,conclusion,createdAt",
+    ])
+    if code != 0:
+        raise NoSweepFound(
+            f"gh could not list the sweep's runs (exit {code}): "
+            f"{output.strip()[:200]}. That is not the same as there being none")
+    try:
+        runs = json.loads(output)
+    except ValueError as error:
+        raise NoSweepFound(
+            f"gh printed something that is not JSON: {output.strip()[:200]}"
+        ) from error
+    if not runs:
+        raise NoSweepFound(
+            f"no successful scheduled run of {SWEEP_WORKFLOW} was found, so "
+            "there is nothing to record from. The sweep may have been failing, "
+            "or skipping because the tree was already proved")
+    return str(runs[0]["databaseId"])
+
+
 def fetch_run(run_id: str, into: Path) -> list[Path]:
     """Every `guard-timings-*` artifact of one guards.yml run, downloaded.
 
@@ -206,12 +264,26 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--from-run", dest="run_id", default=None,
                         help="a guards.yml run id, whose shard artifacts are "
                              "downloaded and then treated as --from")
+    parser.add_argument("--from-newest-run", dest="newest", action="store_true",
+                        help="find the newest successful scheduled guards.yml "
+                             "run and treat it as --from-run")
     parser.add_argument("--record", type=Path, default=RECORD)
     args = parser.parse_args(argv)
 
-    asked = [bool(args.whole), bool(args.add), bool(args.run_id)]
+    asked = [bool(args.whole), bool(args.add), bool(args.run_id),
+             bool(args.newest)]
     if sum(asked) != 1:
-        parser.error("say exactly one of --from, --add or --from-run")
+        parser.error(
+            "say exactly one of --from, --add, --from-run or --from-newest-run")
+
+    if args.newest:
+        try:
+            args.run_id = newest_sweep_run()
+        except NoSweepFound as refusal:
+            print(refusal)
+            return 1
+        print(f"recording from run {args.run_id}, the newest successful "
+              f"scheduled {SWEEP_WORKFLOW} run")
 
     if args.run_id:
         with tempfile.TemporaryDirectory() as scratch:

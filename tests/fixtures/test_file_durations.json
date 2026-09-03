@@ -127,6 +127,7 @@
     "test_golden_drift_is_reported.py": 1.01,
     "test_golden_frames.py": 220.21,
     "test_golden_recording_door.py": 0.04,
+    "test_guard_costs_are_recorded_automatically.py": 0.0,
     "test_guard_entry_costs.py": 0.0,
     "test_guard_mutation_registry.py": 5.049999999999993,
     "test_guard_sweep_due.py": 0.0,
@@ -761,6 +762,10 @@
     "test_golden_recording_door.py": {
       "run": "full-2026-09-02T04:01Z",
       "scale": 1.0
+    },
+    "test_guard_costs_are_recorded_automatically.py": {
+      "run": "partial-2026-09-03T17:14Z",
+      "scale": 1.045
     },
     "test_guard_entry_costs.py": {
       "run": "full-2026-09-02T04:01Z",

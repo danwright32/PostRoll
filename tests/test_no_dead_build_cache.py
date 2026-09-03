@@ -52,6 +52,8 @@ a run showing an exact-key hit compiling near zero units.
 from __future__ import annotations
 
 import re
+
+from tests.mac_build_setup import jobs
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -109,7 +111,14 @@ def test_nothing_caches_the_swift_build_products():
           "for why the mtime of a fresh checkout makes that hard.")
 
 
-def test_every_python_setup_still_caches_pip():
+#: One `setup-python` step, with the `with:` block under it. Spelled once, so
+#: the check and its control below cannot drift into testing different patterns.
+SETUP_PYTHON = re.compile(
+    r"^      - (?:name:.*\n        )?uses: actions/setup-python@[^\n]*"
+    r"(?:\n(?:        |\n)[^\n]*)*", re.M)
+
+
+def test_every_python_setup_that_installs_anything_still_caches_pip():
     """The other half. Removing the dead cache must not take the live ones with
     it, and "no caches at all" satisfies the check above perfectly (L283: a
     guard asserting something is absent is satisfied by a deletion).
@@ -120,16 +129,23 @@ def test_every_python_setup_still_caches_pip():
     for the other (L135). The pip cache is one of the things the DerivedData
     cache was evicting from the 10 GB budget, so it is the thing most likely to
     be lost by accident here.
+
+    Scoped to jobs that INSTALL something, since #1099. The rule is about not
+    losing a cache that hits, and a job running no `pip install` at all has
+    nothing to cache: demanding one there would add a restore that saves
+    nothing and reads as an optimisation to everybody after (L303, L346). Every
+    job that does install is still covered, which today is every other one.
     """
     uncached = []
     for path in sorted(WORKFLOWS.glob("*.yml")):
-        settings = "\n".join(line for line in path.read_text(encoding="utf-8").splitlines()
-                              if not line.strip().startswith("#"))
-        for match in re.finditer(
-                r"^      - (?:name:.*\n        )?uses: actions/setup-python@[^\n]*"
-                r"(?:\n(?:        |\n)[^\n]*)*", settings, re.M):
-            if "cache: pip" not in match.group(0):
-                uncached.append(f"{path.name}: {match.group(0).splitlines()[0].strip()}")
+        for name, body in jobs(path.read_text(encoding="utf-8")).items():
+            if "pip install" not in body:
+                continue
+            for match in SETUP_PYTHON.finditer(body):
+                if "cache: pip" not in match.group(0):
+                    uncached.append(
+                        f"{path.name}:{name}: "
+                        f"{match.group(0).splitlines()[0].strip()}")
     assert not uncached, (
         f"these setup-python steps no longer cache pip: {uncached}. #991 removed "
         "the DerivedData cache because it never hit; the pip cache does hit, and "
@@ -139,11 +155,22 @@ def test_every_python_setup_still_caches_pip():
 def test_the_pip_check_can_see_an_uncached_setup():
     """The control for the check above, on a fixture rather than on the tree, so
     it cannot pass by the scan having stopped matching (L1)."""
-    settings = ("jobs:\n  a:\n    steps:\n"
-                "      - uses: actions/setup-python@v6\n        with:\n"
+    settings = ("      - uses: actions/setup-python@v6\n        with:\n"
                 "          python-version: \"3.11\"\n")
-    found = re.search(
-        r"^      - (?:name:.*\n        )?uses: actions/setup-python@[^\n]*"
-        r"(?:\n(?:        |\n)[^\n]*)*", settings, re.M)
+    found = SETUP_PYTHON.search(settings)
     assert found, "the setup-python pattern matches nothing, so the check is vacuous"
     assert "cache: pip" not in found.group(0)
+
+
+def test_a_job_that_installs_nothing_is_the_only_thing_the_scoping_exempts():
+    """The scoping must not become an escape hatch. A job holding a `pip
+    install` is covered whatever else it does, which is what keeps every job
+    that has a cache worth losing inside the rule."""
+    installing = ("      - uses: actions/setup-python@v6\n"
+                  "        with:\n          python-version: \"3.11\"\n"
+                  "      - name: Install dependencies\n"
+                  "        run: pip install -r requirements.txt\n")
+    assert "pip install" in installing
+    found = SETUP_PYTHON.search(installing)
+    assert found and "cache: pip" not in found.group(0), (
+        "this fixture is meant to be an uncached setup in an installing job")

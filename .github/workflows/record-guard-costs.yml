@@ -1,0 +1,142 @@
+name: Record guard costs
+
+# The daily sweep uploads each shard's per-entry readings, and until this file
+# nothing folded them into tests/fixtures/guard_entry_costs.json (#1099). That
+# was `tools/record_guard_costs.py --from-run <id>`, a command somebody had to
+# remember to type, which is a rule living in a comment (L27). The safety net
+# was tests/test_guard_sweep_fits_its_deadline.py going red once the record
+# covered less than 85% of the registry, which catches the drift late and fails
+# a suite for a reason unrelated to whatever change is being made.
+#
+# No pull_request trigger, deliberately. wait_for_checks.py derives the bar
+# from the workflow files, and a new check name can only go green once its
+# recorded reply already holds it, so adding one costs a knowingly red merge
+# (#1074, L48).
+on:
+  schedule:
+    # Two hours after the sweep's own 07:00, which carries a 30 minute deadline
+    # and a 30 minute job cap. A run starting before the sweep has finished
+    # would find yesterday's readings, record them again, and propose a change
+    # that changes nothing.
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    # A job without a deadline cannot fail, it can only hang (L110, L313). This
+    # downloads a handful of small artifacts and writes one file.
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+    # At JOB level rather than on the step that uses it, because a step's own
+    # `env:` is not in scope in that step's own `if:`, and the whole point of
+    # the condition below is to skip cleanly when the secret is absent.
+    env:
+      RECORD_UPDATE_TOKEN: ${{ secrets.RECORD_UPDATE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      # Through the recorder, never by writing the record here. Every refusal
+      # lives in that tool: readings from two different runs, a duplicate
+      # entry, a zero, an empty file, and a shard that ran out of time. A step
+      # that wrote the record itself would carry none of them.
+      #
+      # `continue-on-error` is deliberate, and it is not silence: the tool
+      # prints its own refusal, and the last step reports what happened either
+      # way. A day with no successful sweep to record from must not read as a
+      # failing workflow, which is what teaches somebody to ignore it (L36).
+      - name: Fold the newest sweep's readings into the record
+        id: record
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python tools/record_guard_costs.py --from-newest-run
+
+      - name: Say whether the record moved
+        id: moved
+        run: |
+          if git diff --quiet -- tests/fixtures/guard_entry_costs.json; then
+            echo "moved=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "moved=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      # The measurement, kept whatever happens next. A run that computed a new
+      # record and could not propose it must not throw the reading away: this
+      # artifact is what makes the manual path one download rather than a
+      # re-run of the whole sweep (L277).
+      - name: Keep the record this run computed
+        if: always() && steps.moved.outputs.moved == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: guard-entry-costs
+          path: tests/fixtures/guard_entry_costs.json
+          if-no-files-found: error
+
+      # A pull request, not a commit to main, so the readings arrive as a
+      # reviewed change.
+      #
+      # RECORD_UPDATE_TOKEN rather than the default token, and this is the one
+      # thing about this job worth knowing. A pull request opened with
+      # GITHUB_TOKEN starts NO workflow runs, so it would carry no checks at
+      # all; wait_for_checks.py refuses an empty answer, correctly, so such a
+      # pull request could never be merged and this job would produce something
+      # nobody can act on.
+      #
+      # Until that secret exists the job still records, still keeps the
+      # artifact, and says so below. Inert is fine; inert and quiet is not
+      # (L543).
+      - name: Propose the new record
+        id: propose
+        if: steps.moved.outputs.moved == 'true' && env.RECORD_UPDATE_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ secrets.RECORD_UPDATE_TOKEN }}
+        run: |
+          set -euo pipefail
+          branch="guard-costs/$(date -u +%Y-%m-%d)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${branch}"
+          git add tests/fixtures/guard_entry_costs.json
+          git commit -m "Record what each guard entry costs (#1099)"
+          git push --force-with-lease origin "${branch}"
+          gh pr create \
+            --base main \
+            --head "${branch}" \
+            --title "Record what each guard entry costs (#1099)" \
+            --body "Folded in from the newest scheduled guard sweep by tools/record_guard_costs.py --from-newest-run. Every refusal that tool carries applied: the readings all came from one run, none is zero, no entry is duplicated, and no shard ran out of time."
+
+      # Three outcomes, said apart. A day with nothing to record, a record that
+      # moved and was proposed, and a record that moved with no way to propose
+      # it are different events, and only the third needs anybody to do
+      # anything (L11, L98).
+      - name: Say what happened
+        if: always()
+        run: |
+          {
+            echo "### Guard cost record"
+            if [ "${{ steps.record.outcome }}" != "success" ]; then
+              echo "The recorder refused. Its reason is in the step above:"
+              echo "nothing was written and nothing was proposed."
+            elif [ "${{ steps.moved.outputs.moved }}" != "true" ]; then
+              echo "The record already matches the newest sweep, so there is"
+              echo "nothing to propose."
+            elif [ -n "${RECORD_UPDATE_TOKEN}" ]; then
+              echo "The record moved and a pull request was opened."
+            else
+              echo "The record moved, and no RECORD_UPDATE_TOKEN is set, so no"
+              echo "pull request could be opened. A pull request opened with the"
+              echo "default token starts no workflow runs, so it would carry no"
+              echo "checks and could never be merged. The new record is attached"
+              echo "to this run as the guard-entry-costs artifact: download it,"
+              echo "commit it and open the pull request by hand, or add the"
+              echo "secret and this job will do it tomorrow."
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"
