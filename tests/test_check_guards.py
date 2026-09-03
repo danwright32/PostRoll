@@ -31,6 +31,9 @@ from tools.check_guards import (
     Entry,
     Outcome,
     RegistryError,
+    Result,
+    WarmBuild,
+    write_timings,
     build_lock,
     build_lock_path,
     check_guards,
@@ -1742,3 +1745,191 @@ def test_a_module_that_could_not_be_read_is_not_remembered_as_silencing_nobody(t
     assert "test_every_anchor_still_matches" in silenced_functions(module, repo), (
         "the unreadable answer was cached, so a module that can now be read is "
         "still remembered as silencing nobody")
+
+
+# ── The app is built ONCE, before the loop (#1096) ────────────────────────────
+#
+# The first Swift entry of each shard paid for the cold app build that every
+# entry after it reused. Measured on run 33409212726, one reading per shard and
+# always that one: 85.0, 90.4, 120.2, 126.6, 127.9 and 137.8 seconds against a
+# Swift median of 24.0. #1090 set those readings aside rather than record them
+# as the entries' cost, which is right and leaves a permanent gap: a shard runs
+# its entries in registry order, so the same entries are first every time and
+# are estimated from their kind's median indefinitely.
+#
+# Building once before the loop closes it. No entry carries the build, so every
+# reading is the steady-state cost.
+
+
+def swift_registry(tmp_path: Path, *names: str) -> Path:
+    return write_registry(
+        tmp_path / "registry",
+        [registry_dict(name=name, test=f"PostRollTests/NoteTests/{name}")
+         for name in names])
+
+
+def test_the_app_is_built_once_before_any_entry_runs(repo: Path, tmp_path: Path):
+    with_shared_cache(repo)
+    runner = a_runner(65, SWIFT_RED)
+
+    check_guards(repo, swift_registry(tmp_path, "one", "two"), runner,
+                 log=lambda _: None)
+
+    assert runner.calls, "nothing ran at all"
+    first = runner.calls[0]
+    assert "build-for-testing" in first, (
+        "the first thing the sweep ran was an entry, so that entry paid for "
+        f"the cold build every entry after it reuses. It ran: {first}")
+    assert "-only-testing" not in " ".join(first), (
+        "the warm build is scoped to one test, so it builds no more than the "
+        "first entry would have")
+    assert first[first.index("-derivedDataPath") + 1] == "/tmp/some-cache", (
+        "the warm build does not fill the cache the entries read, so it warms "
+        "nothing and every entry still pays")
+
+
+def test_a_run_with_no_swift_entry_does_not_build_the_app(repo: Path,
+                                                          tmp_path: Path):
+    """The `changed` job on a Python-only diff. Building there would add a
+    couple of minutes to the job every pull request waits on, to warm a cache
+    nothing in the run reads."""
+    with_shared_cache(repo)
+    (repo / "tests").mkdir(exist_ok=True)
+    (repo / "tests" / "test_note.py").write_text("def test_ink():\n    pass\n")
+    registry = write_registry(tmp_path / "registry", [registry_dict(
+        file="tests/test_note.py", find="pass", replace="return",
+        test="tests/test_note.py::test_ink")])
+    runner = a_runner(1, "1 failed in 0.4s")
+
+    check_guards(repo, registry, runner, log=lambda _: None)
+
+    assert not any("build-for-testing" in " ".join(call)
+                   for call in runner.calls), (
+        "a run with no Swift entry built the app anyway")
+
+
+def test_a_failed_warm_build_is_loud_and_does_not_stop_the_run(repo: Path,
+                                                               tmp_path: Path):
+    """Loud, because every Swift entry after it will report ERROR for a reason
+    that has nothing to do with the guard, and the one line that explains all of
+    them is this one (L11). Not fatal, because the run still has verdicts to
+    reach and a tool that dies preparing has proven nothing."""
+    with_shared_cache(repo)
+    calls: list[list[str]] = []
+
+    def runner(cmd: list[str], cwd: Path) -> tuple[int, str]:
+        calls.append(cmd)
+        if "build-for-testing" in cmd:
+            return 65, "Note.swift:2:17: error: cannot find 'Color' in scope\n"
+        return 65, SWIFT_RED
+
+    lines: list[str] = []
+    check_guards(repo, swift_registry(tmp_path, "one"), runner,
+                 log=lines.append)
+
+    said = "\n".join(lines)
+    assert "build" in said.lower() and "failed" in said.lower(), (
+        f"nothing said the shared build failed. Log was:\n{said}")
+    assert "cannot find 'Color' in scope" in said, (
+        "the compiler's own reason is not in the log, so the reader has a "
+        "failure with no cause")
+    assert len(calls) > 1, "the run stopped at the failed build"
+
+
+def test_the_warm_build_is_inside_the_deadlines_clock(repo: Path, tmp_path: Path):
+    """A build outside the clock is time the deadline cannot see, and the
+    deadline exists because the runner's own cap reports CANCELLED, which is
+    indistinguishable from a superseded run (#1086).
+
+    The clock is SET rather than waited on, so this asserts about the sweep
+    rather than about how loaded the machine is, and it costs nothing (L290,
+    L524). Sleeping for a real 5 seconds would be the same assertion, slower,
+    and would flake on a busy runner.
+    """
+    with_shared_cache(repo)
+    clock = [0.0]
+
+    def runner(cmd: list[str], cwd: Path) -> tuple[int, str]:
+        if "build-for-testing" in cmd:
+            clock[0] += 5.0
+        return 65, SWIFT_RED
+
+    lines: list[str] = []
+    check_guards(repo, swift_registry(tmp_path, "one", "two"), runner,
+                 deadline_seconds=1.0, log=lines.append,
+                 now=lambda: clock[0])
+
+    said = "\n".join(lines)
+    # Both entries unreached is what discriminates. A deadline started AFTER
+    # the build is not yet passed when the loop makes its first check, so the
+    # first entry runs and the log still says "deadline" further down: a test
+    # asserting only that word passes without the fix (L159).
+    assert "2 entries never reached" in said, (
+        "the deadline was measured from after the warm build, so the build's "
+        f"time is free of it. Log was:\n{said}")
+
+
+# ── and the readings say so ──────────────────────────────────────────────────
+
+def result_of(name: str, seconds: float, swift: bool = True) -> Result:
+    return Result(entry(name=name,
+                        test=(f"PostRollTests/NoteTests/{name}" if swift
+                              else f"tests/test_{name}.py::test_it")),
+                  Outcome.KILLED, "", seconds)
+
+
+def test_every_entry_carries_a_cost_once_the_build_is_shared(tmp_path: Path,
+                                                             repo: Path):
+    """The gap this closes. With the build outside the loop no entry pays for
+    it, so setting the first Swift one aside would now discard a real reading."""
+    path = tmp_path / "timings.json"
+
+    write_timings(path, [result_of("one", 24.0), result_of("two", 22.0)],
+                  repo, warm=WarmBuild(seconds=118.0, ok=True))
+
+    written = json.loads(path.read_text())
+    assert written["seconds"] == {"one": 24.0, "two": 22.0}
+
+
+def test_the_shared_builds_own_cost_is_still_recorded(tmp_path: Path,
+                                                      repo: Path):
+    """It is the only measurement anyone has of what the cold build costs, and
+    shipping the fix must not destroy the evidence the diagnosis came from
+    (L277)."""
+    path = tmp_path / "timings.json"
+
+    write_timings(path, [result_of("one", 24.0)], repo,
+                  warm=WarmBuild(seconds=118.0, ok=True))
+
+    cold = json.loads(path.read_text())["cold"]
+    assert cold["seconds"] == 118.0
+    assert "build" in cold["entry"], (
+        f"the cold reading is filed under {cold['entry']!r}, which reads as a "
+        "registry entry's cost rather than as the shared build's")
+
+
+def test_without_a_shared_build_the_first_swift_entry_is_still_set_aside(
+        tmp_path: Path, repo: Path):
+    """The case that has not gone away: a checkout naming no cache builds per
+    entry, and the first one still carries the cold build."""
+    path = tmp_path / "timings.json"
+
+    write_timings(path, [result_of("one", 121.0), result_of("two", 22.0)],
+                  repo, warm=None)
+
+    written = json.loads(path.read_text())
+    assert written["seconds"] == {"two": 22.0}
+    assert written["cold"] == {"entry": "one", "seconds": 121.0}
+
+
+def test_a_failed_shared_build_does_not_record_a_cold_reading(tmp_path: Path,
+                                                              repo: Path):
+    """A build that failed took whatever time a broken build takes, and filing
+    that as the cold build's cost puts a number nothing can tell from a real one
+    into the record (L331)."""
+    path = tmp_path / "timings.json"
+
+    write_timings(path, [result_of("one", 24.0)], repo,
+                  warm=WarmBuild(seconds=3.0, ok=False))
+
+    assert json.loads(path.read_text())["cold"] is None
