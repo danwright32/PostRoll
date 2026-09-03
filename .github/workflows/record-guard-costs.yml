@@ -12,18 +12,45 @@ name: Record guard costs
 # from the workflow files, and a new check name can only go green once its
 # recorded reply already holds it, so adding one costs a knowingly red merge
 # (#1074, L48).
+# When the sweep FINISHES, never at a clock time (#1262).
+#
+# This was `cron: "0 9 * * *"`, described as two hours after the sweep's own
+# 07:00. The premise was false. Measured 2026-09-03, the last six scheduled runs
+# of the sweep actually STARTED at 11:55, 11:57, 12:21 and 14:50, because GitHub
+# delays scheduled workflows by hours under load, so this ran hours BEFORE the
+# thing it was written to follow, every day. A declared cron is not when a job
+# runs, and two scheduled jobs cannot be ordered by arithmetic between their
+# crons (L386).
+#
+# The workflow is named rather than referenced, because that is all
+# `workflow_run` offers, and `tests/test_guard_costs_are_recorded_automatically.py`
+# reads the name out of guards.yml rather than trusting the copy here: a name
+# that matches nothing fires never, and a workflow that never runs looks exactly
+# like one with nothing to do (L100, L98).
 on:
-  schedule:
-    # Two hours after the sweep's own 07:00, which carries a 30 minute deadline
-    # and a 30 minute job cap. A run starting before the sweep has finished
-    # would find yesterday's readings, record them again, and propose a change
-    # that changes nothing.
-    - cron: "0 9 * * *"
+  workflow_run:
+    workflows: ["Guard proofs"]
+    types: [completed]
   workflow_dispatch:
 
 jobs:
   record:
     runs-on: ubuntu-latest
+    # `workflow_run` fires for EVERY trigger of the upstream workflow, and the
+    # sweep's `changed` job runs on every pull request. Recording from one of
+    # those would price the whole registry from the handful of entries one diff
+    # touched, because `--from` REPLACES the record. So the schedule is what is
+    # followed, and a sweep that failed is not followed at all: a shard that
+    # died early measured the entries it reached and nothing about the rest
+    # (L331).
+    #
+    # A dispatched run carries no `workflow_run` context at all, so it is
+    # admitted by its own name. Without that the manual trigger would be a
+    # control that does nothing (L109).
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event.workflow_run.event == 'schedule'
+          && github.event.workflow_run.conclusion == 'success')
     # A job without a deadline cannot fail, it can only hang (L110, L313). This
     # downloads a handful of small artifacts and writes one file.
     timeout-minutes: 20

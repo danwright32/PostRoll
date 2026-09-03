@@ -1,0 +1,8 @@
+{
+  "name": "the-recorder-names-the-real-sweep",
+  "file": ".github/workflows/record-guard-costs.yml",
+  "find": "    workflows: [\"Guard proofs\"]",
+  "replace": "    workflows: [\"Guard proofs sweep\"]",
+  "test": "tests/test_guard_costs_are_recorded_automatically.py::test_it_names_the_sweep_by_the_name_the_sweep_declares",
+  "breaks": "the trigger names a workflow that does not exist, so it matches nothing and fires never, and a workflow that never runs looks exactly like one with nothing to do (#1262, L100, L98)"
+}
