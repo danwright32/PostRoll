@@ -146,6 +146,7 @@
     "test_jamendo_status_envelope.py": 0.0,
     "test_job_duration_drift.py": 0.02,
     "test_layout_sidecar.py": 0.0,
+    "test_mac_build_setup_is_shared.py": 0.0,
     "test_make_test_runs_both_suites.py": 0.6700000000000002,
     "test_manifest_contract.py": 0.07,
     "test_manifest_read_keys.py": 0.0,
@@ -835,6 +836,10 @@
     "test_layout_sidecar.py": {
       "run": "full-2026-09-02T04:01Z",
       "scale": 1.0
+    },
+    "test_mac_build_setup_is_shared.py": {
+      "run": "partial-2026-09-03T16:55Z",
+      "scale": 1.136
     },
     "test_make_test_runs_both_suites.py": {
       "run": "full-2026-09-02T04:01Z",
