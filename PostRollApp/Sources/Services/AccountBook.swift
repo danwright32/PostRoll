@@ -119,6 +119,17 @@ struct AccountStats: Codable, Equatable, Sendable {
     /// remembers nothing.
     var fetchAttempts: Int = 0
 
+    /// Marked as never worth inviting, by hand (#1271).
+    ///
+    /// Not a ranking problem. However good the figures, Dan has decided the
+    /// invite will not be sent, so a slot spent on this account is wasted and
+    /// offering it again every week asks a question he has already answered.
+    ///
+    /// A mark on the ACCOUNT rather than a list of names inside the ranking: a
+    /// list maintained by hand beside the data it describes is exempt from
+    /// every check and cannot be changed without a build (L41).
+    var neverInvite: Bool = false
+
     /// Marked private by hand (#982).
     ///
     /// Not detectable from the logged out page: an account serving a normal
@@ -173,6 +184,7 @@ struct AccountStats: Codable, Equatable, Sendable {
         reels           = try c.decodeIfPresent(Int.self, forKey: .reels)
         feed            = try c.decodeIfPresent(Int.self, forKey: .feed)
         isPrivate       = try c.decodeIfPresent(Bool.self, forKey: .isPrivate) ?? false
+        neverInvite     = try c.decodeIfPresent(Bool.self, forKey: .neverInvite) ?? false
         fetchAttempts   = try c.decodeIfPresent(Int.self, forKey: .fetchAttempts) ?? 0
     }
 
@@ -185,6 +197,7 @@ struct AccountStats: Codable, Equatable, Sendable {
          instagramID: String? = nil,
          reels: Int? = nil, feed: Int? = nil,
          isPrivate: Bool = false,
+         neverInvite: Bool = false,
          fetchAttempts: Int = 0) {
         self.followers = followers
         self.likes = likes
@@ -198,6 +211,7 @@ struct AccountStats: Codable, Equatable, Sendable {
         self.reels = reels
         self.feed = feed
         self.isPrivate = isPrivate
+        self.neverInvite = neverInvite
         self.fetchAttempts = fetchAttempts
     }
 
@@ -235,8 +249,8 @@ struct AccountStats: Codable, Equatable, Sendable {
             merged.feed = incoming.feed
         }
         if let recordedOn = incoming.recordedOn { merged.recordedOn = recordedOn }
-        // isPrivate is never carried by a fetch: it is a mark Dan makes by
-        // hand and nothing else may clear it (#982).
+        // isPrivate and neverInvite are never carried by a fetch: they are
+        // marks Dan makes by hand and nothing else may clear them (#982, #1271).
         //
         // The attempt count moves with the OUTCOME, so a success clears it and
         // a failure carries it forward. Without this the bound is a field
@@ -708,7 +722,8 @@ final class AccountBook {
     /// and it would produce a negative engagement rate that sorts above every
     /// real account.
     func record(handle: String, followers: Int?, likes: Int?, comments: Int?,
-                isPrivate: Bool? = nil, on date: Date) {
+                isPrivate: Bool? = nil, neverInvite: Bool? = nil,
+                on date: Date) {
         let key = Self.key(handle)
         guard !key.isEmpty else { return }
         var entry = records[key] ?? AccountRecord(handle: CaptionBlocks.bareUsername(handle))
@@ -745,6 +760,7 @@ final class AccountBook {
         // so an unstated mark is left exactly as it was rather than cleared to
         // the unmarked state a plain Bool default would write (L168).
         if let isPrivate { stats.isPrivate = isPrivate }
+        if let neverInvite { stats.neverInvite = neverInvite }
         entry.stats = stats
         records[key] = entry
         save()

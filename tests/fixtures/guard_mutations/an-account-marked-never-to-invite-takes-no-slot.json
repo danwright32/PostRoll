@@ -1,0 +1,8 @@
+{
+  "name": "an-account-marked-never-to-invite-takes-no-slot",
+  "file": "PostRollApp/Sources/Services/CollaboratorPick.swift",
+  "find": "        let candidates = everyone.filter { $0.stats?.neverInvite != true }",
+  "replace": "        let candidates = everyone",
+  "test": "PostRollTests/CollaboratorPickTests/testAnAccountMarkedNeverInviteIsNotSuggestedHoweverStrongItIs",
+  "breaks": "an account Dan marked never to invite takes one of the five collaborator slots on its figures alone, so a slot is spent on an invite he has already decided will not be sent, and the app asks the same question every week (#1271)"
+}

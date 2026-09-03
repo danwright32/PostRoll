@@ -850,6 +850,105 @@ final class CollaboratorPickTests: XCTestCase {
         XCTAssertTrue(reason.lowercased().contains("not counted"), reason)
     }
 
+    // MARK: - Accounts Dan will never invite (#1271)
+    //
+    // Some accounts are not a ranking problem. However good the figures, he
+    // will never send the invite, and an app that keeps offering them asks the
+    // same question every week and gets the same answer. Excluded rather than
+    // demoted, unlike private: a private account can still fill a slot no
+    // public account can fill, while this is a standing decision that the
+    // invite will not be sent, so a slot spent on it is a slot wasted.
+
+    private func marked(_ followers: Int, _ likes: Int, _ comments: Int) -> AccountStats {
+        var made = stats(followers, likes, comments)
+        made.neverInvite = true
+        return made
+    }
+
+    func testAnAccountMarkedNeverInviteIsNotSuggestedHoweverStrongItIs() {
+        let table = ["excluded": marked(433_555, 5_000, 900)]
+            .merging(Dictionary(uniqueKeysWithValues:
+                ["b", "c", "d", "e", "f"].map { ($0, stats(1_000, 50, 5)) })) { a, _ in a }
+        let result = CollaboratorPick.suggest(
+            handles: ["excluded", "b", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        XCTAssertFalse(result.suggested.map(\.handle).contains("excluded"),
+                       "a slot was spent on an invite that will never be sent")
+    }
+
+    func testAnAccountMarkedNeverInviteIsNotOfferedAsTheFirstPhotoSwap() {
+        // That line exists to name a swap worth making by hand. This one is
+        // never worth making, so naming it is the same wasted question in a
+        // different place.
+        var table = ["excluded": marked(433_555, 5_000, 900)]
+        let inPhoto = ["p1", "p2", "p3", "p4", "p5"]
+        for handle in inPhoto { table[handle] = stats(1_000, 50, 5) }
+        let result = CollaboratorPick.suggest(
+            handles: ["excluded"] + inPhoto,
+            firstPhoto: Set(inPhoto), stats: lookup(table), asOf: now)
+
+        XCTAssertEqual(result.suggested.count, CollaboratorPick.maxPerPost,
+                       "nothing was excluded, so this fixture cannot show that line")
+        XCTAssertNotEqual(result.strongestExcluded?.handle, "excluded")
+    }
+
+    func testAnAccountMarkedNeverInviteIsStillNamed() {
+        // Dan made the mark, so he has to be able to see the app honouring it
+        // rather than having lost the account (L152). Silence would read as a
+        // tag that went missing.
+        let table = ["excluded": marked(433_555, 5_000, 900),
+                     "b": stats(1_000, 50, 5)]
+        let result = CollaboratorPick.suggest(
+            handles: ["excluded", "b", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        XCTAssertTrue(result.excluded.map(\.handle).contains("excluded"),
+                      "the account vanished from the answer entirely")
+        XCTAssertTrue(CollaboratorPick.captionBlock(result).contains("excluded"),
+                      "CAPTIONS.txt does not say the account was held back")
+    }
+
+    func testNeverInviteAndPrivateAreDifferentSentences() {
+        // Two permanent properties with two different reasons. One heading over
+        // both would say something untrue about one of them (L11).
+        var closed = stats(500, 10, 1)
+        closed.isPrivate = true
+        let table = ["excluded": marked(433_555, 5_000, 900),
+                     "closedcircle": closed,
+                     "b": stats(1_000, 50, 5)]
+        let result = CollaboratorPick.suggest(
+            handles: ["excluded", "closedcircle", "b", "c", "d", "e", "f"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+        let block = CollaboratorPick.captionBlock(result)
+
+        let excludedLine = block.split(separator: "\n").first { $0.contains("excluded") }
+        let privateLine = block.split(separator: "\n").first { $0.contains("closedcircle") }
+        XCTAssertNotNil(excludedLine)
+        XCTAssertNotNil(privateLine)
+        XCTAssertNotEqual(excludedLine, privateLine,
+                          "both permanent states are reported under one sentence")
+    }
+
+    func testADayTaggingOnlyHeldBackAccountsIsNotADayThatTagsNobody() {
+        // Two different days. "Nobody is tagged yet" names a job still to do
+        // and would send Dan back to a day that is finished, where the accounts
+        // are there and the decision about them is already made (L11).
+        let table = ["excluded": marked(433_555, 5_000, 900),
+                     "alsoexcluded": marked(9_000, 300, 50)]
+        let result = CollaboratorPick.suggest(
+            handles: ["excluded", "alsoexcluded"],
+            firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        XCTAssertEqual(result.coverage, .allHeldBack)
+        XCTAssertNotEqual(CollaboratorPick.panelSubtitle(for: result),
+                          CollaboratorPick.nobodyTaggedLine,
+                          "a day whose every tag is held back reads as a day "
+                          + "nobody has tagged")
+        XCTAssertTrue(CollaboratorPick.captionBlock(result).contains("2"),
+                      "the block does not say how many were held back")
+    }
+
     func testTheTwoUnrankedStatesAreSplitOnceForEverySurface() {
         // #982 gave the caption block a separate sentence for a private
         // account, and left the panel's HEADING saying "not counted yet, so not

@@ -637,10 +637,11 @@ struct CaptionReviewView: View {
             AccountNumbersSheet(
                 handle: target.handle,
                 stats: accounts.stats(for: target.handle),
-                onSave: { followers, likes, comments, isPrivate in
+                onSave: { followers, likes, comments, isPrivate, neverInvite in
                     accounts.record(handle: target.handle, followers: followers,
                                               likes: likes, comments: comments,
-                                              isPrivate: isPrivate, on: Date())
+                                              isPrivate: isPrivate,
+                                              neverInvite: neverInvite, on: Date())
                     // The suggestions are judged against this instant, so
                     // moving it is what makes the panel re-rank on the numbers
                     // just entered rather than keep showing the old order.

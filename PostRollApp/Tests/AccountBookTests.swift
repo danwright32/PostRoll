@@ -58,6 +58,30 @@ final class AccountBookTests: XCTestCase {
         XCTAssertEqual(book.stats(for: "closedcircle")?.isPrivate, false)
     }
 
+    func testTheFormIsWhatSetsTheNeverInviteMark() {
+        // The same shape as the private mark and for the same reason: no fetch
+        // carries it, so a write that drops it here leaves the exclusion a rule
+        // nothing in the app is able to set (#1271, L543).
+        book.record(handle: "carnegiehall", followers: 433_555, likes: 356, comments: 12,
+                    neverInvite: true, on: stamp)
+
+        XCTAssertEqual(book.stats(for: "carnegiehall")?.neverInvite, true)
+    }
+
+    func testSavingFiguresLeavesTheNeverInviteMarkAlone() {
+        // The form sends both marks on every save, but a fetch and every other
+        // writer say nothing about either, and an unstated mark must be left
+        // exactly as it was rather than cleared (L168).
+        book.record(handle: "carnegiehall", followers: 433_555, likes: 356, comments: 12,
+                    neverInvite: true, on: stamp)
+        book.record(handle: "carnegiehall", followers: 440_000, likes: 400, comments: 15,
+                    on: stamp)
+
+        XCTAssertEqual(book.stats(for: "carnegiehall")?.followers, 440_000)
+        XCTAssertEqual(book.stats(for: "carnegiehall")?.neverInvite, true,
+                       "a refreshed follower count started offering the account again")
+    }
+
     func testARecordWrittenBeforeTheMarkExistedReadsAsNotPrivate() {
         // Every record in the live book predates the field. A decoder that
         // refused one of them would turn a downgrade into an app that cannot
@@ -69,6 +93,7 @@ final class AccountBookTests: XCTestCase {
 
         XCTAssertEqual(decoded?.followers, 2_000)
         XCTAssertEqual(decoded?.isPrivate, false)
+        XCTAssertEqual(decoded?.neverInvite, false)
     }
 
     // MARK: - One record per account, however it was spelled

@@ -1,0 +1,8 @@
+{
+  "name": "a-day-of-held-back-accounts-is-not-a-day-that-tags-nobody",
+  "file": "PostRollApp/Sources/Services/CollaboratorPick.swift",
+  "find": "            return Result(coverage: everyone.isEmpty ? .nothingTagged : .allHeldBack,",
+  "replace": "            return Result(coverage: .nothingTagged,",
+  "test": "PostRollTests/CollaboratorPickTests/testADayTaggingOnlyHeldBackAccountsIsNotADayThatTagsNobody",
+  "breaks": "a day whose every tagged account is marked never to invite reports that nobody is tagged yet, which names a job still to do and sends Dan back to a day that is finished, the accounts being there and the decision already made (#1271, L11)"
+}

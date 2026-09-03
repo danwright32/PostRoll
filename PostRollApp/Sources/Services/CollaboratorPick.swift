@@ -108,6 +108,14 @@ enum CollaboratorPick {
     enum Coverage: Equatable {
         /// Nothing this post tags is an account that can be invited.
         case nothingTagged
+        /// This post tags accounts, and every one of them is marked never to
+        /// invite (#1271).
+        ///
+        /// Its own answer rather than a share of `nothingTagged`. "Nobody is
+        /// tagged yet" is a job to go and do; this is a decision already made,
+        /// and reporting one as the other would send Dan back to a day that is
+        /// finished (L11).
+        case allHeldBack
         /// There are no more candidates than slots, so all of them go.
         /// Nobody was cut, so nothing here may read as a ranking.
         case allFit
@@ -147,6 +155,10 @@ enum CollaboratorPick {
         var strongestExcluded: Candidate?
         /// Tagged accounts with no numbers yet. Listed, never scored.
         var unranked: [Candidate]
+        /// Accounts held back because Dan marked them never to invite (#1271).
+        /// Named rather than dropped: he made the mark, so he has to be able to
+        /// see it being honoured rather than wonder where a tag went (L152).
+        var excluded: [Candidate]
         var notes: [String]
     }
 
@@ -195,7 +207,7 @@ enum CollaboratorPick {
         }
 
         let firstPhotoKeys = firstPhoto.map { Set($0.map(AccountBook.key)) }
-        let candidates = keys.map { key -> Candidate in
+        let everyone = keys.map { key -> Candidate in
             let stats = stats(key)
             let inFirstPhoto = firstPhotoKeys?.contains(key) ?? false
             let scored = score(stats)
@@ -208,12 +220,26 @@ enum CollaboratorPick {
                                                 asOf: now))
         }
 
+        // Held back BEFORE anything is ranked (#1271), and so before the
+        // "everyone fits" count too: an account that will never be invited must
+        // not fill one of the five, and must not make a day that genuinely fits
+        // read as one that had to choose.
+        //
+        // Excluded rather than demoted, which is what separates this from the
+        // private mark. A private account can still fill a slot no public
+        // account can fill; this is a standing decision that the invite will not
+        // be sent, so a slot spent on it is simply wasted.
+        let excluded = everyone.filter { $0.stats?.neverInvite == true }
+        let candidates = everyone.filter { $0.stats?.neverInvite != true }
+
         // Nothing this post tags can be invited. Said out loud, because an
         // absent section reads as a day that was considered and needed no
         // invites, which is the opposite of what it means (#964).
         guard !candidates.isEmpty else {
-            return Result(coverage: .nothingTagged, suggested: [], fallbacks: [],
-                          strongestExcluded: nil, unranked: [], notes: notes)
+            return Result(coverage: everyone.isEmpty ? .nothingTagged : .allHeldBack,
+                          suggested: [], fallbacks: [],
+                          strongestExcluded: nil, unranked: [], excluded: excluded,
+                          notes: notes)
         }
 
         // No more candidates than slots, so every one of them goes and there is
@@ -228,7 +254,8 @@ enum CollaboratorPick {
         // form.
         guard candidates.count > maxPerPost else {
             return Result(coverage: .allFit, suggested: candidates, fallbacks: [],
-                          strongestExcluded: nil, unranked: [], notes: notes)
+                          strongestExcluded: nil, unranked: [], excluded: excluded,
+                          notes: notes)
         }
 
         // Split by whether the account can be ranked at all, and carry the
@@ -250,7 +277,7 @@ enum CollaboratorPick {
         // nothing rankable means nothing with a rate.
         guard !rankable.isEmpty else {
             return Result(coverage: .nothingToRank, suggested: [], fallbacks: [],
-                          strongestExcluded: nil, unranked: candidates, notes: notes)
+                          strongestExcluded: nil, unranked: candidates, excluded: excluded, notes: notes)
         }
 
         let ranked = rankable.sorted { better($0, than: $1, respectingFirstPhoto: true) }
@@ -268,6 +295,7 @@ enum CollaboratorPick {
                       strongestExcluded: excludedPurelyByFirstPhotoRule(
                         ranked: ranked, suggested: suggested, applies: firstPhotoKeys != nil),
                       unranked: unranked,
+                      excluded: excluded,
                       notes: notes)
     }
 
@@ -563,6 +591,24 @@ enum CollaboratorPick {
              + "\(maxPerPost) collaborator slots, so invite every one of them."
     }
 
+    /// Said when this post's every tagged account is one Dan will not invite.
+    ///
+    /// Deliberately not the "nobody is tagged yet" sentence. That one names a
+    /// job still to do, and this day is finished: the accounts are there and
+    /// the decision about them has already been made.
+    static func allHeldBackLine(_ count: Int) -> String {
+        count == 1
+            ? "The one account this post tags is marked never to invite, so "
+              + "there is nothing to send."
+            : "All \(count) accounts this post tags are marked never to invite, "
+              + "so there is nothing to send."
+    }
+
+    /// Said of the accounts held back by that mark, wherever some others were
+    /// still worth ranking (#1271).
+    static let neverInviteLine =
+        "Marked never to invite, so held back rather than ranked: "
+
     /// Said of an account that can never be counted, however long anybody waits.
     ///
     /// Its own sentence rather than a share of the one above (#982). A private
@@ -572,6 +618,16 @@ enum CollaboratorPick {
     /// week, with no action anywhere that could ever clear it (L11).
     static let privateLine =
         "Private, so an invite reaches only their own approved followers: "
+
+    /// What the never invite mark means, beside the control that makes it.
+    ///
+    /// Worded here with the rest of them, so the sentence Dan reads while
+    /// ticking the box and the sentence the block prints afterwards cannot come
+    /// to describe the same mark differently.
+    static let neverInviteFormNote =
+        "They are held back from every suggestion rather than ranked, and still "
+        + "named so the mark can be seen to be working. Use it for accounts you "
+        + "will never send an invite to, whatever their figures."
 
     /// What the mark MEANS, said beside the control that makes it (#982).
     ///
@@ -639,6 +695,8 @@ enum CollaboratorPick {
         switch result.coverage {
         case .nothingTagged:
             return nobodyTaggedLine
+        case .allHeldBack:
+            return allHeldBackLine(result.excluded.count)
         case .allFit:
             return everyoneFitsLine(result.suggested.count)
                  + " A collaborator invite puts this post on their own grid."
@@ -667,6 +725,8 @@ enum CollaboratorPick {
         switch result.coverage {
         case .nothingTagged:
             lines.append(nobodyTaggedLine)
+        case .allHeldBack:
+            lines.append(allHeldBackLine(result.excluded.count))
         case .allFit:
             lines.append(everyoneFitsLine(result.suggested.count))
             for candidate in result.suggested {
@@ -690,6 +750,14 @@ enum CollaboratorPick {
                              + "\(excluded.handle) (\(excluded.reason))")
             }
             lines.append(contentsOf: unrankedLines(result.unranked))
+        }
+        // Named in every shape, not only the ranked one: the mark is Dan's and
+        // he has to be able to see it working rather than wonder where a tag
+        // went (L152). Not repeated under `.allHeldBack`, whose own sentence is
+        // already about exactly these accounts.
+        if !result.excluded.isEmpty, result.coverage != .allHeldBack {
+            lines.append(neverInviteLine
+                         + result.excluded.map(\.handle).joined(separator: ", "))
         }
         lines.append(contentsOf: result.notes)
         return lines.joined(separator: "\n")
