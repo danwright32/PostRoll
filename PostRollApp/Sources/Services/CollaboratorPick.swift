@@ -419,6 +419,45 @@ enum CollaboratorPick {
              + "\(maxPerPost) collaborator slots, so invite every one of them."
     }
 
+    /// Said of an account that can never be counted, however long anybody waits.
+    ///
+    /// Its own sentence rather than a share of the one above (#982). A private
+    /// profile shows its follower count and nothing else: the per post figures
+    /// the ranking needs are visible only to approved followers. Listed under
+    /// "not counted yet" it read as an outstanding job, printed again every
+    /// week, with no action anywhere that could ever clear it (L11).
+    static let privateLine =
+        "Private, so an invite reaches only their own approved followers: "
+
+    /// What the mark MEANS, said beside the control that makes it (#982).
+    ///
+    /// Worded here with the rest of them rather than in the view, so the
+    /// sentence Dan reads while ticking the box and the sentence CAPTIONS.txt
+    /// prints afterwards cannot come to describe the same mark differently.
+    static let privateFormNote =
+        "Their posts cannot be counted, and an invite reaches only their own "
+        + "approved followers, so they are ranked last rather than asked for "
+        + "numbers."
+
+    /// The unranked list split into the two different things it holds.
+    ///
+    /// Named rather than counted in both halves, so it is visible WHO is in
+    /// which state and the remedy, where there is one, can be acted on without
+    /// opening the app.
+    private static func unrankedLines(_ unranked: [Candidate]) -> [String] {
+        let marked = unranked.filter { $0.stats?.isPrivate == true }
+        let waiting = unranked.filter { $0.stats?.isPrivate != true }
+        var lines: [String] = []
+        if !waiting.isEmpty {
+            lines.append("Not counted yet, so not ranked: "
+                         + waiting.map(\.handle).joined(separator: ", "))
+        }
+        if !marked.isEmpty {
+            lines.append(privateLine + marked.map(\.handle).joined(separator: ", "))
+        }
+        return lines
+    }
+
     /// Said when there are more candidates than slots and none of them has any
     /// figures at all (#1115).
     ///
@@ -476,10 +515,7 @@ enum CollaboratorPick {
             }
         case .nothingToRank:
             lines.append(nothingToRankLine(result.unranked.count))
-            // Named rather than counted, so it is visible WHO is waiting on
-            // figures and the remedy can be acted on without opening the app.
-            lines.append("Not counted yet, so not ranked: "
-                         + result.unranked.map(\.handle).joined(separator: ", "))
+            lines.append(contentsOf: unrankedLines(result.unranked))
         case .ranked:
             lines.append("Instagram allows \(maxPerPost) collaborators per post. Invite these:")
             for (index, candidate) in result.suggested.enumerated() {
@@ -494,10 +530,7 @@ enum CollaboratorPick {
                              + "swap in by hand if the reach is worth it: "
                              + "\(excluded.handle) (\(excluded.reason))")
             }
-            if !result.unranked.isEmpty {
-                lines.append("Not counted yet, so not ranked: "
-                             + result.unranked.map(\.handle).joined(separator: ", "))
-            }
+            lines.append(contentsOf: unrankedLines(result.unranked))
         }
         lines.append(contentsOf: result.notes)
         return lines.joined(separator: "\n")
@@ -538,7 +571,12 @@ enum CollaboratorPick {
     /// decision that an unmeasured account is never scored was narrowed here,
     /// not reversed.
     static func score(_ stats: AccountStats?) -> Score? {
-        guard let stats, !stats.isPrivate || true else { return nil }
+        // A private account IS scored (#982). Demote, do not exclude: `better`
+        // ranks it below every public candidate, which leaves it able to fill a
+        // slot no public account can fill, and an unscored account would fall
+        // out of the ranking into the list of accounts waiting on numbers it
+        // already has.
+        guard let stats else { return nil }
         guard let followers = stats.followers, followers > 0 else { return nil }
 
         // A withheld like count is handled BEFORE the measured path, because
@@ -672,9 +710,15 @@ enum CollaboratorPick {
             // different things done to them. The label comes from the record
             // rather than being spelled again here, so the suggestion line and
             // the panel row cannot describe one account differently.
-            parts.append(stats?.countedness == .followersOnly
-                         ? stats?.freshnessLabel(asOf: now) ?? "Not counted yet"
-                         : "Not counted yet")
+            // Three unranked states now, not two (#982). A private account is
+            // not waiting on anything, so it must not read like an account that
+            // is.
+            switch stats?.countedness {
+            case .followersOnly, .privateAccount:
+                parts.append(stats?.freshnessLabel(asOf: now) ?? "Not counted yet")
+            default:
+                parts.append("Not counted yet")
+            }
         }
         if appliesFirstPhoto {
             parts.append(inFirstPhoto ? "in the first photo" : "not in the first photo")

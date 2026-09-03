@@ -32,6 +32,45 @@ final class AccountBookTests: XCTestCase {
 
     private let stamp = Date(timeIntervalSince1970: 1_775_000_000)
 
+    // MARK: - The private mark is Dan's, and only Dan clears it (#982)
+
+    func testTheFormIsWhatSetsTheMark() {
+        // Nothing else can. Private is not detectable from the logged out page,
+        // and no fetch carries it, so a write that drops the mark here leaves
+        // `isPrivate` a ranking key nothing in the app is able to set (L543).
+        //
+        // That a save which says NOTHING about privacy leaves an existing mark
+        // alone is `testAPrivateMarkSurvivesTypingNumbersIn`.
+        book.record(handle: "closedcircle", followers: 169, likes: nil, comments: nil,
+                    isPrivate: true, on: stamp)
+
+        XCTAssertEqual(book.stats(for: "closedcircle")?.isPrivate, true)
+    }
+
+    func testTheMarkCanBeTakenOffAgain() {
+        // An account that opened up. Distinct from not stating: nil leaves the
+        // mark alone, false takes it off, and only the form sends false.
+        book.record(handle: "closedcircle", followers: 169, likes: nil, comments: nil,
+                    isPrivate: true, on: stamp)
+        book.record(handle: "closedcircle", followers: 169, likes: 20, comments: 3,
+                    isPrivate: false, on: stamp)
+
+        XCTAssertEqual(book.stats(for: "closedcircle")?.isPrivate, false)
+    }
+
+    func testARecordWrittenBeforeTheMarkExistedReadsAsNotPrivate() {
+        // Every record in the live book predates the field. A decoder that
+        // refused one of them would turn a downgrade into an app that cannot
+        // open its own data.
+        let older = """
+        {"followers":2000,"likes":50,"comments":10}
+        """.data(using: .utf8)!
+        let decoded = try? JSONDecoder().decode(AccountStats.self, from: older)
+
+        XCTAssertEqual(decoded?.followers, 2_000)
+        XCTAssertEqual(decoded?.isPrivate, false)
+    }
+
     // MARK: - One record per account, however it was spelled
 
     func testEverySpellingOfOneHandleResolvesToOneRecord() {

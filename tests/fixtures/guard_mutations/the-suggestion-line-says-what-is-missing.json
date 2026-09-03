@@ -1,7 +1,7 @@
 {
   "name": "the-suggestion-line-says-what-is-missing",
   "file": "PostRollApp/Sources/Services/CollaboratorPick.swift",
-  "find": "            parts.append(stats?.countedness == .followersOnly\n                         ? stats?.freshnessLabel(asOf: now) ?? \"Not counted yet\"\n                         : \"Not counted yet\")",
+  "find": "            switch stats?.countedness {\n            case .followersOnly, .privateAccount:\n                parts.append(stats?.freshnessLabel(asOf: now) ?? \"Not counted yet\")\n            default:\n                parts.append(\"Not counted yet\")\n            }",
   "replace": "            parts.append(\"Not counted yet\")",
   "test": "PostRollTests/CollaboratorPickTests/testAFollowersOnlyAccountSaysWhatIsMissingInTheSuggestionLine",
   "breaks": "the panel row and the CAPTIONS.txt line go back to telling Dan that nothing was entered for an account he has just entered a follower count for, which is the state most likely to make him enter it again (#977, L11)"

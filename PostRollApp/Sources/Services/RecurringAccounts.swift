@@ -110,8 +110,15 @@ enum RecurringAccounts {
         var out: [Attention] = []
         for (key, count) in eventCounts(events: events)
         where count >= minimumEvents && onThisEvent.contains(key) {
+            let known = stats(key)
+            // A private account can never become rankable (#982). The figures
+            // this banner asks for are visible only to approved followers, so
+            // every appearance it makes here is a job nobody can finish, and a
+            // list that always holds an item nobody can clear stops being read
+            // (L36).
+            if known?.isPrivate == true { continue }
             let need: Need
-            switch stats(key)?.freshness(asOf: now) ?? .unknown {
+            switch known?.freshness(asOf: now) ?? .unknown {
             case .unknown:            need = .neverCounted
             case .stale(let daysOld): need = .stale(daysOld: daysOld)
             case .fresh:              continue

@@ -54,4 +54,64 @@ final class AccountNumbersEntryTests: XCTestCase {
             XCTAssertEqual(AccountNumbersEntry.parse(AccountNumbersEntry.text(value)), value)
         }
     }
+
+    // MARK: - The private mark is made on this form (#982)
+    //
+    // A SwiftUI sheet with this much environment cannot be built in a test, so
+    // what is guarded is the wiring: the form carries the control, and both
+    // screens that present the form carry its answer through to the book.
+    // Without a control the mark can never be set by anybody, and a ranking key
+    // nothing can ever set is a rule that never fires (L543).
+
+    func testTheNumbersFormOffersTheMark() throws {
+        let source = try Self.source("Views/CollaboratorPanel.swift")
+
+        XCTAssertTrue(source.contains("Toggle("),
+                      "the form has no control for the mark, so isPrivate can "
+                      + "never be set on any account and the ranking key that "
+                      + "reads it can never fire")
+        XCTAssertTrue(source.contains("onSave: (Int?, Int?, Int?, Bool) -> Void"),
+                      "the form cannot report the mark to whoever presents it")
+        XCTAssertTrue(source.contains("CollaboratorPick.privateFormNote"),
+                      "the control says what the mark means in its own words, "
+                      + "which is how the form and CAPTIONS.txt come to describe "
+                      + "the same mark differently")
+    }
+
+    func testTheFormPrefillsTheMarkSoSavingCannotClearIt() throws {
+        let source = try Self.source("Views/CollaboratorPanel.swift")
+
+        XCTAssertTrue(source.contains("stats?.isPrivate ?? false"),
+                      "the control opens unticked whatever is stored, so saving "
+                      + "an unrelated figure unmarks the account")
+    }
+
+    func testBothScreensCarryTheMarkIntoTheBook() throws {
+        // Scoped to each save handler rather than the whole file, because a
+        // whole-file search for `isPrivate` passes on a file that merely
+        // mentions it somewhere else.
+        for (file, sheet) in [("Views/CaptionReviewView.swift", "$editingAccount"),
+                              ("Views/ExportView.swift", "$editingRecurringAccount")] {
+            let source = try Self.source(file)
+            let handler = try XCTUnwrap(
+                source.range(of: ".sheet(item: \(sheet))").map { start in
+                    let rest = source[start.upperBound...]
+                    return String(rest[..<(rest.range(of: "onCancel:")?.lowerBound
+                                           ?? rest.endIndex)])
+                }, file)
+
+            XCTAssertTrue(handler.contains("isPrivate: isPrivate"),
+                          "\(file) drops the mark on the way to the book, so "
+                          + "ticking the box does nothing")
+        }
+    }
+
+    private static func source(_ path: String) throws -> String {
+        try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Sources/\(path)"),
+            encoding: .utf8)
+    }
 }

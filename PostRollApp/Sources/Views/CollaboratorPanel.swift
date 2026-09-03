@@ -161,14 +161,17 @@ struct CollaboratorPanel: View {
 struct AccountNumbersSheet: View {
     let handle: String
     let stats: AccountStats?
-    /// Followers, likes, comments. Any of them may be nil, which stores as
-    /// "not counted" rather than zero.
-    let onSave: (Int?, Int?, Int?) -> Void
+    /// Followers, likes, comments, and whether the profile is private. Any of
+    /// the three figures may be nil, which stores as "not counted" rather than
+    /// zero. The mark is always stated, because this form is the only thing
+    /// that can set or clear it.
+    let onSave: (Int?, Int?, Int?, Bool) -> Void
     let onCancel: () -> Void
 
     @State private var followers: String = ""
     @State private var likes: String = ""
     @State private var comments: String = ""
+    @State private var isPrivate: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
@@ -190,6 +193,18 @@ struct AccountNumbersSheet: View {
             field("Likes on a typical post", text: $likes)
             field("Comments on a typical post", text: $comments)
 
+            // Here rather than anywhere else because this is where Dan is
+            // standing when he finds out: the form has just told him to open
+            // the profile, and a private one answers with a follower count and
+            // nothing else (#982). Nothing can detect it from the logged out
+            // page, so this control is the only way the mark is ever made.
+            Toggle("Private account", isOn: $isPrivate)
+                .font(.system(size: 12))
+            Text(CollaboratorPick.privateFormNote)
+                .font(.system(size: 11))
+                .foregroundStyle(PaintedSurfaces.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+
             // The date is shown wherever the numbers are (#280), so a figure
             // driving a ranking cannot look equally confident whether it was
             // entered last week or two years ago.
@@ -208,7 +223,8 @@ struct AccountNumbersSheet: View {
                 Button("Save") {
                     onSave(AccountNumbersEntry.parse(followers),
                            AccountNumbersEntry.parse(likes),
-                           AccountNumbersEntry.parse(comments))
+                           AccountNumbersEntry.parse(comments),
+                           isPrivate)
                 }
                 .keyboardShortcut(.defaultAction)
             }
@@ -221,6 +237,9 @@ struct AccountNumbersSheet: View {
             followers = AccountNumbersEntry.text(stats?.followers)
             likes = AccountNumbersEntry.text(stats?.likes)
             comments = AccountNumbersEntry.text(stats?.comments)
+            // Prefilled like every other field, so saving an unrelated
+            // correction cannot silently unmark the account.
+            isPrivate = stats?.isPrivate ?? false
         }
     }
 
