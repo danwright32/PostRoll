@@ -27,6 +27,7 @@ from pathlib import Path
 
 import pytest
 
+from tests import mac_build_setup
 from tools.check_toolchain import (
     Verdict,
     base_interpreter,
@@ -97,18 +98,27 @@ def test_the_recorded_version_is_readable() -> None:
 
 
 def test_the_workflow_selects_the_recorded_xcode_rather_than_the_image_default() -> None:
-    workflow = SWIFT_WORKFLOW.read_text()
-    body = "\n".join(
-        line for line in workflow.split("\n") if not line.strip().startswith("#")
+    """Both halves, because either alone is satisfied by a dead setup (#1249).
+
+    The steps live in one composite action now, so the pin is read there. An
+    action nothing calls is not a step, so the workflow is checked for the call
+    in the same test: with only the first assertion this would go on passing
+    over a workflow that had stopped preparing anything at all (L3).
+    """
+    setup = mac_build_setup.uncommented(mac_build_setup.action_text())
+    assert ".ci-xcode-version" in setup, (
+        f"{mac_build_setup.ACTION} does not read PostRollApp/.ci-xcode-version, "
+        "so the compiler CI uses is whatever the runner image happens to "
+        "default to and can move under the repo without a commit"
     )
-    assert ".ci-xcode-version" in body, (
-        "the macOS job does not read PostRollApp/.ci-xcode-version, so the "
-        "compiler CI uses is whatever the runner image happens to default to "
-        "and can move under the repo without a commit"
-    )
-    assert "xcode-select" in body, (
-        "the job reads the recorded version but never selects it, so the "
+    assert "xcode-select" in setup, (
+        "the action reads the recorded version but never selects it, so the "
         "recording is decoration"
+    )
+    calls = mac_build_setup.uncommented(SWIFT_WORKFLOW.read_text())
+    assert mac_build_setup.ACTION_REF in calls, (
+        "the macOS job never calls the action that selects the recorded Xcode, "
+        "so it compiles with the runner image's default"
     )
 
 

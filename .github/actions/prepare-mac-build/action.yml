@@ -1,0 +1,48 @@
+name: Prepare the Mac build
+description: >
+  Select the recorded Xcode, install XcodeGen and generate the project.
+
+  Shared by every job that compiles, so these steps exist ONCE (#1249). They
+  were written out four times across swift.yml, guards.yml and ui.yml, and a
+  guard anchored on the Xcode pin needs that text to appear exactly once in its
+  file: every entry in tests/fixtures/guard_mutations pins its target with a
+  `find` string that must match a single time, and two identical copies made
+  `ci-selects-the-recorded-xcode` unresolvable the first time the setup was
+  duplicated.
+
+  The caller carries its own `if:` on this whole step, so a gate that has to see
+  its own job's steps (the already-checked gate, the sweep's due gate) stays
+  where it can.
+runs:
+  using: composite
+  steps:
+    # Not the image default. A runner image updates its default Xcode without a
+    # commit here, which is how the compiler moved out from under the repo in
+    # the first place, so the version is read out of the file that
+    # tools/check_toolchain.py holds this Mac to (L25, L41). Absent is a hard
+    # failure naming what the image does have: falling back to the default
+    # would be the silent drift this step exists to stop.
+    - name: Select the recorded Xcode
+      shell: bash
+      run: |
+        version="$(cat PostRollApp/.ci-xcode-version)"
+        app="/Applications/Xcode_${version}.app"
+        if [ ! -d "${app}" ]; then
+          echo "PostRollApp/.ci-xcode-version asks for Xcode ${version}, which is not"
+          echo "on this runner image. What it has:"
+          ls -d /Applications/Xcode*.app
+          exit 1
+        fi
+        sudo xcode-select --switch "${app}"
+        xcodebuild -version
+
+    - name: Install XcodeGen
+      shell: bash
+      run: brew install xcodegen
+
+    # The .xcodeproj is generated from project.yml, so CI regenerates it rather
+    # than trusting a checked-in copy that may be behind the manifest.
+    - name: Generate the Xcode project
+      shell: bash
+      working-directory: PostRollApp
+      run: xcodegen generate

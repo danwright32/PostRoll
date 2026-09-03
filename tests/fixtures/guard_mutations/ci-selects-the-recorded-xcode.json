@@ -1,6 +1,6 @@
 {
   "name": "ci-selects-the-recorded-xcode",
-  "file": ".github/workflows/swift.yml",
+  "file": ".github/actions/prepare-mac-build/action.yml",
   "find": "sudo xcode-select --switch \"${app}\"",
   "replace": "echo \"would switch to ${app}\"",
   "test": "tests/test_toolchain_matches_ci.py::test_the_workflow_selects_the_recorded_xcode_rather_than_the_image_default",
