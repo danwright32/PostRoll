@@ -1,0 +1,8 @@
+{
+  "name": "the-recorder-follows-only-the-sweep",
+  "file": ".github/workflows/record-guard-costs.yml",
+  "find": "      || (github.event.workflow_run.event == 'schedule'",
+  "replace": "      || (github.event.workflow_run.event != 'never-a-real-event'",
+  "test": "tests/test_guard_costs_are_recorded_automatically.py::test_it_does_not_fire_on_every_pull_request",
+  "breaks": "the recorder follows EVERY run of the guard sweep, including the `changed` job on every pull request, and since --from REPLACES the record the whole registry would be priced from the handful of entries one diff happened to touch (#1262)"
+}

@@ -110,13 +110,92 @@ def test_it_never_becomes_a_check_a_pull_request_waits_on(workflow: str) -> None
     assert "pull_request:" not in uncommented(workflow)
 
 
-def test_it_runs_on_a_schedule_of_its_own(workflow: str) -> None:
+# ── it follows the sweep rather than a clock (#1262) ─────────────────────────
+#
+# It was scheduled at 09:00, "two hours after the sweep's own 07:00". The
+# premise was false: measured 2026-09-03, the last six scheduled runs of the
+# sweep actually STARTED at 11:55, 11:57, 12:21 and 14:50, because GitHub delays
+# scheduled workflows by hours under load. So the recorder ran hours BEFORE the
+# thing it was written to follow, every day, and the record stayed a day behind
+# while a confident sentence beside the cron said otherwise (L386).
+
+
+def _sweep_name() -> str:
+    """The sweep's declared name, read from ITS file rather than retyped here.
+
+    A `workflow_run` trigger matches on the upstream workflow's NAME, and a
+    name that matches nothing fires never: the recorder would simply stop, and
+    a workflow that never runs looks exactly like one with nothing to do (L100,
+    L98).
+    """
+    from pathlib import Path
+    text = (Path(__file__).resolve().parent.parent
+            / ".github" / "workflows" / "guards.yml").read_text()
+    first = next(line for line in text.splitlines() if line.startswith("name:"))
+    return first.split("name:", 1)[1].strip()
+
+
+def test_it_starts_when_the_sweep_finishes_rather_than_at_a_clock_time(
+        workflow: str) -> None:
     body = uncommented(workflow)
-    assert "schedule:" in body and "cron:" in body, (
-        "nothing runs this, so the record ages exactly as it did before")
-    assert "workflow_dispatch:" in body, (
-        "there is no way to ask for it, so a record that has drifted waits a "
-        "day for the next cron rather than being fixed now")
+    assert "workflow_run:" in body, (
+        "nothing ties this to the sweep, so whatever time it is given is a "
+        "guess about how late GitHub will start a scheduled job (#1262)")
+    assert "cron:" not in body, (
+        "a clock time is still here beside the trigger that makes it "
+        "unnecessary, so the run that fires first is whichever the platform "
+        "gets to, and one of the two is always recording nothing")
+
+
+def _followed_workflows(workflow: str) -> list[str]:
+    """The names in the `workflow_run` trigger's own list.
+
+    Parsed rather than searched for. Asking whether the sweep's name APPEARS in
+    the file is answered by any longer name containing it: written that way
+    first, this guard SURVIVED its mutation, because "Guard proofs sweep"
+    contains "Guard proofs" and GitHub would have matched neither (L178).
+    """
+    import re
+    line = re.search(r"^\s*workflows:\s*\[(.*)\]\s*$",
+                     uncommented(workflow), re.M)
+    assert line, ("the workflow_run trigger carries no workflows list, so it "
+                  "follows nothing and this check reads an empty set (L98)")
+    return [name.strip().strip('"\'') for name in line.group(1).split(",")]
+
+
+def test_it_names_the_sweep_by_the_name_the_sweep_declares(workflow: str) -> None:
+    assert _followed_workflows(workflow) == [_sweep_name()], (
+        f"the trigger follows {_followed_workflows(workflow)}, and "
+        f".github/workflows/guards.yml calls itself {_sweep_name()!r}. A name "
+        "that is not exactly that matches no workflow and fires never")
+
+
+def test_it_does_not_fire_on_every_pull_request(workflow: str) -> None:
+    """The trap in `workflow_run`: it fires for EVERY trigger of the upstream
+    workflow, and the sweep's `changed` job runs on every pull request. Without
+    a gate this would record from a run that proved the entries one diff
+    touched, and `--from` REPLACES the record, so the whole registry would be
+    priced from a handful of entries."""
+    body = uncommented(workflow)
+    assert "workflow_run.event == 'schedule'" in body, (
+        "the job does not check WHICH trigger produced the sweep it is "
+        "following, so it records from the per-pull-request run too")
+
+
+def test_it_does_not_record_from_a_sweep_that_failed(workflow: str) -> None:
+    assert "workflow_run.conclusion == 'success'" in uncommented(workflow), (
+        "a failed sweep would be recorded from, and a shard that died early "
+        "measured the entries it reached and nothing about the rest (L331)")
+
+
+def test_it_can_still_be_asked_for_by_hand(workflow: str) -> None:
+    """The gate must not exclude a manual run. A record that has drifted should
+    be fixable now rather than at the next sweep."""
+    body = uncommented(workflow)
+    assert "workflow_dispatch:" in body
+    assert "github.event_name == 'workflow_dispatch'" in body, (
+        "the schedule gate refuses a dispatched run too, so the manual trigger "
+        "is a control that does nothing (L109)")
 
 
 def test_it_opens_a_pull_request_rather_than_committing_to_main(workflow: str) -> None:
