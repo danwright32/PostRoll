@@ -74,7 +74,7 @@ struct CollaboratorPanel: View {
                 // ten times anyone's reach would silently never be offered, and
                 // nothing on screen would say why.
                 divider
-                Text("LEFT OUT ONLY FOR NOT BEING IN THE FIRST PHOTO")
+                Text(result.membership.leftOutHeading)
                     .font(.system(size: 9, weight: .medium))
                     .tracking(0.8)
                     .foregroundStyle(PaintedSurfaces.secondaryText)

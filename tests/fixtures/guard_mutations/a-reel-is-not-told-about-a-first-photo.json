@@ -1,0 +1,8 @@
+{
+  "name": "a-reel-is-not-told-about-a-first-photo",
+  "file": "PostRollApp/Sources/Services/CollaboratorPick.swift",
+  "find": "        let kind: MembershipKind = preset.isCollageCarousel(day) ? .firstPhoto : .onScreen",
+  "replace": "        let kind: MembershipKind = .firstPhoto",
+  "test": "PostRollTests/CollaboratorPickForDayTests/testAReelDoesNotTalkAboutAFirstPhoto",
+  "breaks": "a reel's block and panel describe the day in terms of a first photo it does not have, so every sentence about who is in it is a claim about something that does not exist on that day (#984, L11)"
+}

@@ -51,6 +51,126 @@ final class CollaboratorPickForDayTests: XCTestCase {
 
     private let everyone = ["first1", "first2", "other1", "other2", "other3", "other4"]
 
+    // MARK: - Who is actually in the reel (#984)
+    //
+    // On Tuesday and Thursday the candidate pool is the whole WEEK's tagged
+    // accounts, and the first photo rule that exists to stop a wasted invite
+    // never applies, because a reel has no first photo. So the app could
+    // suggest inviting somebody who does not appear in the reel at all, which
+    // is exactly the failure that rule was written to prevent on carousels,
+    // and a declined invite wastes one of only five slots.
+    //
+    // The issue proposed building the test from the clips or photos the reel is
+    // assembled from. Measured on the live store on 2026-09-03, that data does
+    // not exist: across all 21 events the reel days carry zero clips and zero
+    // photo tags, and not one of 2,133 reel photos is a file tagged on any
+    // other day. What IS recorded is `selectedPerformerIDs`, "performers
+    // selected as appearing in this day's photos", on 18 of 21 Thursdays.
+
+    private func performer(_ handle: String) -> Performer {
+        Performer(name: handle, handle: handle)
+    }
+
+    private func reelEvent(selecting selected: [String], tagging tagged: [String]) -> Event {
+        var event = carouselEvent()
+        let people = tagged.map(performer)
+        var ocr = OCRResult()
+        ocr.performers = people
+        event.ocrResult = ocr
+        var thu = PostingDay(day: .thursday)
+        thu.photoPaths = [photo("reel1.jpg"), photo("reel2.jpg")]
+        thu.tagHandles = tagged
+        thu.selectedPerformerIDs = people.filter { selected.contains($0.handle) }.map(\.id)
+        event.days[DayName.thursday.rawValue] = thu
+        return event
+    }
+
+    func testSomebodyOnScreenBeatsAStrongerAccountThatIsNot() {
+        // The same rule the first photo bias applies on a carousel, on the day
+        // it could not reach. An invite to somebody who does not appear asks
+        // them to host a post that does not show them, and they decline.
+        let event = reelEvent(selecting: ["onscreen"],
+                              tagging: ["onscreen", "absent", "a", "b", "c", "d"])
+        let table = ["onscreen": stats(1_000, 20, 2),
+                     "absent": stats(50_000, 5_000, 900),
+                     "a": stats(900, 10, 1), "b": stats(800, 9, 1),
+                     "c": stats(700, 8, 1), "d": stats(600, 7, 1)]
+
+        let result = CollaboratorPick.suggest(
+            event: event, day: .thursday, preset: .balanced,
+            stats: { table[AccountBook.key($0)] }, asOf: now)
+
+        XCTAssertEqual(result.suggested.first?.handle, "onscreen",
+                       "the strongest account was suggested for a reel it does "
+                       + "not appear in: \(result.suggested.map(\.handle))")
+    }
+
+    func testAReelWithNobodySelectedSaysItCannotTell() {
+        // Unknown is not "nobody is in it". Ranking as though the reel showed
+        // nobody would silently drop the bias for every account at once, and
+        // the surface would read exactly as it does when the check ran.
+        let event = reelEvent(selecting: [],
+                              tagging: ["onscreen", "absent", "a", "b", "c", "d"])
+        let table = ["onscreen": stats(1_000, 20, 2),
+                     "absent": stats(50_000, 5_000, 900),
+                     "a": stats(900, 10, 1), "b": stats(800, 9, 1),
+                     "c": stats(700, 8, 1), "d": stats(600, 7, 1)]
+
+        let result = CollaboratorPick.suggest(
+            event: event, day: .thursday, preset: .balanced,
+            stats: { table[AccountBook.key($0)] }, asOf: now)
+
+        XCTAssertFalse(result.notes.isEmpty,
+                       "the ranking is engagement only and nothing says so")
+        XCTAssertEqual(result.suggested.first?.handle, "absent",
+                       "with membership unknown the ranking is on figures alone")
+    }
+
+    func testAReelDoesNotTalkAboutAFirstPhoto() {
+        // A reel has none, so every sentence naming one is a claim about
+        // something that does not exist on this day (L11).
+        let event = reelEvent(selecting: ["onscreen"],
+                              tagging: ["onscreen", "absent", "a", "b", "c", "d"])
+        let table = ["onscreen": stats(1_000, 20, 2),
+                     "absent": stats(50_000, 5_000, 900),
+                     "a": stats(900, 10, 1), "b": stats(800, 9, 1),
+                     "c": stats(700, 8, 1), "d": stats(600, 7, 1)]
+
+        let result = CollaboratorPick.suggest(
+            event: event, day: .thursday, preset: .balanced,
+            stats: { table[AccountBook.key($0)] }, asOf: now)
+        let block = CollaboratorPick.captionBlock(result)
+
+        XCTAssertFalse(block.lowercased().contains("first photo"),
+                       "a reel's block talks about a photo it does not have: \(block)")
+        XCTAssertTrue(block.lowercased().contains("on screen"),
+                      "the block does not say what the bias actually is: \(block)")
+    }
+
+    func testACarouselStillTalksAboutItsFirstPhoto() {
+        // The other half of the same rule. Both days say what they mean, and
+        // one wording for both would be wrong on whichever day it did not fit.
+        let result = CollaboratorPick.suggest(
+            event: carouselEvent(), day: .wednesday, preset: .balanced,
+            stats: lookup(everyone), asOf: now)
+
+        XCTAssertTrue(CollaboratorPick.captionBlock(result).lowercased()
+                        .contains("first photo"))
+    }
+
+    func testThePanelHeadingDoesNotNameAPhotoAReelDoesNotHave() throws {
+        // The same claim as the block, on the screen beside it. A heading typed
+        // in the view is one the two surfaces can disagree about, and on a reel
+        // it names something that does not exist.
+        let code = try source("Views/CollaboratorPanel.swift")
+
+        XCTAssertTrue(code.contains("result.membership.leftOutHeading"),
+                      "the panel spells the heading itself, so a reel is told "
+                      + "about a first photo it does not have")
+        XCTAssertFalse(code.contains("NOT BEING IN THE FIRST PHOTO"),
+                       "the literal is still there to be drawn on a reel")
+    }
+
     // MARK: - The event's own accounts (#985)
     //
     // On a collage carousel the pool was only the people tagged in that day's
