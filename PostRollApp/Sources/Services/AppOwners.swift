@@ -62,6 +62,30 @@ extension AppOwners {
         }
     }
 
+    /// Ask about the archive's recurring accounts, which nothing ever has (#1268).
+    ///
+    /// Here for the same reason `connectTheHandleTrigger` is: this is the one
+    /// place that already knows about both the events and the fetch, and
+    /// neither should have to know about the other.
+    ///
+    /// Called at launch, and safe to call at every launch: `archiveBackfill`
+    /// answers with the recurring accounts no fetch has yet reached, so it goes
+    /// permanently quiet once they are answered and there is no marker to be
+    /// written by a launch that fetched nothing (L368). A failed run leaves the
+    /// handles exactly as due as they were.
+    ///
+    /// The stats reader is a parameter so a test can drive this without the
+    /// shared book, and defaults to the book the app actually keeps.
+    func backfillTheArchive(events: [Event],
+                            stats: (String) -> AccountStats? = {
+                                AccountBook.shared.stats(for: $0)
+                            },
+                            asOf now: Date = Date()) {
+        let handles = AccountFetchDue.archiveBackfill(events: events, stats: stats)
+        guard !handles.isEmpty else { return }
+        accountNumbers.handlesSettled(handles, asOf: now)
+    }
+
     /// Everything running right now, phrased for a sentence (#862).
     ///
     /// Derived from this struct rather than written out again, for the same
