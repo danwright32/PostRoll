@@ -141,36 +141,12 @@ jobs:
         run: python3 tools/check_tree_already_checked.py --check "swift-unit"
 
 
-      # Not the image default. A runner image updates its default Xcode without
-      # a commit here, which is how the compiler moved out from under the repo
-      # in the first place, so the version is read out of the file that
-      # tools/check_toolchain.py holds this Mac to (L25, L41). Absent is a hard
-      # failure naming what the image does have: falling back to the default
-      # would be the silent drift this step exists to stop.
-      - name: Select the recorded Xcode
+      # The pinned Xcode, XcodeGen and the generated project, in one place
+      # shared with guards.yml and ui.yml (#1249). The `if:` stays HERE rather
+      # than inside the action, because the gate reads a step of THIS job.
+      - name: Prepare the Mac build
         if: steps.already.outputs.run != 'false'
-        run: |
-          version="$(cat PostRollApp/.ci-xcode-version)"
-          app="/Applications/Xcode_${version}.app"
-          if [ ! -d "${app}" ]; then
-            echo "PostRollApp/.ci-xcode-version asks for Xcode ${version}, which is not"
-            echo "on this runner image. What it has:"
-            ls -d /Applications/Xcode*.app
-            exit 1
-          fi
-          sudo xcode-select --switch "${app}"
-          xcodebuild -version
-
-      - name: Install XcodeGen
-        if: steps.already.outputs.run != 'false'
-        run: brew install xcodegen
-
-      # The .xcodeproj is generated from project.yml, so CI regenerates it
-      # rather than trusting a checked-in copy that may be behind the manifest.
-      - name: Generate the Xcode project
-        if: steps.already.outputs.run != 'false'
-        working-directory: PostRollApp
-        run: xcodegen generate
+        uses: ./.github/actions/prepare-mac-build
       # There is deliberately NO DerivedData build cache here any more (#991).
       #
       # It restored on every run and prevented no compilation at all. Measured

@@ -124,24 +124,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Select the recorded Xcode
-        run: |
-          version="$(cat PostRollApp/.ci-xcode-version)"
-          app="/Applications/Xcode_${version}.app"
-          if [ ! -d "${app}" ]; then
-            echo "PostRollApp/.ci-xcode-version asks for Xcode ${version}, which is not"
-            echo "on this runner image. What it has:"
-            ls -d /Applications/Xcode*.app
-            exit 1
-          fi
-          sudo xcode-select --switch "${app}"
-
-      - name: Install XcodeGen
-        run: brew install xcodegen
-
-      - name: Generate the Xcode project
-        working-directory: PostRollApp
-        run: xcodegen generate
+      # Shared with swift.yml and ui.yml (#1249).
+      - name: Prepare the Mac build
+        uses: ./.github/actions/prepare-mac-build
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -320,27 +305,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python tools/check_guard_sweep_due.py --shard ${{ matrix.shard }}
 
-      - name: Select the recorded Xcode
+      # Shared with swift.yml and ui.yml (#1249). The `if:` stays HERE: it is
+      # what keeps a quiet day from paying for the whole setup, and it reads a
+      # step of THIS job.
+      - name: Prepare the Mac build
         if: steps.due.outputs.due == 'true'
-        run: |
-          version="$(cat PostRollApp/.ci-xcode-version)"
-          app="/Applications/Xcode_${version}.app"
-          if [ ! -d "${app}" ]; then
-            echo "PostRollApp/.ci-xcode-version asks for Xcode ${version}, which is not"
-            echo "on this runner image. What it has:"
-            ls -d /Applications/Xcode*.app
-            exit 1
-          fi
-          sudo xcode-select --switch "${app}"
-
-      - name: Install XcodeGen
-        if: steps.due.outputs.due == 'true'
-        run: brew install xcodegen
-
-      - name: Generate the Xcode project
-        if: steps.due.outputs.due == 'true'
-        working-directory: PostRollApp
-        run: xcodegen generate
+        uses: ./.github/actions/prepare-mac-build
 
       - name: Install dependencies
         if: steps.due.outputs.due == 'true'

@@ -1,0 +1,8 @@
+{
+  "name": "the-setup-is-not-copied-back-into-a-workflow",
+  "file": ".github/workflows/swift.yml",
+  "find": "        uses: ./.github/actions/prepare-mac-build",
+  "replace": "        run: brew install xcodegen",
+  "test": "tests/test_mac_build_setup_is_shared.py::test_no_workflow_keeps_its_own_copy_of_the_setup",
+  "breaks": "a workflow spells part of the Mac build setup out again, which is the four-copy shape #1249 removed and the one that makes a guard registry anchor match two places in one file and stop resolving"
+}

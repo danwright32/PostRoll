@@ -153,25 +153,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Select the recorded Xcode
-        run: |
-          version="$(cat PostRollApp/.ci-xcode-version)"
-          app="/Applications/Xcode_${version}.app"
-          if [ ! -d "${app}" ]; then
-            echo "PostRollApp/.ci-xcode-version asks for Xcode ${version}, which is not"
-            echo "on this runner image. What it has:"
-            ls -d /Applications/Xcode*.app
-            exit 1
-          fi
-          sudo xcode-select --switch "${app}"
-          xcodebuild -version
-
-      - name: Install XcodeGen
-        run: brew install xcodegen
-
-      - name: Generate the Xcode project
-        working-directory: PostRollApp
-        run: xcodegen generate
+      # Shared with swift.yml and guards.yml (#1249).
+      - name: Prepare the Mac build
+        uses: ./.github/actions/prepare-mac-build
 
       # Whether there is a window server session to draw into at all, asked
       # before anything tries to use one. A UI test that cannot launch reports a

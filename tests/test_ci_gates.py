@@ -31,6 +31,8 @@ from pathlib import Path
 
 import pytest
 
+from tests import mac_build_setup
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
@@ -156,6 +158,10 @@ def test_the_reference_frame_job_does_not_pay_for_a_build(swift):
         "the reference-frame job builds the app, which it never uses")
     assert "xcodegen" not in frames, (
         "the reference-frame job generates the Xcode project, which it never uses")
+    assert mac_build_setup.ACTION_REF not in frames, (
+        "the reference-frame job runs the shared Mac build setup, which since "
+        "#1249 is the one-line way to add exactly the Xcode work this job has "
+        "no use for")
 
 
 def test_pull_requests_still_run_the_app_checks(swift):
@@ -227,7 +233,15 @@ def test_it_regenerates_the_project_rather_than_trusting_the_checked_in_copy(swi
     # project.yml is the manifest; the .xcodeproj is generated from it, so a
     # stale checked-in copy would test a different set of files than the repo
     # describes.
-    assert "xcodegen generate" in swift
+    #
+    # Through the shared action since #1249, and asked of the UNCOMMENTED text
+    # in both places. The moment the command moved out of this file, the words
+    # `xcodegen generate` survived here in a comment ABOUT the generation, and
+    # this guard went on passing over a workflow that no longer did it (L103).
+    assert mac_build_setup.ACTION_REF in mac_build_setup.uncommented(swift), (
+        "swift-unit does not call the action that generates the project")
+    assert "xcodegen generate" in mac_build_setup.uncommented(
+        mac_build_setup.action_text())
 
 
 # ── the reference frames have somewhere to run (#163) ─────────────────────────
@@ -494,7 +508,13 @@ def test_every_expensive_step_of_the_sweep_is_behind_the_due_gate(guards):
     day it lands rather than the day somebody remembers this file (L96).
     """
     gate = "steps.due.outputs.due == 'true'"
-    costly = re.compile(r"brew install|xcodegen generate|pip install|check_guards\.py")
+    # The action reference counts as costly since #1249: the three setup steps
+    # moved into it, so a pattern naming only the commands stopped matching them
+    # and this guard would have gone on passing while the sweep paid for the
+    # whole setup on a quiet day (L247).
+    costly = re.compile(
+        r"brew install|xcodegen generate|pip install|check_guards\.py"
+        r"|" + re.escape(mac_build_setup.ACTION_REF))
     ungated = [name for name, text in _steps(_full_job(guards))
                if costly.search(text) and gate not in text]
     assert not ungated, (

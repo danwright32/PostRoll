@@ -1,0 +1,8 @@
+{
+  "name": "a-compiling-job-prepares-its-project",
+  "file": ".github/workflows/ui.yml",
+  "find": "        uses: ./.github/actions/prepare-mac-build",
+  "replace": "        run: echo \"nothing prepared\"",
+  "test": "tests/test_mac_build_setup_is_shared.py::test_every_job_that_runs_xcodebuild_prepares_through_the_action",
+  "breaks": "a job runs xcodebuild without generating the project first, so it compiles a checked-in .xcodeproj that may be behind the manifest, or fails outright when there is none (#1249)"
+}
