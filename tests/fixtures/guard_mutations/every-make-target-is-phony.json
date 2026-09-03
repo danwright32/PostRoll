@@ -1,8 +1,8 @@
 {
   "name": "every-make-target-is-phony",
   "file": "Makefile",
-  "find": "record-design-change record-codec-change review-sheet clean",
-  "replace": "record-design-change review-sheet clean",
+  "find": "record-design-change record-codec-change review-sheet collage-arrangements clean",
+  "replace": "record-design-change review-sheet collage-arrangements clean",
   "test": "tests/test_readme_documents_every_make_target.py::test_every_target_is_declared_phony",
   "breaks": "a make rule is not declared .PHONY, so a file or folder of that name beside the Makefile makes the target a no-op that reports success. `record-test-durations` and `record-design-change` were both in that state"
 }

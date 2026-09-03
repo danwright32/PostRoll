@@ -23,7 +23,7 @@ PROJECT   := PostRollApp/PostRoll.xcodeproj
 	test-python-fast \
 	check-guards check-toolchain record-fingerprints record-test-durations \
 	build-gui-tests \
-	record-design-change record-codec-change review-sheet clean
+	record-design-change record-codec-change review-sheet collage-arrangements clean
 
 # One build-and-install implementation, not two. This used to run its own
 # xcodebuild and cp, skipping the xattr clear, the stable-identity signing and
@@ -271,6 +271,20 @@ record-fingerprints:
 # lightbox group absent. A spec matching nothing is not a pass (L98), so the
 # count of groups that reported is held to the count of tests asked for.
 
+
+# Every collage arrangement the chooser could hand over, drawn (#923).
+#
+# The phone chrome overlay in the app shows the collage that WAS rendered, so it
+# answers "is this frame safe" and cannot answer "is every arrangement the
+# chooser might give me safe". That is how #921 shipped: the collage on screen
+# looked fine and the one burying three of seven photographs was one press of
+# New layout away.
+#
+# This draws the pool instead, rejected arrangements included, because a sheet
+# of survivors looks exactly like a filter that rejects nothing.
+collage-arrangements:
+	@venv/bin/python tools/render_collage_arrangements.py \
+		--out "$(BUILD_DIR)/collage-arrangements" $(if $(COUNT),--count $(COUNT),)
 
 review-sheet:
 	out=$$($(LOCKED) xcodebuild -project "$(PROJECT)" -scheme PostRollTests \
