@@ -1,3 +1,4 @@
+import SwiftUI
 import XCTest
 
 /// #279, #280: what typing into the numbers form actually stores.
@@ -116,7 +117,42 @@ final class AccountNumbersEntryTests: XCTestCase {
             XCTAssertTrue(handler.contains("neverInvite: neverInvite"),
                           "\(file) drops the never invite mark on the way to "
                           + "the book, so ticking the box does nothing")
+            XCTAssertTrue(handler.contains("acceptedInvites: accepted")
+                          && handler.contains("declinedInvites: declined"),
+                          "\(file) drops what came of the invites on the way to "
+                          + "the book, so the ranking never learns anything")
         }
+    }
+
+    /// The form grew from three fields to seven controls across #982, #1271 and
+    /// #986, and it is a fixed width sheet with no scroll region, so the thing
+    /// that breaks first is the Save button going off the bottom of a window it
+    /// no longer fits in. That is invisible to every other check here, which
+    /// reads the source rather than the rendered surface (L79).
+    ///
+    /// Measured against the height the app actually opens its window at, not a
+    /// number chosen here, so the two cannot drift apart (L63).
+    ///
+    /// Measured 2026-09-03: 668pt against a 760pt window, so there is about
+    /// 92pt of headroom and roughly one more control's worth of room. The bound
+    /// is the hard one rather than a margin invented here, so this fails when
+    /// the form genuinely cannot be completed; the number above is what says
+    /// how close it already is. Re-read it by running this with the bound set
+    /// to 1.
+    @MainActor
+    func testTheNumbersFormStillFitsInTheWindow() throws {
+        let sheet = AccountNumbersSheet(handle: "janecellist", stats: nil,
+                                        onSave: { _, _, _, _, _, _, _ in },
+                                        onCancel: { })
+        let rendered = try WordFootprint.imageRendered(sheet, wordless: false)
+        // The renderer draws at scale 2.
+        let height = CGFloat(rendered.pixelsHigh) / 2
+
+        XCTAssertLessThan(height, WindowMetrics.defaultHeight,
+                          "the numbers form is \(Int(height))pt tall against a "
+                          + "\(Int(WindowMetrics.defaultHeight))pt window, so "
+                          + "the Save button is off the bottom and the form "
+                          + "cannot be completed at all")
     }
 
     private static func source(_ path: String) throws -> String {

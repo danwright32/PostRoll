@@ -55,6 +55,7 @@ struct PostRollApp: App {
     /// it cannot drift apart.
     static let mainWindowID = "main"
 
+
     @State private var appState = AppState()
     @State private var hashtagStore = HashtagStore()
     @State private var analyticsStore = AnalyticsStore()
@@ -146,7 +147,8 @@ struct PostRollApp: App {
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified)
-        .defaultSize(width: 1200, height: 760)
+        .defaultSize(width: WindowMetrics.defaultWidth,
+                     height: WindowMetrics.defaultHeight)
         .commands {
             SheetCommands(appState: appState)
             CommandGroup(replacing: .help) {
