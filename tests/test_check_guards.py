@@ -1839,17 +1839,25 @@ def test_a_failed_warm_build_is_loud_and_does_not_stop_the_run(repo: Path,
 def test_the_warm_build_is_inside_the_deadlines_clock(repo: Path, tmp_path: Path):
     """A build outside the clock is time the deadline cannot see, and the
     deadline exists because the runner's own cap reports CANCELLED, which is
-    indistinguishable from a superseded run (#1086)."""
+    indistinguishable from a superseded run (#1086).
+
+    The clock is SET rather than waited on, so this asserts about the sweep
+    rather than about how loaded the machine is, and it costs nothing (L290,
+    L524). Sleeping for a real 5 seconds would be the same assertion, slower,
+    and would flake on a busy runner.
+    """
     with_shared_cache(repo)
+    clock = [0.0]
 
     def runner(cmd: list[str], cwd: Path) -> tuple[int, str]:
         if "build-for-testing" in cmd:
-            time.sleep(0.05)
+            clock[0] += 5.0
         return 65, SWIFT_RED
 
     lines: list[str] = []
     check_guards(repo, swift_registry(tmp_path, "one", "two"), runner,
-                 deadline_seconds=0.01, log=lines.append)
+                 deadline_seconds=1.0, log=lines.append,
+                 now=lambda: clock[0])
 
     said = "\n".join(lines)
     # Both entries unreached is what discriminates. A deadline started AFTER

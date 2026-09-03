@@ -1091,7 +1091,7 @@ class WarmBuild:
 
 
 def warm_the_build(entries: list[Entry], repo_root: Path, runner,
-                   log=say) -> WarmBuild | None:
+                   log=say, now=time.monotonic) -> WarmBuild | None:
     """Build the app ONCE, before any entry runs (#1096).
 
     The first Swift entry of each shard used to pay for the cold build that
@@ -1119,10 +1119,10 @@ def warm_the_build(entries: list[Entry], repo_root: Path, runner,
     command = swift_invocation(repo_root) + ["build-for-testing"]
     log("building the app once before the loop, so no entry below carries it "
         "(#1096)")
-    started = time.monotonic()
+    started = now()
     with build_lock(build_lock_path(repo_root), log=log):
         code, output = runner(command, repo_root)
-    seconds = time.monotonic() - started
+    seconds = now() - started
     if code != 0:
         # Loud, and NOT fatal. Every Swift entry below will report ERROR for a
         # reason that has nothing to do with its guard, and this is the one line
@@ -1406,7 +1406,7 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
                  deadline_seconds: float | None = None,
                  timings_path: Path | None = None,
                  blocking: set[str] | None = None,
-                 log=say) -> int:
+                 log=say, now=time.monotonic) -> int:
     # Installed here rather than in main() so every caller that can perturb the
     # tree is covered, including the tests that drive this directly (#547).
     install_interrupt_restore(repo_root, log=log)
@@ -1514,15 +1514,15 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
     # building is two minutes short, and what catches the overrun is the
     # runner's own cap, which reports CANCELLED: the same thing a superseded run
     # reports, which is the confusion #1086 exists to remove.
-    started = time.monotonic()
-    warm = warm_the_build(entries, repo_root, runner, log=log)
+    started = now()
+    warm = warm_the_build(entries, repo_root, runner, log=log, now=now)
     for number, entry in enumerate(entries, start=1):
         # Stop ourselves rather than let the runner's cap do it. A job killed by
         # `timeout-minutes` reports CANCELLED, which is also what a superseded
         # run reports, so the sweep running out of time was indistinguishable
         # from one that was replaced, and it went unnoticed for a day (L11).
         if deadline_seconds is not None \
-                and time.monotonic() - started >= deadline_seconds:
+                and now() - started >= deadline_seconds:
             unproven = entries[number - 1:]
             held = [e for e in unproven
                     if blocking_names is None or e.name in blocking_names]
@@ -1541,7 +1541,7 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
             break
         # How far in and how long so far, on every line, because the thing a
         # person watching needs to tell apart is progress from a hang (#641).
-        where = f"[{number} of {len(entries)}, {time.monotonic() - started:.0f}s]"
+        where = f"[{number} of {len(entries)}, {now() - started:.0f}s]"
         log(f"{where} {entry.name}: breaking {entry.file} "
             f"({entry.breaks}), expecting {entry.test} to go red")
         result = run_entry(entry, repo_root, runner, log=log)
