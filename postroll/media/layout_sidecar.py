@@ -52,30 +52,6 @@ def write_layout_sidecar(path: Path | str, cells: list[dict[str, Any]],
     Path(path).write_text(json.dumps(document), encoding="utf-8")
 
 
-def read_layout_strip(path: Path | str) -> tuple[int, int] | None:
-    """Where the branded strip sat in this layout, or None if it records no strip.
-
-    Separate from `read_layout_sidecar` rather than widening its tuple, because
-    every existing caller wants the cells and none of them wants this: adding a
-    third element would have meant touching four call sites to ignore it.
-
-    Never raises, for the same reason the reader below does not: a sidecar
-    without a strip is every one written before #970, and the answer for those
-    is honestly "not recorded" rather than a guess.
-    """
-    try:
-        doc = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, ValueError, TypeError):
-        return None
-    strip = doc.get("strip") if isinstance(doc, dict) else None
-    if not isinstance(strip, dict):
-        return None
-    y, height = strip.get("y"), strip.get("h")
-    if not isinstance(y, int) or not isinstance(height, int) or height <= 0:
-        return None
-    return y, height
-
-
 def read_layout_sidecar(path: Path | str) -> tuple[int | None, list[dict[str, Any]]]:
     """The (version, cells) in a sidecar, tolerating every shape on disk.
 

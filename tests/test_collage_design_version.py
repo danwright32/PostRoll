@@ -20,7 +20,8 @@ from pathlib import Path
 import pytest
 
 from postroll.media import design_tokens as tokens
-from postroll.media.layout_sidecar import layout_sidecar_path, read_layout_sidecar
+from postroll.media.layout_sidecar import (
+    layout_sidecar_path, read_layout_sidecar, write_layout_sidecar)
 from tests.source_text import swift_without_comments
 
 
@@ -108,44 +109,53 @@ def test_the_sidecar_records_where_the_strip_sat(tmp_path, sample_photo):
     dragged cells is what let a row grow over the branding unchallenged, so the
     sidecar has to actually carry it.
     """
+    from PIL import Image
+
     from postroll.media.generate_collage import (
         STRIP_H, generate_collage, plan_base_layout)
-    from postroll.media.layout_sidecar import read_layout_strip
 
     photos = [str(sample_photo)] * 7
     out = tmp_path / "collage.png"
     generate_collage(photos, str(out), event_name="E", org="O", venue="V", seed=7)
 
-    band = read_layout_strip(layout_sidecar_path(out))
+    # The raw JSON, not a round trip through a Python reader. What has to be
+    # right is the shape `LayoutSidecar.Contents` decodes, and reading it back
+    # through a reader written beside the writer would only confirm the two
+    # agree with each other (L52).
+    written = json.loads(layout_sidecar_path(out).read_text(encoding="utf-8"))
+    band = written.get("strip")
     assert band is not None, "the sidecar records no strip, so the editor infers one"
+    assert set(band) == {"y", "h"}, (
+        f"the editor decodes `y` and `h`, and this carries {sorted(band)}")
 
-    strip_y, height = band
-    assert height == STRIP_H
-    from PIL import Image
+    assert band["h"] == STRIP_H
     ratio = Image.open(sample_photo).width / Image.open(sample_photo).height
-    assert strip_y == plan_base_layout([ratio] * 7, 7)[3], (
+    assert band["y"] == plan_base_layout([ratio] * 7, 7)[3], (
         "the recorded band is not where this layout actually put the strip")
 
 
-def test_a_sidecar_without_a_band_reads_as_not_recorded(tmp_path):
-    """Every collage rendered before #970 has no `strip`, and the honest answer
-    for those is None rather than a band at zero: the checks that read it
-    decline to judge rather than refusing layouts for a position nobody chose
-    (L214)."""
-    import json
+def test_a_layout_with_no_strip_records_none(tmp_path, sample_photo):
+    """A layout with no strip records no key, rather than a band at zero.
 
-    from postroll.media.layout_sidecar import read_layout_strip
+    The editor reads a missing key as "not recorded" and declines to judge the
+    band, which is also the honest answer for every collage rendered before
+    #970. A zero height band would be a different claim, and reading one would
+    refuse cells against a position nobody chose (L214, L257).
+    """
+    from postroll.media.generate_collage import STRIP_H, generate_collage
 
-    path = tmp_path / "old_layout.json"
-    path.write_text(json.dumps({"version": 1, "cells": []}), encoding="utf-8")
-    assert read_layout_strip(path) is None
+    # A reel strip has no branded band, and the writer omits the key entirely
+    # rather than recording one at zero. That distinction is what lets the
+    # editor tell "no band here" from "a band with no thickness", which would
+    # judge every cell against a line.
+    write_layout_sidecar(tmp_path / "reel_layout.json", [], strip=None)
+    written = json.loads((tmp_path / "reel_layout.json").read_text(encoding="utf-8"))
+    assert "strip" not in written
 
-    path.write_text(json.dumps([{"photo_path": "/a.jpg", "x": 0, "y": 0, "w": 1, "h": 1}]),
-                    encoding="utf-8")
-    assert read_layout_strip(path) is None, "a bare array predates the envelope"
-
-    path.write_text(json.dumps({"version": 1, "cells": [], "strip": {"y": 400, "h": 0}}),
-                    encoding="utf-8")
-    assert read_layout_strip(path) is None, (
-        "a band with no thickness is a malformed record, and reading it as a "
-        "real band would judge every cell against a line rather than a band")
+    # And the collage's is present, so the absence above is a real difference
+    # rather than a writer that never records one (L159).
+    out = tmp_path / "collage.png"
+    generate_collage([str(sample_photo)] * 4, str(out),
+                     event_name="E", org="O", venue="V", seed=3)
+    assert json.loads(
+        layout_sidecar_path(out).read_text(encoding="utf-8"))["strip"]["h"] == STRIP_H
