@@ -345,6 +345,150 @@ enum CollaboratorPick {
     /// and refused outright when the day's tag data names a photo set the day
     /// no longer has. Refused rather than read: guessing here does not fail
     /// loudly, it credits the wrong person while looking entirely reasonable.
+    /// A later photo worth moving to the front of the carousel (#983).
+    ///
+    /// On a collage carousel only the first photo appears in the feed, and the
+    /// ranking treats that order as fixed: `better` biases hard toward whoever
+    /// is in the visible image, because somebody who is not in it usually
+    /// declines and a declined invite wastes one of five slots. The order
+    /// itself was never questioned, so a post whose strongest accounts sit in
+    /// photo 3 was ranked around that fact rather than told it could lead with
+    /// photo 3.
+    struct PhotoPromotion: Equatable {
+        /// Where the photo sits today, zero based, so a sentence can say
+        /// "photo 3" by adding one in the one place that renders it.
+        let index: Int
+        let photo: URL
+        /// The strongest account that photo carries.
+        let best: Candidate
+        /// The strongest the first photo carries today, or nil when it carries
+        /// nobody who can be ranked. Both are needed: the sentence has to say
+        /// what is being given up as well as what is being gained.
+        let current: Candidate?
+    }
+
+    /// The photo worth leading with, or nil when the one in front already is.
+    ///
+    /// Fires on ANY improvement rather than behind a "much stronger" threshold.
+    /// A threshold is a second constant to calibrate against a population
+    /// nobody has measured, and the honest answer to "is this reorder worth it"
+    /// is Dan's, not a number's. The cost of the broader trigger is noise, so
+    /// the firing rate is worth measuring against real events once figures
+    /// exist (L36).
+    ///
+    /// Compared with `better`, the same predicate the ranking itself sorts on,
+    /// so there is one ranking rule in the codebase and no second definition to
+    /// drift (L107). `respectingFirstPhoto` is off here deliberately: this
+    /// question is about which photo SHOULD be in front, so a bias toward
+    /// whoever is in front already would answer it with its own premise.
+    static func photoToPromote(event: Event, day: DayName, preset: PostingPreset,
+                               stats: (String) -> AccountStats?,
+                               asOf now: Date) -> PhotoPromotion? {
+        // Collage carousels only. A reel and a single image have no first photo
+        // to be in, so there is no lead to improve.
+        guard preset.isCollageCarousel(day),
+              let posting = event.days[day.rawValue],
+              posting.photoPaths.count > 1
+        else { return nil }
+
+        let strongestPerPhoto = posting.photoPaths.map { photo in
+            strongest(of: CaptionBlocks.photoTags(posting, for: photo),
+                      stats: stats, asOf: now)
+        }
+        guard let lead = strongestPerPhoto.first else { return nil }
+
+        // The best of ALL the later photos, not the first one that beats the
+        // lead: naming an improvement while a larger one sits further along
+        // spends the single suggestion on the smaller of the two.
+        var best: (index: Int, candidate: Rankable)?
+        for (index, contender) in strongestPerPhoto.enumerated().dropFirst() {
+            guard let contender else { continue }
+            if let lead, !better(contender, than: lead, respectingFirstPhoto: false) {
+                continue
+            }
+            if let found = best?.candidate,
+               !better(contender, than: found, respectingFirstPhoto: false) {
+                continue
+            }
+            best = (index, contender)
+        }
+
+        guard let best else { return nil }
+        return PhotoPromotion(index: best.index,
+                              photo: posting.photoPaths[best.index],
+                              best: best.candidate.candidate,
+                              current: lead?.candidate)
+    }
+
+    /// What the control offering the reorder is called.
+    ///
+    /// The index is zero based and the sentence people read is not, so the plus
+    /// one lives here, once, rather than at each surface with one of them
+    /// forgetting.
+    static func promotionControlLabel(for promotion: PhotoPromotion) -> String {
+        "Make photo \(promotion.index + 1) first"
+    }
+
+    /// What pressing it costs, derived from the day rather than asserted.
+    ///
+    /// `generate_collage.py` fills cells positionally and takes the row heights
+    /// from the photo aspect ratios in order, so a reorder lays the collage out
+    /// again. Whether that THROWS ANYTHING AWAY depends on the day: a cell
+    /// layout Dan picked, or crops he set, are keyed to the old order and
+    /// cannot survive it.
+    ///
+    /// Two sentences rather than one worded for the worst case, because a
+    /// warning shown on every post carries no information and reads identically
+    /// whether it is discarding nothing or an afternoon of work (L180).
+    static func promotionCostLine(dropsLayout: Bool) -> String {
+        dropsLayout
+            ? "The collage is laid out again from the new order, so the cell "
+              + "layout and crops set on this day are cleared."
+            : "The collage is laid out again from the new order."
+    }
+
+    /// Why the reorder is worth making, in the voice of the rest of the block.
+    static func promotionReason(_ promotion: PhotoPromotion) -> String {
+        let gained = "Photo \(promotion.index + 1) tags \(promotion.best.handle) "
+                   + "(\(promotion.best.reason))."
+        guard let current = promotion.current else {
+            // Nobody in the visible image can be ranked at all, which is a
+            // different and stronger reason than one account beating another.
+            return "The first photo tags nobody who can be ranked, so the image "
+                 + "in the feed credits nobody who can usefully collaborate. "
+                 + gained
+        }
+        return "The first photo leads with \(current.handle) (\(current.reason)). "
+             + gained
+    }
+
+    /// The strongest rankable account among some handles, or nil when none of
+    /// them can be ranked at all.
+    ///
+    /// Built with no first photo distinction, because this is the question that
+    /// decides which photo goes in front: an account cannot be credited for
+    /// being in the photo whose position is under discussion.
+    private static func strongest(of handles: [String],
+                                  stats: (String) -> AccountStats?,
+                                  asOf now: Date) -> Rankable? {
+        handles
+            .map(CaptionBlocks.bareUsername)
+            .filter { !$0.isEmpty }
+            .map(AccountBook.key)
+            .map { key -> Candidate in
+                let known = stats(key)
+                let scored = score(known)
+                return Candidate(handle: key, stats: known, inFirstPhoto: false,
+                                 rate: scored?.rate,
+                                 rateIsAssumed: scored?.assumed ?? false,
+                                 reason: reasonText(stats: known, scored: scored,
+                                                    inFirstPhoto: false,
+                                                    appliesFirstPhoto: false, asOf: now))
+            }
+            .compactMap(Rankable.init)
+            .max { better($1, than: $0, respectingFirstPhoto: false) }
+    }
+
     static func firstPhotoHandles(event: Event, day: DayName,
                                   preset: PostingPreset) -> FirstPhotoMembership {
         // A reel or a single-image post has no first photo to be in.
@@ -439,14 +583,29 @@ enum CollaboratorPick {
         + "approved followers, so they are ranked last rather than asked for "
         + "numbers."
 
-    /// The unranked list split into the two different things it holds.
+    /// The unranked list split into the two different things it holds (#982).
+    ///
+    /// Shared rather than filtered again at each surface. #982 gave the caption
+    /// block its own sentence for a private account and left the panel drawing
+    /// the same account under a heading reading "not counted yet, so not
+    /// ranked", so the heading contradicted the row beneath it. Sharing the
+    /// DATA while copying the code that applies it is not consolidation (L370).
+    ///
+    /// `waiting` is the half a number would fix. `marked` can never be counted
+    /// by anybody.
+    static func splitUnranked(_ unranked: [Candidate])
+        -> (waiting: [Candidate], marked: [Candidate]) {
+        (unranked.filter { $0.stats?.isPrivate != true },
+         unranked.filter { $0.stats?.isPrivate == true })
+    }
+
+    /// The unranked list rendered for the caption block.
     ///
     /// Named rather than counted in both halves, so it is visible WHO is in
     /// which state and the remedy, where there is one, can be acted on without
     /// opening the app.
     private static func unrankedLines(_ unranked: [Candidate]) -> [String] {
-        let marked = unranked.filter { $0.stats?.isPrivate == true }
-        let waiting = unranked.filter { $0.stats?.isPrivate != true }
+        let (waiting, marked) = splitUnranked(unranked)
         var lines: [String] = []
         if !waiting.isEmpty {
             lines.append("Not counted yet, so not ranked: "

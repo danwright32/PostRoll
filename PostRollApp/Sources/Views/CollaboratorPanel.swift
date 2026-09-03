@@ -22,6 +22,20 @@ struct CollaboratorPanel: View {
     /// Open the numbers form for one account. The whole ranking runs on figures
     /// Dan enters, so the way to enter them is beside the names being ranked.
     let onEditNumbers: (String) -> Void
+    /// A later photo worth leading with, and the press that does it (#983).
+    /// Nil when the photo in front already leads, or the day has no first photo
+    /// to improve. ONE parameter rather than three: this view is built inside
+    /// `CaptionReviewView`'s body, which is at the type checker's limit.
+    var lead: PhotoLead?
+
+    /// Everything the reorder suggestion needs, in one value.
+    struct PhotoLead {
+        let promotion: CollaboratorPick.PhotoPromotion
+        /// Whether this day actually has a cell layout or crops to lose, read
+        /// off the day rather than assumed, so the warning is not boilerplate.
+        let dropsLayout: Bool
+        let promote: () -> Void
+    }
 
     /// What this day's answer is, in a sentence (#964, #1115).
     ///
@@ -70,14 +84,62 @@ struct CollaboratorPanel: View {
                 row(rank: "", candidate: excluded)
             }
 
-            if !result.unranked.isEmpty {
+            // Two different states, two headings (#982). One heading over both
+            // put a private account, which nobody can ever count, under a
+            // claim that somebody has not counted it yet, contradicting the
+            // row directly beneath it. The split is shared with the caption
+            // block rather than filtered again here.
+            let unranked = CollaboratorPick.splitUnranked(result.unranked)
+
+            if !unranked.waiting.isEmpty {
                 divider
                 Text("NOT COUNTED YET, SO NOT RANKED")
                     .font(.system(size: 9, weight: .medium))
                     .tracking(0.8)
                     .foregroundStyle(PaintedSurfaces.secondaryText)
-                ForEach(result.unranked, id: \.handle) { candidate in
+                ForEach(unranked.waiting, id: \.handle) { candidate in
                     row(rank: "", candidate: candidate)
+                }
+            }
+
+            if !unranked.marked.isEmpty {
+                divider
+                Text("PRIVATE, SO NOT RANKED")
+                    .font(.system(size: 9, weight: .medium))
+                    .tracking(0.8)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
+                Text(CollaboratorPick.privateFormNote)
+                    .font(.system(size: 11))
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                ForEach(unranked.marked, id: \.handle) { candidate in
+                    row(rank: "", candidate: candidate)
+                }
+            }
+
+            // Offered rather than described (#983). On a carousel only the
+            // first photo appears in the feed, so a post whose strongest
+            // accounts sit further along credits nobody who can usefully
+            // collaborate, and the fix is one press. A finding the app could
+            // apply itself, handed back as a sentence, teaches Dan to skim the
+            // panel where the findings that need his judgement live (L272).
+            if let lead {
+                divider
+                Text("A STRONGER PHOTO COULD LEAD")
+                    .font(.system(size: 9, weight: .medium))
+                    .tracking(0.8)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
+                Text(CollaboratorPick.promotionReason(lead.promotion))
+                    .font(.system(size: 11))
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .firstTextBaseline, spacing: Spacing.sm) {
+                    Button(CollaboratorPick.promotionControlLabel(for: lead.promotion),
+                           action: lead.promote)
+                    Text(CollaboratorPick.promotionCostLine(dropsLayout: lead.dropsLayout))
+                        .font(.system(size: 11))
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 

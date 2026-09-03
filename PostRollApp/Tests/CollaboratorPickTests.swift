@@ -850,6 +850,49 @@ final class CollaboratorPickTests: XCTestCase {
         XCTAssertTrue(reason.lowercased().contains("not counted"), reason)
     }
 
+    func testTheTwoUnrankedStatesAreSplitOnceForEverySurface() {
+        // #982 gave the caption block a separate sentence for a private
+        // account, and left the panel's HEADING saying "not counted yet, so not
+        // ranked" over the top of it. The row underneath read correctly and the
+        // heading above it contradicted the row, which is the same defect one
+        // line higher up. Split in one place so a third surface cannot get a
+        // fourth answer (L370).
+        var marked = AccountStats(followers: 169, recordedOn: now)
+        marked.isPrivate = true
+        let waiting = CollaboratorPick.Candidate(handle: "uncounted", stats: nil,
+                                                 inFirstPhoto: false, rate: nil,
+                                                 rateIsAssumed: false, reason: "")
+        let closed = CollaboratorPick.Candidate(handle: "closedcircle", stats: marked,
+                                                inFirstPhoto: false, rate: nil,
+                                                rateIsAssumed: false, reason: "")
+
+        let split = CollaboratorPick.splitUnranked([waiting, closed])
+
+        XCTAssertEqual(split.waiting.map(\.handle), ["uncounted"])
+        XCTAssertEqual(split.marked.map(\.handle), ["closedcircle"])
+    }
+
+    func testThePanelDoesNotFileAPrivateAccountUnderNotCountedYet() {
+        // The heading is the claim, so it is the thing that has to be checked.
+        // A view with this much environment cannot be built in a test, so what
+        // is guarded is that the screen asks for the split rather than
+        // rendering one list under one heading.
+        let relative = "Sources/Views/CollaboratorPanel.swift"
+        let code = SwiftSourceText.withoutComments(
+            try! String(contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent(relative), encoding: .utf8))
+
+        XCTAssertTrue(code.contains("CollaboratorPick.splitUnranked"),
+                      "\(relative) renders every unranked account under one "
+                      + "heading, so a private account is filed as one nobody "
+                      + "has counted yet")
+        XCTAssertFalse(code.contains("ForEach(result.unranked"),
+                       "\(relative) still walks the whole unranked list in one "
+                       + "pass, so the split cannot be what it draws")
+    }
+
     func testAPrivateAccountSaysSoInTheSuggestionLine() {
         // The same defect one state along (#982). A private account has a
         // follower count and can never have the rest, so the followers-only

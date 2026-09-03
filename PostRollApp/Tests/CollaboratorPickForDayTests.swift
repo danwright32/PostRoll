@@ -51,6 +51,213 @@ final class CollaboratorPickForDayTests: XCTestCase {
 
     private let everyone = ["first1", "first2", "other1", "other2", "other3", "other4"]
 
+    // MARK: - Promoting a stronger photo to the front (#983)
+    //
+    // On a collage carousel only the FIRST photo appears in the feed, and the
+    // ranking treats that order as fixed: it biases hard toward whoever is in
+    // the visible image, because somebody who is not in it usually declines and
+    // a declined invite wastes one of five slots. What nothing ever questioned
+    // is the order itself. If the strongest accounts are tagged in photo 3, the
+    // app ranks around that fact rather than pointing out that photo 3 could be
+    // first.
+
+    /// A carousel whose strength sits in photo 3 rather than photo 1.
+    private func lopsidedEvent() -> Event {
+        var event = carouselEvent()
+        var wed = event.days[DayName.wednesday.rawValue]!
+        let photos = wed.photoPaths
+        wed.photoTags = [
+            photos[0].absoluteString: ["weakone"],
+            photos[1].absoluteString: ["middling"],
+            photos[2].absoluteString: ["strongest", "alsostrong"],
+            photos[3].absoluteString: ["another"],
+        ]
+        event.days[DayName.wednesday.rawValue] = wed
+        return event
+    }
+
+    private func lopsidedStats() -> (String) -> AccountStats? {
+        let table = [
+            "weakone":    stats(500, 10, 1),
+            "middling":   stats(4_120, 120, 20),
+            "strongest":  stats(12_400, 500, 90),
+            "alsostrong": stats(9_000, 300, 50),
+            "another":    stats(600, 12, 2),
+        ]
+        return { table[AccountBook.key($0)] }
+    }
+
+    private func promotion(_ event: Event,
+                           _ stats: @escaping (String) -> AccountStats?,
+                           day: DayName = .wednesday,
+                           preset: PostingPreset = .balanced)
+        -> CollaboratorPick.PhotoPromotion? {
+        CollaboratorPick.photoToPromote(event: event, day: day, preset: preset,
+                                        stats: stats, asOf: now)
+    }
+
+    func testAStrongerAccountInALaterPhotoIsWorthMovingToTheFront() {
+        let found = promotion(lopsidedEvent(), lopsidedStats())
+
+        XCTAssertEqual(found?.index, 2, "the wrong photo was named, or none was")
+        XCTAssertEqual(found?.best.handle, "strongest")
+        XCTAssertEqual(found?.current?.handle, "weakone",
+                       "the sentence cannot say what the first photo offers today")
+    }
+
+    func testAFirstPhotoThatAlreadyLeadsIsLeftAlone() {
+        // Fires on any improvement at all, so the only quiet case is a first
+        // photo that is genuinely best. Anything looser and the suggestion
+        // appears on posts where there is nothing to gain, and a notice that
+        // fires on most posts stops being read (L36).
+        var event = lopsidedEvent()
+        var wed = event.days[DayName.wednesday.rawValue]!
+        let photos = wed.photoPaths
+        wed.photoTags = [
+            photos[0].absoluteString: ["strongest"],
+            photos[1].absoluteString: ["middling"],
+            photos[2].absoluteString: ["weakone"],
+        ]
+        event.days[DayName.wednesday.rawValue] = wed
+
+        XCTAssertNil(promotion(event, lopsidedStats()))
+    }
+
+    func testThePhotoNamedIsTheBestOfThemAllNotTheFirstThatBeatsTheLead() {
+        // Photo 2 beats photo 1, and photo 3 beats photo 2. Naming photo 2
+        // would spend the one suggestion on the smaller of two improvements.
+        var event = lopsidedEvent()
+        var wed = event.days[DayName.wednesday.rawValue]!
+        let photos = wed.photoPaths
+        wed.photoTags = [
+            photos[0].absoluteString: ["weakone"],
+            photos[1].absoluteString: ["alsostrong"],
+            photos[2].absoluteString: ["strongest"],
+        ]
+        event.days[DayName.wednesday.rawValue] = wed
+
+        XCTAssertEqual(promotion(event, lopsidedStats())?.index, 2)
+    }
+
+    func testAReelDayIsNeverAskedToReorder() {
+        // A reel has no first photo distinction, so there is no lead to
+        // improve and nothing to say.
+        XCTAssertNil(promotion(lopsidedEvent(), lopsidedStats(), day: .thursday))
+    }
+
+    func testADayWhoseAccountsCannotBeRankedSaysNothing() {
+        // Not an empty suggestion. With no figures anywhere there is no basis
+        // for claiming one photo leads better than another, and inventing one
+        // would put a reorder in front of Dan on no evidence.
+        XCTAssertNil(promotion(lopsidedEvent(), { _ in nil }))
+    }
+
+    func testAFirstPhotoTaggingOnlyAPrivateAccountIsBeatenByAPublicOne() {
+        // The case this came from. The lead photo credits an account whose
+        // invite reaches only its own approved followers, while a later photo
+        // carries a public one, and the two rules compose without either
+        // knowing about the other (#982).
+        var marked = stats(50_000, 5_000, 1_000)
+        marked.isPrivate = true
+        let table = ["weakone": marked, "middling": stats(4_120, 120, 20)]
+        var event = lopsidedEvent()
+        var wed = event.days[DayName.wednesday.rawValue]!
+        let photos = wed.photoPaths
+        wed.photoTags = [photos[0].absoluteString: ["weakone"],
+                         photos[1].absoluteString: ["middling"]]
+        event.days[DayName.wednesday.rawValue] = wed
+
+        let found = promotion(event, { table[AccountBook.key($0)] })
+
+        XCTAssertEqual(found?.index, 1)
+        XCTAssertEqual(found?.best.handle, "middling")
+    }
+
+    func testTheControlSaysWhatTheReorderCosts() {
+        // Derived from the day's own state, never printed on every post. A
+        // warning shown whatever the situation carries no information, and
+        // reads identically whether it is throwing away nothing or throwing
+        // away every crop Dan set by hand (L180).
+        let plain = CollaboratorPick.promotionCostLine(dropsLayout: false)
+        let costly = CollaboratorPick.promotionCostLine(dropsLayout: true)
+
+        XCTAssertNotEqual(plain, costly,
+                          "the control says the same thing whether or not there "
+                          + "is anything to lose")
+        XCTAssertFalse(plain.lowercased().contains("crop"),
+                       "a day with no crops is warned about losing them: \(plain)")
+        XCTAssertTrue(costly.lowercased().contains("crop"),
+                      "the crops are dropped and the control does not say so: \(costly)")
+    }
+
+    func testTheNameOfThePhotoCountsFromOne() {
+        // The index is zero based and the sentence is not. Named once, here,
+        // rather than each surface adding one and one of them forgetting.
+        let found = promotion(lopsidedEvent(), lopsidedStats())
+
+        XCTAssertEqual(found?.index, 2)
+        XCTAssertEqual(CollaboratorPick.promotionControlLabel(for: found!), "Make photo 3 first")
+    }
+
+    // MARK: - The control exists on the screen
+
+    private func source(_ path: String) throws -> String {
+        SwiftSourceText.withoutComments(
+            try String(contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Sources/\(path)"), encoding: .utf8))
+    }
+
+    func testThePanelOffersTheReorderRatherThanOnlyDescribingIt() throws {
+        // A suggestion Dan cannot act on where he reads it is work handed back
+        // to him, and it would sit there every week saying the same thing
+        // (L272). The reorder is one press.
+        let code = try source("Views/CollaboratorPanel.swift")
+
+        XCTAssertTrue(code.contains("CollaboratorPick.promotionControlLabel"),
+                      "the panel names the control itself, so the sentence and "
+                      + "the button can come to disagree about which photo")
+        XCTAssertTrue(code.contains("CollaboratorPick.promotionReason"),
+                      "the panel says why in its own words")
+        XCTAssertTrue(code.contains("CollaboratorPick.promotionCostLine"),
+                      "the panel does not say what pressing it costs, or says it "
+                      + "in wording of its own")
+    }
+
+    func testTheScreenTellsThePanelWhetherThereIsAnythingToLose() throws {
+        // The cost line is only honest if the flag behind it is read off the
+        // day. Passed as a constant it becomes the boilerplate warning it
+        // exists not to be.
+        let code = try source("Views/CaptionReviewView.swift")
+
+        XCTAssertTrue(code.contains("collageCellOverride") && code.contains("collageCropOffsets"),
+                      "nothing on this screen reads the state the warning claims")
+        XCTAssertTrue(code.contains("CollaboratorPick.photoToPromote"),
+                      "the screen never asks whether a stronger photo exists")
+    }
+
+    func testPromotingAPhotoClearsTheLayoutItInvalidates() throws {
+        // The collage is filled positionally and its row heights come from the
+        // photo aspect ratios in order, so a per-cell layout and the crops
+        // keyed to it cannot survive a reorder. Left behind they are applied to
+        // the wrong pictures.
+        let code = try source("Views/CaptionReviewView.swift")
+        let handler = try XCTUnwrap(
+            code.range(of: "func promotePhoto").map { start in
+                let rest = code[start.upperBound...]
+                return String(rest[..<(rest.range(of: "\n    }")?.upperBound ?? rest.endIndex)])
+            }, "the screen has no promote action at all")
+
+        XCTAssertTrue(handler.contains("collageCellOverride = nil"),
+                      "the cell layout survives a reorder it was keyed to")
+        XCTAssertTrue(handler.contains("collageCropOffsets"),
+                      "the crops survive a reorder they were keyed to")
+        XCTAssertFalse(handler.contains("regenerate"),
+                       "the reorder triggers a regen of its own rather than "
+                       + "batching with the other edits until Apply changes")
+    }
+
     // MARK: - Which accounts a day actually tags
 
     func testACarouselDayTagsThePeopleInItsPhotos() {
