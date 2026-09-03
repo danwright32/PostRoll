@@ -1,0 +1,8 @@
+{
+  "name": "suite-cost-numbers-agree-with-each-other",
+  "file": "tests/fixtures/swift_suite_cost.json",
+  "find": "\"wall_seconds\": 212.2,",
+  "replace": "\"wall_seconds\": 100.0,",
+  "test": "tests/test_swift_suite_cost_names_its_machine.py::test_no_reading_claims_better_than_perfect_packing",
+  "breaks": "a wall clock faster than the work divides across its workers is recorded as a real reading, so a mistyped figure is planned on exactly as the 106s one was (#1243)"
+}
