@@ -148,4 +148,36 @@ enum ScrollReelTiming {
     /// The longest scroll the editor offers, from the reel length presets.
     /// Named here because the notice's choice of remedy turns on it.
     static let sliderMaximumSeconds: Double = 60
+
+    // MARK: - Watching the pace (#1071)
+    //
+    // There was no way to see a Thursday reel MOVE without rendering the whole
+    // thing. On 2026-08-30 Dan settled the comfortable scroll speed by having
+    // ten complete reels rendered at 50 to 160 seconds each and opening them in
+    // QuickTime, roughly forty minutes to answer one question, and every reel
+    // with an unusual photo count poses it again.
+    //
+    // The numbers below come from the same travel and cruise factor the encoder
+    // walks. A preview that moved at its own speed would be worse than none,
+    // because it would be trusted.
+
+    /// How long a pace sample runs.
+    ///
+    /// At the comfortable speed a full screen is replaced every 4.4 seconds, so
+    /// a shorter sample would show a slice of movement rather than the thing
+    /// being judged. Long enough to see a screen go by twice, short enough that
+    /// judging the pace is not itself a wait.
+    static let paceSampleSeconds: Double = 9
+
+    /// The sample shows a VIEWPORT-shaped window of the strip, not the whole
+    /// strip scaled down: the speed a viewer sees is pixels against the
+    /// viewport, and a scaled whole strip moves at a completely different one.
+    static let paceWindowHeight: Double = viewportHeight
+
+    /// How fast the strip moves through that window, in canvas pixels a second,
+    /// at cruise. The ramps at each end are not sampled: cruise is where the
+    /// reel spends its time and what "too fast" was reported about.
+    static func cruisePixelsPerSecond(stripHeight: Double, scrollSeconds: Double) -> Double {
+        travelPerFrame(stripHeight: stripHeight, scrollSeconds: scrollSeconds) * fps
+    }
 }

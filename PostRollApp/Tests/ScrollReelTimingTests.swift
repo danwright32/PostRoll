@@ -267,3 +267,62 @@ extension ScrollReelTimingTests {
             stripHeight: 0, photoCount: 234, scrollSeconds: 35))
     }
 }
+
+// MARK: - Watching the pace rather than exporting to judge it (#1071)
+
+extension ScrollReelTimingTests {
+
+    /// The rate the in-app preview scrolls at, in canvas pixels per second.
+    ///
+    /// Derived from the same travel and cruise factor the encoder walks, not a
+    /// number chosen to look right: a preview that moves at its own speed is
+    /// worse than no preview, because it would be trusted.
+    func testThePaceRateIsTheOneTheEncoderCruisesAt() throws {
+        let fixture = try loadSpeedFixture()
+        for reel in fixture.measured_reels {
+            for scrollSeconds in [35.0, 60.0, 100.0] {
+                let perFrame = ScrollReelTiming.travelPerFrame(
+                    stripHeight: reel.strip_h, scrollSeconds: scrollSeconds)
+                let perSecond = ScrollReelTiming.cruisePixelsPerSecond(
+                    stripHeight: reel.strip_h, scrollSeconds: scrollSeconds)
+                XCTAssertEqual(perSecond, perFrame * fixture.fps, accuracy: 0.001,
+                               "\(reel.name) at \(Int(scrollSeconds))s")
+            }
+        }
+    }
+
+    /// A reel at the comfortable speed replaces the screen every 4.4 seconds,
+    /// so a sample has to be long enough to SEE a screen replaced and short
+    /// enough that judging the pace is not another wait. Both ends asserted,
+    /// because a sample shorter than one screen shows a slice of movement that
+    /// says nothing about the thing being judged.
+    func testThePaceSampleIsLongEnoughToShowAScreenBeingReplaced() throws {
+        let fixture = try loadSpeedFixture()
+        let comfortableScreen = fixture.viewport_h
+            / fixture.comfortable_travel_px / fixture.fps
+
+        XCTAssertGreaterThan(ScrollReelTiming.paceSampleSeconds, comfortableScreen,
+                             "the sample is over before one screen has passed")
+        XCTAssertLessThanOrEqual(ScrollReelTiming.paceSampleSeconds, 12,
+                                 "judging the pace should not be another wait")
+    }
+
+    func testAStripThatDoesNotScrollHasNoPaceToShow() throws {
+        let fixture = try loadSpeedFixture()
+        XCTAssertEqual(ScrollReelTiming.cruisePixelsPerSecond(
+            stripHeight: fixture.viewport_h - 1, scrollSeconds: 35), 0)
+        XCTAssertEqual(ScrollReelTiming.cruisePixelsPerSecond(
+            stripHeight: 29000, scrollSeconds: 0), 0)
+    }
+
+    /// What the sampler actually shows: a viewport-shaped window of the strip.
+    /// Judging pace against the WHOLE strip scaled down would show a different
+    /// speed from the one a viewer sees, which is the mistake this replaces.
+    func testTheWindowIsTheViewportRatherThanTheWholeStrip() throws {
+        let fixture = try loadSpeedFixture()
+        XCTAssertEqual(ScrollReelTiming.paceWindowHeight, fixture.viewport_h)
+        XCTAssertLessThan(ScrollReelTiming.paceWindowHeight,
+                          fixture.measured_reels[0].strip_h,
+                          "a window as tall as the strip is not a window")
+    }
+}

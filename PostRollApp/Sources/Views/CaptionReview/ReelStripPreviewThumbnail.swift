@@ -56,6 +56,9 @@ struct ReelStripPreviewThumbnail: View {
     /// Nil until a length is known: `currentReelLength` is only passed on
     /// Thursday, and every other caller of this view has no reel length to be
     /// fast at.
+    /// Whether the pace sample is open.
+    @State private var showingPace = false
+
     private var speedNotice: String? {
         guard let currentReelLength else { return nil }
         return ScrollReelTiming.speedNotice(
@@ -263,6 +266,32 @@ struct ReelStripPreviewThumbnail: View {
                     .foregroundStyle(PaintedSurfaces.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 2)
+            }
+
+            // The number says it is fast; this lets Dan check (#1071). Offered
+            // whenever there is a length and a strip that scrolls, not only
+            // when the warning fires: a reel judged comfortable by the
+            // threshold is exactly the one worth confirming by eye.
+            if let currentReelLength, image != nil, stripH > CGFloat(ScrollReelTiming.paceWindowHeight) {
+                Button {
+                    showingPace = true
+                } label: {
+                    Label("Watch the pace", systemImage: "play.circle")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(PaintedSurfaces.iconAccent)
+                .padding(.horizontal, 2)
+                .popover(isPresented: $showingPace, arrowEdge: .bottom) {
+                    if let image {
+                        ReelPaceSampler(
+                            strip: image,
+                            stripCanvasHeight: Double(stripH),
+                            scrollSeconds: currentReelLength,
+                            onClose: { showingPace = false })
+                            .frame(width: 320)
+                    }
+                }
             }
 
             // Size slider — always reserves its height so the strip doesn't
