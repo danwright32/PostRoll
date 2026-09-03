@@ -70,20 +70,30 @@ final class AccountNumbersEntryTests: XCTestCase {
                       "the form has no control for the mark, so isPrivate can "
                       + "never be set on any account and the ranking key that "
                       + "reads it can never fire")
-        XCTAssertTrue(source.contains("onSave: (Int?, Int?, Int?, Bool) -> Void"),
-                      "the form cannot report the mark to whoever presents it")
+        // The RULE, not the exact spelling of the signature: pinning the tuple
+        // made this fail the first time a second mark was legitimately added
+        // (L103). What matters is that both marks leave the form.
+        let saves = try XCTUnwrap(source.range(of: "let onSave:").map { start in
+            String(source[start.upperBound...].prefix(120))
+        })
+        XCTAssertEqual(saves.prefix(while: { $0 != "\n" }).filter { $0 == "B" }.count, 2,
+                       "the form reports fewer than the two marks it carries: \(saves)")
         XCTAssertTrue(source.contains("CollaboratorPick.privateFormNote"),
                       "the control says what the mark means in its own words, "
                       + "which is how the form and CAPTIONS.txt come to describe "
                       + "the same mark differently")
     }
 
-    func testTheFormPrefillsTheMarkSoSavingCannotClearIt() throws {
+    func testTheFormPrefillsBothMarksSoSavingCannotClearThem() throws {
         let source = try Self.source("Views/CollaboratorPanel.swift")
 
         XCTAssertTrue(source.contains("stats?.isPrivate ?? false"),
-                      "the control opens unticked whatever is stored, so saving "
-                      + "an unrelated figure unmarks the account")
+                      "the private control opens unticked whatever is stored, so "
+                      + "saving an unrelated figure unmarks the account")
+        XCTAssertTrue(source.contains("stats?.neverInvite ?? false"),
+                      "the never invite control opens unticked whatever is "
+                      + "stored, so saving an unrelated figure starts offering "
+                      + "an account Dan has decided against")
     }
 
     func testBothScreensCarryTheMarkIntoTheBook() throws {
@@ -101,8 +111,11 @@ final class AccountNumbersEntryTests: XCTestCase {
                 }, file)
 
             XCTAssertTrue(handler.contains("isPrivate: isPrivate"),
-                          "\(file) drops the mark on the way to the book, so "
-                          + "ticking the box does nothing")
+                          "\(file) drops the private mark on the way to the "
+                          + "book, so ticking the box does nothing")
+            XCTAssertTrue(handler.contains("neverInvite: neverInvite"),
+                          "\(file) drops the never invite mark on the way to "
+                          + "the book, so ticking the box does nothing")
         }
     }
 

@@ -117,6 +117,17 @@ struct CollaboratorPanel: View {
                 }
             }
 
+            if !result.excluded.isEmpty, result.coverage != .allHeldBack {
+                divider
+                Text("MARKED NEVER TO INVITE")
+                    .font(.system(size: 9, weight: .medium))
+                    .tracking(0.8)
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
+                ForEach(result.excluded, id: \.handle) { candidate in
+                    row(rank: "", candidate: candidate)
+                }
+            }
+
             // Offered rather than described (#983). On a carousel only the
             // first photo appears in the feed, so a post whose strongest
             // accounts sit further along credits nobody who can usefully
@@ -223,17 +234,18 @@ struct CollaboratorPanel: View {
 struct AccountNumbersSheet: View {
     let handle: String
     let stats: AccountStats?
-    /// Followers, likes, comments, and whether the profile is private. Any of
-    /// the three figures may be nil, which stores as "not counted" rather than
-    /// zero. The mark is always stated, because this form is the only thing
-    /// that can set or clear it.
-    let onSave: (Int?, Int?, Int?, Bool) -> Void
+    /// Followers, likes, comments, whether the profile is private, and whether
+    /// Dan will never invite it. Any of the three figures may be nil, which
+    /// stores as "not counted" rather than zero. Both marks are always stated,
+    /// because this form is the only thing that can set or clear either.
+    let onSave: (Int?, Int?, Int?, Bool, Bool) -> Void
     let onCancel: () -> Void
 
     @State private var followers: String = ""
     @State private var likes: String = ""
     @State private var comments: String = ""
     @State private var isPrivate: Bool = false
+    @State private var neverInvite: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
@@ -267,6 +279,16 @@ struct AccountNumbersSheet: View {
                 .foregroundStyle(PaintedSurfaces.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
+            // A standing decision rather than a figure (#1271). Here beside the
+            // private mark because both are facts about the account that only
+            // Dan can record, and this is the one form that records them.
+            Toggle("Never invite as a collaborator", isOn: $neverInvite)
+                .font(.system(size: 12))
+            Text(CollaboratorPick.neverInviteFormNote)
+                .font(.system(size: 11))
+                .foregroundStyle(PaintedSurfaces.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+
             // The date is shown wherever the numbers are (#280), so a figure
             // driving a ranking cannot look equally confident whether it was
             // entered last week or two years ago.
@@ -286,7 +308,7 @@ struct AccountNumbersSheet: View {
                     onSave(AccountNumbersEntry.parse(followers),
                            AccountNumbersEntry.parse(likes),
                            AccountNumbersEntry.parse(comments),
-                           isPrivate)
+                           isPrivate, neverInvite)
                 }
                 .keyboardShortcut(.defaultAction)
             }
@@ -302,6 +324,7 @@ struct AccountNumbersSheet: View {
             // Prefilled like every other field, so saving an unrelated
             // correction cannot silently unmark the account.
             isPrivate = stats?.isPrivate ?? false
+            neverInvite = stats?.neverInvite ?? false
         }
     }
 
