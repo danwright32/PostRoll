@@ -37,8 +37,22 @@ enum LayoutSidecar {
         var version: Int?
         var cells: [CollageCell]
 
+        /// Where the branded centre strip SAT in this layout (#970).
+        ///
+        /// Nil for a reel strip, which has no strip, and for every collage
+        /// sidecar written before this was recorded. Nil means "not recorded"
+        /// rather than "no strip": the checks that read it decline to judge the
+        /// band rather than inventing one, because a made up band would refuse
+        /// layouts for a position nobody chose.
+        var strip: StripBand?
+
         /// Whether this collage predates the design this build renders.
         var isStale: Bool { (version ?? 0) < CollageDesign.collageDesignVersion }
+    }
+
+    struct StripBand: Equatable, Decodable {
+        var y: Int
+        var h: Int
     }
 
     /// Read a sidecar in either shape, tolerating everything already on disk.
@@ -57,11 +71,18 @@ enum LayoutSidecar {
         struct Envelope: Decodable {
             var version: Int?
             var cells: [CollageCell]?
+            var strip: StripBand?
         }
         guard let envelope = try? JSONDecoder().decode(Envelope.self, from: data) else {
             return Contents(version: nil, cells: [])
         }
-        return Contents(version: envelope.version, cells: envelope.cells ?? [])
+        // A band of zero height is not a band. Python omits `strip` entirely
+        // where there is none, so a zero here is a malformed file rather than a
+        // layout without a strip, and reading it as one would judge every cell
+        // against a band with no thickness (L257).
+        let band = envelope.strip.flatMap { $0.h > 0 ? $0 : nil }
+        return Contents(version: envelope.version, cells: envelope.cells ?? [],
+                        strip: band)
     }
 
     /// The contents of the sidecar belonging to a rendered preview.
