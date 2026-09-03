@@ -163,10 +163,23 @@ def test_every_xcodebuild_in_the_job_shares_one_derived_data_path(macos):
     """Built is not wired (L3).
 
     This used to be phrased about the build CACHE, and #991 removed that. The
-    rule survives it and is not about caching at all: the `swift-unit` job runs
-    xcodebuild three times, and if they write to different derived-data folders
-    the test build recompiles from scratch everything the app build just
-    produced, within one job, on one runner, with nothing shared between them.
+    rule survives it, and is not about caching at all: three xcodebuild
+    invocations in one job that write to different derived-data folders each
+    build from scratch what a sibling may already have produced, within one
+    run, on one runner.
+
+    What this does NOT prove, and used to claim it did: that the test build
+    reuses the app build. Measured on run 33760431737 (#1103), it cannot. The
+    app build is forced to `-configuration Release` and the test build resolves
+    to Debug with POSTROLL_TESTS set, and a shared derived-data path shares
+    NOTHING across configurations, so those two compile the same 229 files
+    twice however this test reads. The reuse that is real is between the two
+    Debug invocations, the test run and the GUI compile.
+
+    The path is still worth holding to one value for all three, because the
+    alternative is an invocation writing to the shared default where nothing
+    can see it, which is the defect #485 actually found. It is the REASON that
+    was wrong, not the rule (L380).
 
     The expected path is taken from the first invocation rather than from a
     cache declaration, because there is no longer a cache to read it from. Any
