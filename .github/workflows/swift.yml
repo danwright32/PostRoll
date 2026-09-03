@@ -99,7 +99,8 @@ jobs:
   swift-unit:
     runs-on: macos-26
     # Same reason as the python job (#832). 45 rather than a tighter number
-    # because this compiles the app and runs 2250 tests, measured at 8m44s, and
+    # because this compiles the app and runs the whole Swift suite, which was
+    # 2,250 tests at 8m44s when this was written and is 2,895 tests today, and
     # it matches what the macOS job in tests.yml already carries for work of the
     # same kind.
     timeout-minutes: 45
@@ -269,11 +270,27 @@ jobs:
       # tolerance, so growing REVIEW_TESTS reports the problem rather than
       # quietly pushing local runs under the floor.
       #
-      # Parallel since #992, which is worth most of this step. Measured on
-      # 2026-08-30 against Xcode 26.6, the version the pin selects: the suite is
-      # 294s of test bodies serially and 106s wall in parallel, and the packing
-      # is near perfect up to four workers before it hits its floor, which is the
-      # heaviest single class at 68s.
+      # Parallel since #992, which is worth most of this step. What it is worth,
+      # and on WHICH machine, is recorded in tests/fixtures/swift_suite_cost.json
+      # rather than here. This comment used to carry one bare pair of numbers
+      # taken on a 12 core Mac, sitting inside the job that runs on a runner with
+      # THREE cores, and #1103 planned a milestone off it (#1243).
+      #
+      # Both readings, measured 2026-09-03:
+      #
+      #   this runner (3 cores, 3 workers): 475.8s of test bodies, 212.2s wall,
+      #   2,895 tests. Perfect packing on 3 workers would be 158.6s, so the run
+      #   is at 75% of perfect and what it loses is packing rather than one
+      #   heavy class, the heaviest being 78.4s.
+      #
+      #   this Mac (12 cores, 12 workers): 475.1s of test bodies, 123.4s wall,
+      #   2,892 tests. Here the floor IS one class, UnseenSurfaceTests at 98.0s,
+      #   so the workers past about the fifth buy nothing.
+      #
+      # The claim this replaces, that the packing is near perfect up to four
+      # workers, holds on neither: 3 workers return 2.24x and 12 return 3.86x.
+      # tests/test_swift_suite_cost_names_its_machine.py fails if swift-unit
+      # moves to a runner these readings were not taken on (#1246).
       #
       # The flag is here rather than in the SCHEME, deliberately. The flag alone
       # parallelises with the scheme still saying parallelizable="NO", and

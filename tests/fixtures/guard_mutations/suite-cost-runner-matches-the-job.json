@@ -1,0 +1,8 @@
+{
+  "name": "suite-cost-runner-matches-the-job",
+  "file": "tests/fixtures/swift_suite_cost.json",
+  "find": "\"runner_image\": \"macos-26\",",
+  "replace": "\"runner_image\": \"macos-15\",",
+  "test": "tests/test_swift_suite_cost_names_its_machine.py::test_the_recorded_runner_is_the_runner_the_job_still_asks_for",
+  "breaks": "the recorded suite cost describes a runner swift-unit no longer uses, and nothing says so, which is the defect #1243 was opened about in the other direction"
+}
