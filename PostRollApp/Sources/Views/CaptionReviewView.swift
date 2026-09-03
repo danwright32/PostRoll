@@ -354,7 +354,7 @@ struct CaptionReviewView: View {
                             onSkipFridayClips: day == .friday ? { skipFridayClipsKeepStoryOnly() } : nil,
                             onChangeCollagePhotos: isCollageDay(day) ? { changeCollagePhotos(day: day) } : nil,
                             onChooseLayout: isCollageDay(day) ? { layoutGalleryTarget = GalleryTarget(day: day) } : nil,
-                            onSwapReelPhotos: day == .thursday ? { a, b in swapReelPhotos(day: .thursday, a: a, b: b) } : nil,
+                            onSwapReelPhotos: day == .thursday ? { a, b in swapPhotos(day: .thursday, a: a, b: b) } : nil,
                             onAssignReelPhotos: day == .tuesday ? { raw, edited, bw in
                                 assignReelPhotosAndGenerate(raw: raw, edited: edited, bw: bw)
                             } : nil,
@@ -442,7 +442,8 @@ struct CaptionReviewView: View {
                         if expanded == section {
                             CollaboratorPanel(result: collaborators(for: day, in: live),
                                               eventCounts: taggedEventCounts,
-                                              onEditNumbers: beginEditingNumbers)
+                                              onEditNumbers: beginEditingNumbers,
+                                              lead: photoLead(for: day, in: live))
                                 .padding(.horizontal, Spacing.xl)
                                 .padding(.bottom, Spacing.md)
                                 .disabled(isRegenerating)
@@ -1365,6 +1366,53 @@ struct CaptionReviewView: View {
         editingAccount = EditingAccount(handle: handle)
     }
 
+    /// A later photo worth leading with, and the press that does it (#983).
+    ///
+    /// A named function rather than an inline call, for the same reason the
+    /// collaborator suggestion below is one: this view's body is at the type
+    /// checker's limit and one more closure to infer pushes it over.
+    private func photoLead(for day: DayName, in live: Event) -> CollaboratorPanel.PhotoLead? {
+        guard let promotion = CollaboratorPick.photoToPromote(
+                event: live, day: day, preset: live.effectivePostingPreset,
+                stats: { accounts.stats(for: $0) }, asOf: suggestionsAsOf)
+        else { return nil }
+        let posting = live.days[day.rawValue]
+        // Read off the day, so the warning on the control describes THIS post
+        // rather than the worst case (L180).
+        let dropsLayout = posting?.collageCellOverride != nil
+            || !(posting?.collageCropOffsets.isEmpty ?? true)
+        return CollaboratorPanel.PhotoLead(promotion: promotion, dropsLayout: dropsLayout) {
+            promotePhoto(day: day, to: promotion.photo)
+        }
+    }
+
+    /// Move one photo to the front of a collage carousel (#983).
+    ///
+    /// The swap itself is `swapPhotos`, the same one the reel picker uses: a
+    /// second reorder written beside it is a second thing to keep in step.
+    /// What this adds is the clearing a COLLAGE needs and a reel does not. The
+    /// collage is filled positionally and its row heights come from the photo
+    /// aspect ratios in order, so a per-cell layout and the crops keyed to it
+    /// describe the old order and are applied to the wrong pictures if they
+    /// survive.
+    ///
+    /// No regen. Like every other edit on this screen it batches until "Apply
+    /// changes", so a reorder Dan then thinks better of costs nothing.
+    private func promotePhoto(day: DayName, to photo: URL) {
+        guard let lead = liveEvent.days[day.rawValue]?.photoPaths.first else { return }
+        swapPhotos(day: day, a: lead, b: photo)
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+        guard var pd = ev.days[day.rawValue] else { return }
+        pd.collageCellOverride = nil
+        pd.collageCropOffsets = [:]
+        ev.days[day.rawValue] = pd
+        appState.updateEvent(ev)
+        // The in-memory editor state too, or the live overlay goes on drawing
+        // crops against photos that have moved (#728).
+        dayCollageCropOffsets[day.rawValue] = [:]
+        dayCollageCellOverrides.removeValue(forKey: day.rawValue)
+    }
+
     /// Which of a day's tagged accounts to invite as collaborators (#278).
     ///
     /// A named function rather than an inline call in the body: the view
@@ -1398,7 +1446,7 @@ struct CaptionReviewView: View {
     /// Swap two photos in a day's photoPaths. Persists the new order but
     /// does NOT trigger regen — the user batches swaps with crop / resize
     /// edits and bakes them all in one shot via "Apply changes".
-    private func swapReelPhotos(day: DayName, a: URL, b: URL) {
+    private func swapPhotos(day: DayName, a: URL, b: URL) {
         guard a.path != b.path else { return }
         var ev = appState.events.first(where: { $0.id == event.id }) ?? event
         guard var pd = ev.days[day.rawValue] else { return }
