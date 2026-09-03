@@ -1,0 +1,8 @@
+{
+  "name": "the-organisation-and-venue-can-be-suggested-at-all",
+  "file": "PostRollApp/Sources/Services/CaptionBlocks.swift",
+  "find": "            for handle in EventHandleSuggestions.accounts(in: event.eventHandles) {",
+  "replace": "            for handle in [String]() {",
+  "test": "PostRollTests/CollaboratorPickForDayTests/testTheOrganisationAndVenueAreCandidatesOnACarouselDay",
+  "breaks": "the organisation and the venue drop out of the candidate pool on every collage carousel day, so the accounts that actually recur across the archive, and are the likeliest to accept an invite, can never be suggested anywhere in the app (#985)"
+}

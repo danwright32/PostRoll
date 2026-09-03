@@ -1,0 +1,8 @@
+{
+  "name": "the-event-account-ranks-under-the-people-in-the-photos",
+  "file": "PostRollApp/Sources/Services/CollaboratorPick.swift",
+  "find": "        if a.candidate.isEventAccount != b.candidate.isEventAccount {\n            return !a.candidate.isEventAccount\n        }",
+  "replace": "        // key removed",
+  "test": "PostRollTests/CollaboratorPickForDayTests/testThePeopleInThePhotosStillComeFirst",
+  "breaks": "the event's organisation or venue account takes a collaborator slot off somebody actually tagged in the day's photos, on its figures alone, when an invite puts the post on their grid and somebody in the pictures is the better ask (#985)"
+}

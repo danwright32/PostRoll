@@ -74,10 +74,60 @@ enum CollaboratorPick {
 
     // MARK: - Shapes
 
+    /// What being "in it" means for one day (#984).
+    ///
+    /// A carousel has a first photo and a reel does not, so one wording for
+    /// both is a false claim on whichever day it does not fit (L11). The bias
+    /// itself is the same rule in both places: somebody the post does not show
+    /// is being asked to host a post that does not show them, and they decline,
+    /// which wastes one of only five slots.
+    enum MembershipKind: Equatable {
+        /// Only the first photo of a carousel appears in the feed.
+        case firstPhoto
+        /// Who is on screen in the reel, from the performers Dan selected as
+        /// appearing in the day's photos.
+        case onScreen
+
+        var inIt: String {
+            self == .firstPhoto ? "in the first photo" : "on screen in the reel"
+        }
+        var notInIt: String {
+            self == .firstPhoto ? "not in the first photo" : "not on screen in the reel"
+        }
+        /// Said of the accounts that filled the slots nobody in it could.
+        var fillingLine: String {
+            "Filling the remaining slots, \(notInIt): "
+        }
+        /// Said of the one account the rule alone held back.
+        var leftOutLine: String {
+            "Left out only for being \(notInIt), swap in by hand if the reach "
+            + "is worth it: "
+        }
+        var leftOutHeading: String {
+            self == .firstPhoto
+                ? "LEFT OUT ONLY FOR NOT BEING IN THE FIRST PHOTO"
+                : "LEFT OUT ONLY FOR NOT BEING ON SCREEN"
+        }
+        /// Said when the day cannot establish who is in it at all.
+        var unresolvedNote: String {
+            self == .firstPhoto
+                ? "Could not tell who is in the first photo, so these are "
+                  + "ranked on engagement alone."
+                : "No performers are marked as appearing in this day's photos, "
+                  + "so these are ranked on engagement alone and are not "
+                  + "checked against who is on screen in the reel."
+        }
+    }
+
     struct Candidate: Equatable {
         let handle: String
         let stats: AccountStats?
         let inFirstPhoto: Bool
+        /// The event's own organisation or venue account, rather than somebody
+        /// tagged in the day's photos (#985). Ranked below the people: an
+        /// invite puts the post on their grid, so somebody actually in the
+        /// pictures is the better ask, and this fills a slot they did not.
+        var isEventAccount: Bool = false
         /// Interactions per follower, comments weighted. Nil when the account
         /// has no numbers: an unmeasured account must never be scored as zero,
         /// which would sort it to the bottom as though it had been measured and
@@ -155,6 +205,9 @@ enum CollaboratorPick {
         var strongestExcluded: Candidate?
         /// Tagged accounts with no numbers yet. Listed, never scored.
         var unranked: [Candidate]
+        /// What "in it" meant for this day, so every surface says the same
+        /// thing and neither says it about a day that has no such thing (#984).
+        var membership: MembershipKind = .firstPhoto
         /// Accounts held back because Dan marked them never to invite (#1271).
         /// Named rather than dropped: he made the mark, so he has to be able to
         /// see it being honoured rather than wonder where a tag went (L152).
@@ -182,6 +235,8 @@ enum CollaboratorPick {
     ///   - stats: what is known about one account. Passed as a lookup rather
     ///     than the book itself, so this stays a pure function.
     static func suggest(handles: [String], firstPhoto: Set<String>?,
+                        eventAccounts: Set<String> = [],
+                        membership: MembershipKind = .firstPhoto,
                         stats: (String) -> AccountStats?, asOf now: Date,
                         notes: [String] = []) -> Result {
         // Deduplicated on the account book's key, so three spellings of one
@@ -207,16 +262,19 @@ enum CollaboratorPick {
         }
 
         let firstPhotoKeys = firstPhoto.map { Set($0.map(AccountBook.key)) }
+        let eventKeys = Set(eventAccounts.map(AccountBook.key))
         let everyone = keys.map { key -> Candidate in
             let stats = stats(key)
             let inFirstPhoto = firstPhotoKeys?.contains(key) ?? false
             let scored = score(stats)
             return Candidate(handle: key, stats: stats, inFirstPhoto: inFirstPhoto,
+                             isEventAccount: eventKeys.contains(key),
                              rate: scored?.rate,
                              rateIsAssumed: scored?.assumed ?? false,
                              reason: reasonText(stats: stats, scored: scored,
                                                 inFirstPhoto: inFirstPhoto,
                                                 appliesFirstPhoto: firstPhotoKeys != nil,
+                                                membership: membership,
                                                 asOf: now))
         }
 
@@ -238,7 +296,7 @@ enum CollaboratorPick {
         guard !candidates.isEmpty else {
             return Result(coverage: everyone.isEmpty ? .nothingTagged : .allHeldBack,
                           suggested: [], fallbacks: [],
-                          strongestExcluded: nil, unranked: [], excluded: excluded,
+                          strongestExcluded: nil, unranked: [], membership: membership, excluded: excluded,
                           notes: notes)
         }
 
@@ -254,7 +312,7 @@ enum CollaboratorPick {
         // form.
         guard candidates.count > maxPerPost else {
             return Result(coverage: .allFit, suggested: candidates, fallbacks: [],
-                          strongestExcluded: nil, unranked: [], excluded: excluded,
+                          strongestExcluded: nil, unranked: [], membership: membership, excluded: excluded,
                           notes: notes)
         }
 
@@ -277,7 +335,8 @@ enum CollaboratorPick {
         // nothing rankable means nothing with a rate.
         guard !rankable.isEmpty else {
             return Result(coverage: .nothingToRank, suggested: [], fallbacks: [],
-                          strongestExcluded: nil, unranked: candidates, excluded: excluded, notes: notes)
+                          strongestExcluded: nil, unranked: candidates, membership: membership,
+                          excluded: excluded, notes: notes)
         }
 
         let ranked = rankable.sorted { better($0, than: $1, respectingFirstPhoto: true) }
@@ -295,6 +354,7 @@ enum CollaboratorPick {
                       strongestExcluded: excludedPurelyByFirstPhotoRule(
                         ranked: ranked, suggested: suggested, applies: firstPhotoKeys != nil),
                       unranked: unranked,
+                      membership: membership,
                       excluded: excluded,
                       notes: notes)
     }
@@ -517,6 +577,47 @@ enum CollaboratorPick {
             .max { better($1, than: $0, respectingFirstPhoto: false) }
     }
 
+    /// Who is on screen in a reel, or nil when the day cannot say (#984).
+    ///
+    /// On Tuesday and Thursday the candidate pool is the whole WEEK's tagged
+    /// accounts and the first photo rule never applies, so the app could
+    /// suggest inviting somebody who does not appear in the reel at all. That
+    /// is the same wasted slot the first photo rule exists to prevent, with
+    /// nothing preventing it.
+    ///
+    /// Built from `selectedPerformerIDs`, which the model records as
+    /// "performers selected as appearing in this day's photos" and Dan sets
+    /// himself on the assignment screen. The issue proposed building it from
+    /// the clips or the photo tags instead; measured on the live store on
+    /// 2026-09-03 that data does not exist, with zero clips and zero photo tags
+    /// on every reel day across 21 events, and not one of 2,133 reel photos
+    /// tagged on any other day. The selection is present on 18 of 21 Thursdays.
+    ///
+    /// Nil rather than empty when nothing is selected, and the two are
+    /// different answers. Empty would mean the reel genuinely shows nobody,
+    /// which silently drops the bias for every account at once while the
+    /// surface reads exactly as it does when the check ran (L11, L214).
+    static func onScreenHandles(event: Event, day: DayName) -> FirstPhotoMembership {
+        guard let posting = event.days[day.rawValue],
+              !posting.selectedPerformerIDs.isEmpty
+        else { return FirstPhotoMembership(handles: nil,
+                                           notes: [MembershipKind.onScreen.unresolvedNote]) }
+
+        let selected = Set(posting.selectedPerformerIDs)
+        let handles = (event.ocrResult?.performers ?? [])
+            .filter { selected.contains($0.id) }
+            .map { CaptionBlocks.bareUsername($0.handle) }
+            .filter { !$0.isEmpty && PythonBridge.isRealHandle($0) }
+
+        // Selected performers who carry no handle between them tell us nothing
+        // about which ACCOUNTS are on screen, so this is the unresolved case
+        // rather than a reel that shows nobody.
+        return handles.isEmpty
+            ? FirstPhotoMembership(handles: nil,
+                                   notes: [MembershipKind.onScreen.unresolvedNote])
+            : FirstPhotoMembership(handles: handles, notes: [])
+    }
+
     static func firstPhotoHandles(event: Event, day: DayName,
                                   preset: PostingPreset) -> FirstPhotoMembership {
         // A reel or a single-image post has no first photo to be in.
@@ -558,10 +659,17 @@ enum CollaboratorPick {
     static func suggest(event: Event, day: DayName, preset: PostingPreset,
                         stats: (String) -> AccountStats?, asOf now: Date,
                         notes: [String] = []) -> Result {
-        let membership = firstPhotoHandles(event: event, day: day, preset: preset)
+        let kind: MembershipKind = preset.isCollageCarousel(day) ? .firstPhoto : .onScreen
+        let membership = kind == .firstPhoto
+            ? firstPhotoHandles(event: event, day: day, preset: preset)
+            : onScreenHandles(event: event, day: day)
         return suggest(handles: CaptionBlocks.dayTagCandidates(event: event, day: day,
                                                                preset: preset),
                        firstPhoto: membership.handles.map(Set.init),
+                       eventAccounts: Set(EventHandleSuggestions
+                                            .accounts(in: event.eventHandles)
+                                            .map(CaptionBlocks.bareUsername)),
+                       membership: kind,
                        stats: stats, asOf: now, notes: notes + membership.notes)
     }
 
@@ -741,12 +849,11 @@ enum CollaboratorPick {
                 lines.append("\(index + 1). \(candidate.handle) (\(candidate.reason))")
             }
             if !result.fallbacks.isEmpty {
-                lines.append("Filling the remaining slots, not in the first photo: "
+                lines.append(result.membership.fillingLine
                              + result.fallbacks.joined(separator: ", "))
             }
             if let excluded = result.strongestExcluded {
-                lines.append("Left out only for not being in the first photo, "
-                             + "swap in by hand if the reach is worth it: "
+                lines.append(result.membership.leftOutLine
                              + "\(excluded.handle) (\(excluded.reason))")
             }
             lines.append(contentsOf: unrankedLines(result.unranked))
@@ -867,6 +974,14 @@ enum CollaboratorPick {
         // cannot put the post on a grid anybody can see, so the slot is wasted
         // however good the figures are.
         if a.isPrivate != b.isPrivate { return !a.isPrivate }
+        // The event's own account under the people, and over a private one
+        // (#985). The order of these two keys is the whole decision: a private
+        // account cannot put the post in front of anybody new at all, while an
+        // org can, so private stays outermost and this sits between it and the
+        // people who are actually in the pictures.
+        if a.candidate.isEventAccount != b.candidate.isEventAccount {
+            return !a.candidate.isEventAccount
+        }
         if respectingFirstPhoto, a.candidate.inFirstPhoto != b.candidate.inFirstPhoto {
             return a.candidate.inFirstPhoto
         }
@@ -900,7 +1015,9 @@ enum CollaboratorPick {
 
     private static func reasonText(stats: AccountStats?, scored: Score?,
                                    inFirstPhoto: Bool,
-                                   appliesFirstPhoto: Bool, asOf now: Date) -> String {
+                                   appliesFirstPhoto: Bool,
+                                   membership: MembershipKind = .firstPhoto,
+                                   asOf now: Date) -> String {
         var parts: [String] = []
         if let stats, let scored, let followers = stats.followers {
             parts.append("\(number(followers)) followers")
@@ -948,7 +1065,7 @@ enum CollaboratorPick {
             }
         }
         if appliesFirstPhoto {
-            parts.append(inFirstPhoto ? "in the first photo" : "not in the first photo")
+            parts.append(inFirstPhoto ? membership.inIt : membership.notInIt)
         }
         if let stats, stats.freshness(asOf: now).isStale {
             parts.append(stats.freshnessLabel(asOf: now).lowercased())

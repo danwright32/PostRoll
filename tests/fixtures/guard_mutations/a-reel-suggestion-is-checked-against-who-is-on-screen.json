@@ -1,0 +1,8 @@
+{
+  "name": "a-reel-suggestion-is-checked-against-who-is-on-screen",
+  "file": "PostRollApp/Sources/Services/CollaboratorPick.swift",
+  "find": "        guard let posting = event.days[day.rawValue],\n              !posting.selectedPerformerIDs.isEmpty",
+  "replace": "        guard let posting = event.days[day.rawValue],\n              posting.selectedPerformerIDs.isEmpty",
+  "test": "PostRollTests/CollaboratorPickForDayTests/testSomebodyOnScreenBeatsAStrongerAccountThatIsNot",
+  "breaks": "a reel's collaborator suggestion stops being checked against who appears in it, so the app offers a slot to somebody the video does not show, which is the wasted invite the first photo rule exists to prevent on carousels (#984)"
+}

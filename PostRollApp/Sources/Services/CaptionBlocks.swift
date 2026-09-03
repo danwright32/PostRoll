@@ -199,6 +199,20 @@ enum CaptionBlocks {
                     handles.append(name)
                 }
             }
+            // The event's own accounts too (#985). The post tags them, and they
+            // are the ones that come back: of the accounts tagged across the
+            // archive, the handful that recur are all org or venue handles, so
+            // a pool of the day's photo tags alone can only ever offer people
+            // who will never be seen again.
+            //
+            // AFTER the people, and the ranking keeps them there. An invite
+            // puts the post on their grid, so somebody actually in the pictures
+            // is the better ask; the org fills a slot the people did not.
+            for handle in EventHandleSuggestions.accounts(in: event.eventHandles) {
+                let name = bareUsername(handle)
+                guard !name.isEmpty, seen.insert(name.lowercased()).inserted else { continue }
+                handles.append(name)
+            }
             return handles
         }
         if day == .tuesday || day == .thursday { return weekTagList(event: event) }
