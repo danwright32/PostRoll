@@ -81,6 +81,38 @@ enum PreviewMergePolicy {
         return merged
     }
 
+    /// Assets a day no longer has, and must not carry from before it lost them.
+    ///
+    /// Thursday's cover went in #961: it was a full story composite on a day
+    /// Dan posts no story, and Instagram picks its own grid thumbnail from a
+    /// frame of the reel. Removing it stopped the cover being RENDERED, and
+    /// stopped the panel drawing one, but every Thursday generated before that
+    /// still names a `cover` in events.json.
+    ///
+    /// That is not inert. The export copies already approved previews where it
+    /// can rather than always re-rendering, and it copies whatever keys a day
+    /// has, generically. So the stale path would put a story into the folder
+    /// Dan uploads from, which is the one thing #961 said must not happen.
+    static let retiredAssets: [String: Set<String>] = ["thursday": ["cover"]]
+
+    /// The stored paths with anything retired dropped.
+    ///
+    /// Applied when an event is DECODED, so every reader sees the same thing
+    /// and the file is cleaned the next time it is saved. Doing it at the
+    /// export instead would leave the path in the event for the next surface
+    /// that reads one.
+    static func withoutRetiredAssets(
+        _ paths: [String: [String: String]]
+    ) -> [String: [String: String]] {
+        var cleaned = paths
+        for (day, retired) in retiredAssets {
+            guard var dayPaths = cleaned[day] else { continue }
+            for asset in retired { dayPaths.removeValue(forKey: asset) }
+            cleaned[day] = dayPaths
+        }
+        return cleaned
+    }
+
     /// Key used for a graphics run that died outright rather than reporting a
     /// per-day failure. Names no day, so it can never be passed to --only-days.
     static let graphicsRunKey = "graphics"

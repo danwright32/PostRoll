@@ -199,7 +199,11 @@ extension Event {
         days              = try c.decodeIfPresent([String: PostingDay].self,       forKey: .days)              ?? [:]
         blogPhotoPaths    = try c.decodeIfPresent([URL].self,                      forKey: .blogPhotoPaths)    ?? []
         weekResult        = try c.decodeIfPresent(WeekGenerationResult.self,       forKey: .weekResult)
-        previewMediaPaths = try c.decodeIfPresent([String: [String: String]].self, forKey: .previewMediaPaths) ?? [:]
+        // Anything a day no longer has is dropped on the way in (#961), so no
+        // reader has to remember which assets were retired and the export
+        // cannot copy one it was stored with.
+        previewMediaPaths = PreviewMergePolicy.withoutRetiredAssets(
+            try c.decodeIfPresent([String: [String: String]].self, forKey: .previewMediaPaths) ?? [:])
         mediaErrors       = try c.decodeIfPresent([String: String].self,           forKey: .mediaErrors)       ?? [:]
         mediaWarnings     = try c.decodeIfPresent([String: String].self,           forKey: .mediaWarnings)     ?? [:]
         exportPath        = try c.decodeIfPresent(URL.self,                        forKey: .exportPath)
