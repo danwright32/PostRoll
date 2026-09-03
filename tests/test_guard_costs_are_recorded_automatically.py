@@ -147,11 +147,27 @@ def test_it_starts_when_the_sweep_finishes_rather_than_at_a_clock_time(
         "gets to, and one of the two is always recording nothing")
 
 
+def _followed_workflows(workflow: str) -> list[str]:
+    """The names in the `workflow_run` trigger's own list.
+
+    Parsed rather than searched for. Asking whether the sweep's name APPEARS in
+    the file is answered by any longer name containing it: written that way
+    first, this guard SURVIVED its mutation, because "Guard proofs sweep"
+    contains "Guard proofs" and GitHub would have matched neither (L178).
+    """
+    import re
+    line = re.search(r"^\s*workflows:\s*\[(.*)\]\s*$",
+                     uncommented(workflow), re.M)
+    assert line, ("the workflow_run trigger carries no workflows list, so it "
+                  "follows nothing and this check reads an empty set (L98)")
+    return [name.strip().strip('"\'') for name in line.group(1).split(",")]
+
+
 def test_it_names_the_sweep_by_the_name_the_sweep_declares(workflow: str) -> None:
-    assert _sweep_name() in uncommented(workflow), (
-        f"the trigger does not name {_sweep_name()!r}, which is what "
-        ".github/workflows/guards.yml calls itself, so it matches no workflow "
-        "and fires never")
+    assert _followed_workflows(workflow) == [_sweep_name()], (
+        f"the trigger follows {_followed_workflows(workflow)}, and "
+        f".github/workflows/guards.yml calls itself {_sweep_name()!r}. A name "
+        "that is not exactly that matches no workflow and fires never")
 
 
 def test_it_does_not_fire_on_every_pull_request(workflow: str) -> None:
