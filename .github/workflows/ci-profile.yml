@@ -1,0 +1,99 @@
+name: CI profile
+
+# DISPATCH ONLY, deliberately, for the same two reasons record-durations.yml is.
+#
+# It must never become a check a pull request waits on. `wait_for_checks.py`
+# derives the bar from the workflow files, and a new check name can only go
+# green once its recorded reply already holds it, so adding one costs a
+# knowingly red merge (#1074, L48). A workflow with no `pull_request` trigger is
+# excluded from that derivation by construction rather than by remembering.
+#
+# And it costs nothing until it is asked for. This job builds the app, builds
+# the test bundle and runs the whole Swift suite, so on every push it would pay
+# a second swift-unit to answer a question nobody asked (L307).
+on:
+  workflow_dispatch:
+
+jobs:
+  profile:
+    # The machine swift-unit runs on, because a profile of a different machine
+    # answers about a different job. Every recorded figure this milestone found
+    # to be wrong was wrong for exactly that reason (#1243).
+    runs-on: macos-26
+    # swift-unit itself is about ten minutes and carries 45. This does the same
+    # work plus a GUI compile, and a job without a deadline cannot fail, it can
+    # only hang (L110, L313).
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Prepare the Mac build
+        uses: ./.github/actions/prepare-mac-build
+
+      # What each scheme RESOLVES to, before anything is built with it. The
+      # probe is deliberately not fatal: `-showBuildSettings` for PostRollTests
+      # exits 64, because that scheme lists its target for the test action only,
+      # and under `bash -e` that ended the whole run before any work started the
+      # first time this was tried. tools/ci_profile.py asks the test action too
+      # and carries a failure into the report instead of dying (#1247).
+
+      # `tee` on each invocation, so the attribution is read from the log the
+      # step actually produced rather than re-run. Every one of these carries
+      # -showBuildTimingSummary, including the TEST invocation: without it, the
+      # compile inside the test step can only be had by subtracting the run from
+      # the step, and a subtraction hides whatever else the step spent time on
+      # inside whichever half it is attributed to (#1250).
+      - name: Build the app, timed
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project PostRollApp/PostRoll.xcodeproj \
+            -scheme PostRoll \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath PostRollApp/.derived-data \
+            -showBuildTimingSummary \
+            ONLY_ACTIVE_ARCH=YES \
+            build | tee "${RUNNER_TEMP}/build-the-app.log"
+
+      - name: Run the Swift unit tests, timed
+        run: |
+          set -o pipefail
+          workers="$(sysctl -n hw.ncpu)"
+          echo "::notice::Swift suite on ${workers} workers, ${workers} cores"
+          xcodebuild \
+            -project PostRollApp/PostRoll.xcodeproj \
+            -scheme PostRollTests \
+            -destination 'platform=macOS' \
+            -derivedDataPath PostRollApp/.derived-data \
+            -resultBundlePath "${RUNNER_TEMP}/swift-suite.xcresult" \
+            -parallel-testing-enabled YES \
+            -parallel-testing-worker-count "${workers}" \
+            -showBuildTimingSummary \
+            test | tee "${RUNNER_TEMP}/swift-tests.log"
+
+      - name: Compile the GUI tests, timed
+        run: |
+          set -o pipefail
+          xcodebuild build-for-testing \
+            -project PostRollApp/PostRoll.xcodeproj \
+            -scheme PostRollUITests \
+            -destination 'platform=macOS' \
+            -derivedDataPath PostRollApp/.derived-data \
+            -showBuildTimingSummary | tee "${RUNNER_TEMP}/gui-tests.log"
+
+      # `always()`, because a red suite is one of the runs somebody most wants
+      # the profile of, and a report that only exists for green runs is missing
+      # from every investigation (L514).
+      - name: Say where the time went
+        if: always()
+        run: |
+          python3 tools/ci_profile.py \
+            --scheme PostRoll=Release \
+            --scheme PostRollTests \
+            --scheme PostRollUITests \
+            --build "Build the app=${RUNNER_TEMP}/build-the-app.log" \
+            --build "Run the Swift unit tests=${RUNNER_TEMP}/swift-tests.log" \
+            --build "Compile the GUI tests=${RUNNER_TEMP}/gui-tests.log" \
+            --result-bundle "${RUNNER_TEMP}/swift-suite.xcresult" \
+            | tee -a "${GITHUB_STEP_SUMMARY}"

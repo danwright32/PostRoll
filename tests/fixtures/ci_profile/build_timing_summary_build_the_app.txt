@@ -1,0 +1,51 @@
+Build Timing Summary
+
+SwiftCompile (1 task) | 152.417 seconds
+
+GenerateAssetSymbols (1 task) | 5.725 seconds
+
+SwiftDriver (1 task) | 4.844 seconds
+
+CompileAssetCatalogVariant (1 task) | 2.993 seconds
+
+Ld (1 task) | 1.820 seconds
+
+GenerateDSYMFile (1 task) | 1.378 seconds
+
+PhaseScriptExecution (1 task) | 0.304 seconds
+
+RegisterWithLaunchServices (1 task) | 0.240 seconds
+
+ExtractAppIntentsMetadata (1 task) | 0.157 seconds
+
+CopySwiftLibs (1 task) | 0.131 seconds
+
+CodeSign (1 task) | 0.085 seconds
+
+Copy (4 tasks) | 0.047 seconds
+
+ProcessInfoPlistFile (1 task) | 0.040 seconds
+
+RegisterExecutionPolicyException (1 task) | 0.028 seconds
+
+ProcessProductPackagingDER (1 task) | 0.015 seconds
+
+WriteAuxiliaryFile (16 tasks) | 0.009 seconds
+
+Touch (1 task) | 0.008 seconds
+
+SwiftDriver Compilation Requirements (1 task) | 0.007 seconds
+
+LinkAssetCatalog (1 task) | 0.007 seconds
+
+SwiftDriver Compilation (1 task) | 0.002 seconds
+
+SwiftMergeGeneratedHeaders (1 task) | 0.002 seconds
+
+Validate (1 task) | 0.001 seconds
+
+ProcessProductPackaging (1 task) | 0.001 seconds
+
+note: Run script build phase 'Record the checkout this build was made from' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'PostRoll' from project 'PostRoll')
+** BUILD SUCCEEDED **
+
