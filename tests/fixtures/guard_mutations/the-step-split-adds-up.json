@@ -1,8 +1,8 @@
 {
   "name": "the-step-split-adds-up",
   "file": "tests/fixtures/swift_suite_cost.json",
-  "find": "\"cpu_seconds\": 120.5",
-  "replace": "\"cpu_seconds\": 60.5",
+  "find": "\"cpu_seconds\": 143.0",
+  "replace": "\"cpu_seconds\": 43.0",
   "test": "tests/test_swift_suite_cost_names_its_machine.py::test_the_compile_split_adds_up_to_what_was_measured",
   "breaks": "one half of the test step's compile attribution is edited on its own, so the two halves no longer sum to what was measured and the split reads as an attribution of a total nobody took (#1250)"
 }
