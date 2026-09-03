@@ -199,54 +199,6 @@ jobs:
       # intuition that a cache must help. tests/test_no_dead_build_cache.py
       # names what would have to be shown.
 
-      # The app itself, before the tests. The PostRollTests scheme compiles a
-      # hand-listed subset of Sources, so nothing in CI had ever compiled the
-      # views: a missing brace in InsightsOverviewView sat on main with every
-      # check green, and the app could not be built at all (L3, L88). This is
-      # the job that has to notice, because it is the only one with an Xcode.
-      #
-      # Release, which is the configuration `make install` builds and therefore
-      # the only one that reaches Dan's Applications folder. Without naming it
-      # this built Debug, and the two compile differently: a data race error
-      # that Release refuses and Debug accepts sat on main for three merges with
-      # every check green, and was found only when a stale local build cache was
-      # deleted and the first clean Release build in weeks failed (#485).
-      # Debug still gets compiled either way, by the test scheme below.
-      # ONLY_ACTIVE_ARCH=YES, on the CI build only (#993).
-      #
-      # Release builds universal by default, so this compiled the whole module
-      # twice and linked twice. Read off a runner log on 2026-08-30: one
-      # whole-module `SwiftCompile normal arm64`, one whole-module `SwiftCompile
-      # normal x86_64`, and two `Ld` lines under Release/PostRoll.build. The
-      # step was 132s of a 410s job on the pull request critical path.
-      #
-      # The x86_64 slice runs on no machine this app is installed on, and it is
-      # not what this step is for: it exists for the Release-only diagnostics of
-      # #485 and #521, which are identical for both slices.
-      #
-      # HERE ONLY. `make build` and PostRollApp/build-install.sh still build both,
-      # because that is the bundle somebody installs, and a universal app built
-      # for one architecture runs on one kind of Mac. That failure looks exactly
-      # like this speedup and is far worse, so
-      # tests/test_ci_builds_one_architecture.py asserts both directions rather
-      # than only the one this change is about (L142).
-      #
-      # Safe only while nothing is architecture-specific, which is true today
-      # and is checked rather than promised: that same file fails on any
-      # `#if arch` or `#if targetEnvironment` appearing in Sources or Tests, so
-      # the exemption has a reviewer (L96, L129).
-      - name: Build the app
-        if: steps.already.outputs.run != 'false'
-        run: |
-          xcodebuild \
-            -project PostRollApp/PostRoll.xcodeproj \
-            -scheme PostRoll \
-            -configuration Release \
-            -destination 'platform=macOS' \
-            -derivedDataPath PostRollApp/.derived-data \
-            ONLY_ACTIVE_ARCH=YES \
-            build
-
       # Through tools/suite_counts.py rather than calling xcodebuild directly
       # (#1017). `make test-swift` has read an executed-tests count since #932,
       # but this step did not, so the one place nobody watches the scroll was
@@ -364,6 +316,157 @@ jobs:
         # elapsed time measures when somebody stopped it.
         if: ${{ !cancelled() && steps.already.outputs.run != 'false' }}
         run: echo "swift-unit ran its checks on tree $(git rev-parse HEAD^{tree})"
+  # The Release build, in a job of its own so it runs BESIDE the tests rather
+  # than in front of them (#1242).
+  #
+  # It was the first of three sequential steps in `swift-unit`, and measured on
+  # run 33760431737 it was 194 of that job's 620 seconds, 152.4 of them inside
+  # ONE `SwiftCompile` task: Release compiles whole module, which is one
+  # indivisible unit of work, and this runner has three cores. Nothing in
+  # `swift-unit` consumes what it produces, so the only thing keeping it there
+  # was that nobody had moved it.
+  #
+  # Not a compilation change. Same compiler, same configuration, same flags,
+  # same diagnostics, and the same guards still read it: it costs exactly what
+  # it cost before, in parallel with the tests instead of ahead of them.
+  #
+  # Release is not negotiable here and the reason is recorded rather than
+  # assumed. Commit 208477c closed a gap in which a `sending 'fm' risks causing
+  # data races` error sat on main since #535 with every check green, because CI
+  # built Debug while `make install` builds Release.
+  #
+  # macos-26 for the same reason `swift-unit` uses it: CI's compiler must be at
+  # or ahead of the one on the Mac this is written on, never behind.
+  release-build:
+    runs-on: macos-26
+    # A job without a deadline cannot fail, it can only hang (L110). The build
+    # is about 200 seconds; this is many times that and will not fail a slow
+    # runner.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      # Has a green pull request already checked this exact tree? (#990)
+      #
+      # Every commit on main is a squash merge made by
+      # tools/wait_for_checks.py --merge, which refuses a head that does not
+      # contain main (exit 6, #680) and merges the exact commit it judged. A
+      # squash of a head containing its base produces the head's tree byte for
+      # byte, so the steps below would re-run swift-unit against content it has
+      # already passed on. Measured over the 25 most recent merges, each had
+      # exactly one associated pull request and the trees matched 25 times out
+      # of 25; measured over the last 24 pushes to main, the jobs this gate can
+      # skip are 23 macOS runner-minutes per merge.
+      #
+      # A step rather than a job on purpose. A new job is a new CHECK NAME, and
+      # tools/wait_for_checks.py derives the bar a pull request has to clear
+      # from these workflow files, calibrated against a recorded reply from a
+      # real green pull request. Adding a name means a run carrying it can only
+      # go green once the fixture already holds it, so there is no green run to
+      # record from and breaking the loop costs a knowingly red merge (L48).
+      #
+      # `push` only. On a pull request this must never fire: an up-to-date
+      # branch can carry the same tree as its own head, so a re-run would find
+      # the previous run's green and skip the very check the merge is judged by.
+      #
+      # Every step below asks `!= 'false'` rather than `== 'true'`, so the gate
+      # not running at all, or answering nothing, runs the work. Only the one
+      # positive answer skips (L98).
+      - name: Say whether a green pull request already checked this tree
+        id: already
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/check_tree_already_checked.py --check "release-build"
+
+
+      # Not the image default. A runner image updates its default Xcode without
+      # a commit here, which is how the compiler moved out from under the repo
+      # in the first place, so the version is read out of the file that
+      # tools/check_toolchain.py holds this Mac to (L25, L41). Absent is a hard
+      # failure naming what the image does have: falling back to the default
+      # would be the silent drift this step exists to stop.
+      - name: Select the recorded Xcode
+        if: steps.already.outputs.run != 'false'
+        run: |
+          version="$(cat PostRollApp/.ci-xcode-version)"
+          app="/Applications/Xcode_${version}.app"
+          if [ ! -d "${app}" ]; then
+            echo "PostRollApp/.ci-xcode-version asks for Xcode ${version}, which is not"
+            echo "on this runner image. What it has:"
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          sudo xcode-select --switch "${app}"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        if: steps.already.outputs.run != 'false'
+        run: brew install xcodegen
+
+      # The .xcodeproj is generated from project.yml, so CI regenerates it
+      # rather than trusting a checked-in copy that may be behind the manifest.
+      - name: Generate the Xcode project
+        if: steps.already.outputs.run != 'false'
+        working-directory: PostRollApp
+        run: xcodegen generate
+      # The app itself, before the tests. The PostRollTests scheme compiles a
+      # hand-listed subset of Sources, so nothing in CI had ever compiled the
+      # views: a missing brace in InsightsOverviewView sat on main with every
+      # check green, and the app could not be built at all (L3, L88). This is
+      # the job that has to notice, because it is the only one with an Xcode.
+      #
+      # Release, which is the configuration `make install` builds and therefore
+      # the only one that reaches Dan's Applications folder. Without naming it
+      # this built Debug, and the two compile differently: a data race error
+      # that Release refuses and Debug accepts sat on main for three merges with
+      # every check green, and was found only when a stale local build cache was
+      # deleted and the first clean Release build in weeks failed (#485).
+      # Debug still gets compiled either way, by the test scheme below.
+      # ONLY_ACTIVE_ARCH=YES, on the CI build only (#993).
+      #
+      # Release builds universal by default, so this compiled the whole module
+      # twice and linked twice. Read off a runner log on 2026-08-30: one
+      # whole-module `SwiftCompile normal arm64`, one whole-module `SwiftCompile
+      # normal x86_64`, and two `Ld` lines under Release/PostRoll.build. The
+      # step was 132s of a 410s job on the pull request critical path.
+      #
+      # The x86_64 slice runs on no machine this app is installed on, and it is
+      # not what this step is for: it exists for the Release-only diagnostics of
+      # #485 and #521, which are identical for both slices.
+      #
+      # HERE ONLY. `make build` and PostRollApp/build-install.sh still build both,
+      # because that is the bundle somebody installs, and a universal app built
+      # for one architecture runs on one kind of Mac. That failure looks exactly
+      # like this speedup and is far worse, so
+      # tests/test_ci_builds_one_architecture.py asserts both directions rather
+      # than only the one this change is about (L142).
+      #
+      # Safe only while nothing is architecture-specific, which is true today
+      # and is checked rather than promised: that same file fails on any
+      # `#if arch` or `#if targetEnvironment` appearing in Sources or Tests, so
+      # the exemption has a reviewer (L96, L129).
+      - name: Build the app
+        if: steps.already.outputs.run != 'false'
+        run: |
+          xcodebuild \
+            -project PostRollApp/PostRoll.xcodeproj \
+            -scheme PostRoll \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -derivedDataPath PostRollApp/.derived-data \
+            ONLY_ACTIVE_ARCH=YES \
+            build
+
+      - name: Confirm this job ran its checks
+        # `!cancelled()` rather than nothing, so a job whose checks went RED
+        # still counts as time spent. Dropping a red run would hide a job
+        # getting slower right up to the moment it fails, which is the
+        # direction that matters most, and it is the rule the sweep's proof
+        # step already follows. A CANCELLED job is excluded, because its
+        # elapsed time measures when somebody stopped it.
+        if: ${{ !cancelled() && steps.already.outputs.run != 'false' }}
+        run: echo "release-build ran its checks on tree $(git rev-parse HEAD^{tree})"
   # No Xcode work here at all: these render through Python and Pillow and read
   # pixels back out. They need this runner for its FONTS, not for a build, so the
   # job deliberately does not install XcodeGen or compile the app.
