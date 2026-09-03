@@ -1,0 +1,35 @@
+{
+  "what": "What the Swift suite costs, once per machine, because the two differ by 4x and a bare number gets read as whichever the reader is standing on (#1243).",
+  "runner_image": "macos-26",
+  "readings": [
+    {
+      "machine": "GitHub macos-26 runner",
+      "cores": 3,
+      "workers": 3,
+      "wall_seconds": 212.2,
+      "serial_test_body_seconds": 475.8,
+      "heaviest_class_seconds": 78.4,
+      "heaviest_class": "BannerLegibilityTests",
+      "tests": 2895,
+      "measured_on": "2026-09-03",
+      "measured_from": "workflow_dispatch run 33760431737 at commit 72e1574a315a3f085680048a2bfa91fc27c65fb8: the step's own `Swift suite on 3 workers, 3 cores` notice, xcodebuild's IDETestOperationsObserverDebug reporting `212.162 elapsed`, `Swift: 2895 tests` from tools/suite_counts.py, and the serial total summed off the per-test seconds in the same transcript",
+      "re_measure_with": "gh run view <newest swift.yml run> --log > run.log, then: grep -oE '[0-9.]+ elapsed' run.log for the wall, and sum the '(N seconds)' on every 'Test case ... passed on' line for the serial total"
+    },
+    {
+      "machine": "Daniels-MacBook-Pro-2, macOS 26.5.1, Xcode 26.6",
+      "cores": 12,
+      "workers": 12,
+      "wall_seconds": 123.4,
+      "serial_test_body_seconds": 475.1,
+      "heaviest_class_seconds": 98.0,
+      "heaviest_class": "UnseenSurfaceTests",
+      "tests": 2892,
+      "counts_three_fewer_because": "make test-swift skips the three REVIEW_TESTS dumps, which CI runs. That is the 2,892 against the runner's 2,895, not a lost worker's share.",
+      "measured_on": "2026-09-03",
+      "measured_from": "`make test-swift`, read out of the result bundle it writes rather than off the scroll",
+      "re_measure_with": "make test-swift, then `xcrun xcresulttool get test-results summary --path \"$(. PostRollApp/derived-data-path.sh; printf %s \"$POSTROLL_DERIVED_DATA\")/swift-suite.xcresult\" --format json` for the wall (finishTime minus startTime) and the count, and the same tool's `tests` subcommand for the per-class seconds"
+    }
+  ],
+  "what_the_pair_says": "The two machines run the same amount of test work (475.8s against 475.1s of bodies) and differ almost entirely in how many workers they can pack it onto. The runner loses to packing (212.2s against a perfect 158.6s), this Mac loses to one class (123.4s against a heaviest class of 98.0s). Neither is anywhere near the 'near perfect up to four workers' this record replaces.",
+  "invalidated_by": "any change to swift-unit's runs-on, its worker count, or a class getting materially heavier. tests/test_swift_suite_cost_names_its_machine.py fails on the first of those."
+}
