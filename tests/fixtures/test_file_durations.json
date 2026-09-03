@@ -83,6 +83,7 @@
     "test_ci_caches_and_cancels.py": 0.0,
     "test_ci_gates.py": 1.15,
     "test_ci_log_patterns_read_a_real_log.py": 0.060000000000000005,
+    "test_ci_profile.py": 0.0,
     "test_ci_runs_the_font_dependent_checks.py": 0.03,
     "test_clip_scorer.py": 13.790000000000003,
     "test_closing_crossfade_legibility.py": 177.17999999999998,
@@ -584,6 +585,10 @@
     "test_ci_log_patterns_read_a_real_log.py": {
       "run": "full-2026-09-02T04:01Z",
       "scale": 1.0
+    },
+    "test_ci_profile.py": {
+      "run": "partial-2026-09-03T16:55Z",
+      "scale": 1.286
     },
     "test_ci_runs_the_font_dependent_checks.py": {
       "run": "full-2026-09-02T04:01Z",
