@@ -57,6 +57,50 @@ enum AccountFetchDue {
         return out
     }
 
+    /// The archive's recurring accounts that no fetch has ever reached (#1268).
+    ///
+    /// The fetch is forward only by decision (#1004): it fires when an event's
+    /// handle list settles, so nothing ever asks about the events that were
+    /// already in the store when it shipped. That population is not a small
+    /// remainder, it is all of them, and every consumer of the figures then
+    /// runs correctly over an empty set while reading as though it works
+    /// (L389). Measured on the live store on 2026-09-03: 9 records, 0 rankable,
+    /// not one carrying a fetch outcome.
+    ///
+    /// Scoped two ways, so this stays a backfill and cannot become the launch
+    /// sweep #1004 refused:
+    ///
+    /// - Only accounts that RECUR, on `RecurringAccounts.minimumEvents` or more
+    ///   events, counted by that type's own reader rather than a second notion
+    ///   of recurrence written beside it (L16). Venues and orgs come back; a
+    ///   one time performer is a call spent on a record nothing reads again.
+    /// - Only accounts with NO fetch outcome at all. Refreshing a figure that
+    ///   has aged is the forward path's job, so a second launch asks about
+    ///   nothing.
+    ///
+    /// There is deliberately no "already ran" marker. One would be written by a
+    /// launch that fetched nothing, an empty answer being indistinguishable
+    /// from a full one, and would turn a transient failure into permanent loss
+    /// (L368). Done is derived from the outcomes the fetch itself records, so
+    /// the pass is idempotent by construction and a launch that could not run
+    /// leaves every handle still due.
+    ///
+    /// Most tagged first. The allowance is a rolling hour and a run can be cut
+    /// short, so the order decides which accounts were actually asked about,
+    /// and a dictionary has none to inherit (L343).
+    ///
+    /// Sentinels are not filtered here: `handles(from:)` asks the shared reader
+    /// on the way to the call, and a second copy of that question is a second
+    /// thing to keep in step.
+    static func archiveBackfill(events: [Event],
+                                stats: (String) -> AccountStats?) -> [String] {
+        RecurringAccounts.eventCounts(events: events)
+            .filter { $0.value >= RecurringAccounts.minimumEvents }
+            .filter { stats($0.key)?.outcome == nil }
+            .sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
+            .map(\.key)
+    }
+
     /// The handles worth fetching, in the order they arrived.
     ///
     /// Order preserved rather than sorted, so a run cut short by the allowance

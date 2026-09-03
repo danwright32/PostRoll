@@ -1,0 +1,8 @@
+{
+  "name": "the-archive-backfill-does-not-become-a-launch-sweep",
+  "file": "PostRollApp/Sources/Services/AccountFetchDue.swift",
+  "find": "            .filter { stats($0.key)?.outcome == nil }",
+  "replace": "            .filter { _ in true }",
+  "test": "PostRollTests/AccountFetchDueTests/testAnAccountAFetchHasAlreadyAnsweredIsNotAskedAgain",
+  "breaks": "the one-off archive backfill turns into a sweep that runs on every launch, asking Meta again about accounts it has already answered for and spending a rolling hour allowance on figures nothing has changed about, which is the launch sweep #1004 deliberately refused (#1268)"
+}

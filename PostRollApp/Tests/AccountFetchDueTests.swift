@@ -28,6 +28,86 @@ final class AccountFetchDueTests: XCTestCase {
                                 asOf: now)
     }
 
+    // MARK: - The archive's recurring accounts (#1268)
+    //
+    // The fetch is forward only: it fires when an event's handle list settles,
+    // so nothing has ever asked about the events that were already in the store
+    // when it shipped. Measured on the live store on 2026-09-03: 9 records, 0
+    // of them rankable, and not one carrying a fetch outcome at all, so the
+    // collaborator ranking those figures feed had nothing to rank on any real
+    // day (L389).
+    //
+    // Scoped to the accounts that come back. Venues and orgs recur, one time
+    // performers essentially never do, so a handle tagged once is a call spent
+    // on a record nothing will read again.
+
+    private func event(_ name: String, tagging handles: [String]) -> Event {
+        var e = Event(name: name, org: "Org", venue: "Hall", date: now, shootType: .fullShow)
+        var posting = PostingDay(day: .wednesday)
+        posting.tagHandles = handles
+        e.days[DayName.wednesday.rawValue] = posting
+        return e
+    }
+
+    private func backfill(_ events: [Event], _ table: [String: AccountStats] = [:]) -> [String] {
+        AccountFetchDue.archiveBackfill(events: events,
+                                        stats: { table[AccountBook.key($0)] })
+    }
+
+    func testAnAccountTaggedOnOneEventOnlyIsNotBackfilled() {
+        XCTAssertEqual(backfill([event("a", tagging: ["oneoff"])]), [])
+    }
+
+    func testAnAccountTaggedOnTwoEventsIsBackfilled() {
+        XCTAssertEqual(backfill([event("a", tagging: ["carnegiehall"]),
+                                 event("b", tagging: ["carnegiehall"])]),
+                       ["carnegiehall"])
+    }
+
+    func testAnAccountAFetchHasAlreadyAnsweredIsNotAskedAgain() {
+        // What makes this a backfill rather than a launch sweep. Refreshing a
+        // figure that has aged stays with the forward path; this asks only
+        // about accounts no fetch has ever reached.
+        let events = [event("a", tagging: ["carnegiehall"]),
+                      event("b", tagging: ["carnegiehall"])]
+        XCTAssertEqual(backfill(events, ["carnegiehall": measured()]), [])
+        XCTAssertEqual(backfill(events, ["carnegiehall": measured(daysAgo: 400)]), [],
+                       "a stale figure is the forward path's job, not this one")
+    }
+
+    func testAnAccountDanTypedFiguresForIsStillBackfilled() {
+        // Typed is not fetched. The call adds what typing cannot: the stable
+        // Instagram id, the post mix, and whether Meta will answer at all.
+        let typed = AccountStats(followers: 12_700, recordedOn: now, followersSource: .typed)
+        XCTAssertEqual(backfill([event("a", tagging: ["batterydance"]),
+                                 event("b", tagging: ["batterydance"])],
+                                ["batterydance": typed]),
+                       ["batterydance"])
+    }
+
+    func testTheAccountsTaggedMostAreAskedAboutFirst() {
+        // The allowance is a rolling hour and a run can be cut short, so the
+        // order decides which accounts got asked about (L343). A dictionary
+        // has no order to inherit, so one has to be stated.
+        // Named so that counting and the alphabet DISAGREE. With names whose
+        // alphabetical order happens to match their tag counts, this passes
+        // just as well with no ordering rule at all, which is what the first
+        // version of it did (L48).
+        let events = [event("a", tagging: ["ahandle", "mhandle", "zhandle"]),
+                      event("b", tagging: ["mhandle", "zhandle"]),
+                      event("c", tagging: ["zhandle"])]
+        XCTAssertEqual(backfill(events), ["zhandle", "mhandle"],
+                       "the most tagged account is not asked about first, so a run "
+                       + "cut short by the allowance spent it on the rarer account")
+    }
+
+    func testAnEventListWithNothingRecurringAsksAboutNothing() {
+        // Not an empty pass reported as a completed one: there is genuinely
+        // nothing to ask, which is what a store of one-off performers looks
+        // like, and it must not read the same as a pass that failed.
+        XCTAssertEqual(backfill([event("a", tagging: ["x"]), event("b", tagging: ["y"])]), [])
+    }
+
     // MARK: - What is worth a call
 
     func testAnAccountNobodyHasEverFetchedIsDue() {

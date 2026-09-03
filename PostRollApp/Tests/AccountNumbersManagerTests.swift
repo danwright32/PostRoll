@@ -186,7 +186,91 @@ final class AccountNumbersManagerTests: XCTestCase {
         XCTAssertNotNil(m.failureNote, "and the fetch failure still has somewhere to go")
     }
 
+    // MARK: - The archive's recurring accounts, at launch (#1268)
+
+    private func event(_ name: String, tagging handles: [String]) -> Event {
+        var e = Event(name: name, org: "Org", venue: "Hall", date: now, shootType: .fullShow)
+        var posting = PostingDay(day: .wednesday)
+        posting.tagHandles = handles
+        e.days[DayName.wednesday.rawValue] = posting
+        return e
+    }
+
+    private func owners(_ answer: @escaping @Sendable ([String]) async throws
+                        -> [PythonBridge.AccountFigures]) -> AppOwners {
+        var made = AppOwners()
+        made.accountNumbers = manager(answer)
+        return made
+    }
+
+    func testTheArchivesRecurringAccountsAreAskedAboutOnce() async {
+        // Nothing had ever asked about them. The fetch fires when an event's
+        // handles settle, so the events already in the store when it shipped
+        // were never reached, and the ranking they feed had nothing to rank.
+        let heard = Recorder()
+        let owned = owners { handles in heard.saw(handles); return [] }
+
+        owned.backfillTheArchive(events: [event("a", tagging: ["carnegiehall", "oneoff"]),
+                                          event("b", tagging: ["carnegiehall"])],
+                                 stats: { _ in nil }, asOf: now)
+        await settle()
+
+        XCTAssertEqual(heard.handles, ["carnegiehall"],
+                       "either the recurring account was missed or the allowance "
+                       + "was spent on a performer who never comes back")
+    }
+
+    func testALaunchWithNothingLeftToBackfillAsksAboutNothing() async {
+        // Idempotent by construction rather than by a stored marker: the fetch
+        // records an outcome, and an account carrying one is not asked again.
+        // A marker would be written by a launch that fetched nothing and turn
+        // a transient failure into permanent loss (L368).
+        let heard = Recorder()
+        let owned = owners { handles in heard.saw(handles); return [] }
+        let answered = AccountStats(followers: 1_000, likes: 50, comments: 5, recordedOn: now,
+                                    outcome: .measured)
+
+        owned.backfillTheArchive(events: [event("a", tagging: ["carnegiehall"]),
+                                          event("b", tagging: ["carnegiehall"])],
+                                 stats: { _ in answered }, asOf: now)
+        await settle()
+
+        XCTAssertTrue(heard.handles.isEmpty, "the pass asked again about an account "
+                      + "the fetch has already answered for")
+    }
+
+    func testALaunchThatCouldNotFetchLeavesTheWorkStillDue() async {
+        // The failure path. The pass records nothing itself, so a launch where
+        // the fetch throws leaves every handle exactly as due as it was, and
+        // the next launch asks again.
+        struct Refused: Error {}
+        let heard = Recorder()
+        let owned = owners { handles in heard.saw(handles); throw Refused() }
+        let events = [event("a", tagging: ["carnegiehall"]), event("b", tagging: ["carnegiehall"])]
+
+        owned.backfillTheArchive(events: events, stats: { self.book.stats(for: $0) }, asOf: now)
+        await settle()
+
+        // The attempt has to have HAPPENED, or "still due" is satisfied by a
+        // fixture in which nothing could have marked it done anyway (L159).
+        XCTAssertEqual(heard.handles, ["carnegiehall"], "the fetch was never attempted, "
+                       + "so this says nothing about what a failure leaves behind")
+        XCTAssertEqual(AccountFetchDue.archiveBackfill(events: events,
+                                                       stats: { self.book.stats(for: $0) }),
+                       ["carnegiehall"],
+                       "a failed launch left the account looking done, so nothing "
+                       + "will ever ask about it again")
+    }
+
     // MARK: - Helpers
+
+    /// Remembers which handles reached the fetch, from whichever thread asked.
+    private final class Recorder: @unchecked Sendable {
+        private let lock = NSLock()
+        private var seen: [String] = []
+        func saw(_ handles: [String]) { lock.withLock { seen += handles } }
+        var handles: [String] { lock.withLock { seen } }
+    }
 
     private final class Counter: @unchecked Sendable {
         private let lock = NSLock()
