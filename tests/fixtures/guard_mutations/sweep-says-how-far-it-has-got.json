@@ -1,7 +1,7 @@
 {
   "name": "sweep-says-how-far-it-has-got",
   "file": "tools/check_guards.py",
-  "find": "        where = f\"[{number} of {len(entries)}, {time.monotonic() - started:.0f}s]\"",
+  "find": "        where = f\"[{number} of {len(entries)}, {now() - started:.0f}s]\"",
   "replace": "        where = \"\"",
   "test": "tests/test_check_guards.py::test_each_entry_reports_where_it_has_got_to",
   "breaks": "the sweep stops saying how far through it is and how long it has taken, so twenty minutes of work looks exactly like a hang to anybody watching, which is what CLAUDE.md's rule about time-taking actions is for (#641)"
