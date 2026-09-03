@@ -1,0 +1,8 @@
+{
+  "name": "the-split-is-measured-not-apportioned",
+  "file": "tests/fixtures/swift_suite_cost.json",
+  "find": "so there is one frontend job per file and each file's wall clock is its own",
+  "replace": "by apportioning each batch's wall clock across the files in it",
+  "test": "tests/test_swift_suite_cost_names_its_machine.py::test_the_split_says_how_it_was_taken_and_was_not_apportioned",
+  "breaks": "the Sources against Tests split goes back to being apportioned from each batch's time by file count, which with every batch mixed at a nearly constant ratio can only ever report the two halves as costing the same per file whatever the truth is, and that is exactly the wrong finding this record had to be corrected for (#1250, L107, L63)"
+}

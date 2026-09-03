@@ -46,24 +46,31 @@
       "machine": "Daniels-MacBook-Pro-2, 12 cores, macOS 26.5.1, Xcode 26.6",
       "measured_on": "2026-09-03",
       "files": 541,
-      "batches": 22,
-      "frontend_cpu_seconds": 280.8,
-      "emit_module_cpu_seconds": 16.1,
-      "sources": {
-        "files": 228,
-        "cpu_seconds": 120.5
+      "as_the_job_builds_it": {
+        "batches": 22,
+        "frontend_cpu_seconds": 280.8,
+        "emit_module_cpu_seconds": 16.1,
+        "note": "what the step actually pays. The Swift driver batches the 541 files into 22 frontend jobs, and batching is why this is cheaper than the per-file total below."
       },
-      "tests": {
-        "files": 313,
-        "cpu_seconds": 160.3
+      "split": {
+        "method": "a second cold build with SWIFT_ENABLE_BATCH_MODE=NO, so there is one frontend job per file and each file's wall clock is its own",
+        "frontend_cpu_seconds": 282.9,
+        "sources": {
+          "files": 228,
+          "cpu_seconds": 143.0,
+          "seconds_per_file": 0.627
+        },
+        "tests": {
+          "files": 313,
+          "cpu_seconds": 139.9,
+          "seconds_per_file": 0.447
+        },
+        "sources_cost_ratio": 1.4
       },
-      "seconds_per_file": {
-        "sources": 0.53,
-        "tests": 0.51
-      },
-      "what_it_says": "Neither half dominates. The cost per file is the same either side (0.53s against 0.51s), so the compile tracks the file COUNT and there is no hot half to attack.",
-      "measured_from": "a cold `build-for-testing` into a throwaway derived data path with -showBuildTimingSummary and OTHER_SWIFT_FLAGS=-stats-output-dir. The swift driver batches 541 files into 22 frontend jobs, so each job's wall time is apportioned across its own files, which assumes files inside one batch cost about the same.",
-      "re_measure_with": "xcodebuild -project PostRollApp/PostRoll.xcodeproj -scheme PostRollTests -destination 'platform=macOS' -derivedDataPath <fresh dir> -showBuildTimingSummary OTHER_SWIFT_FLAGS='-stats-output-dir <fresh dir>' build-for-testing, then sum each stats file's swift-frontend wall against the file list of the batch it names"
+      "what_it_says": "The app's own source is HALF the test bundle's compile cost (51%) while being 42% of the files, because a Sources file costs 1.4x what a Tests file does. The dearest files are all SwiftUI views: CaptionReviewView 5.89s, PhotoAssignmentView 5.66s, OCRReviewView 5.09s. So the lever is the Sources side, and it is about which files are compiled rather than how many.",
+      "superseded_reading": "The first attempt apportioned each BATCH's time across its own files and reported Sources 120.5s at 0.53s a file against Tests 160.3s at 0.51s, concluding that neither half dominates. That was the METHOD, not the code: all 22 batches were mixed at a nearly constant ratio, so apportioning by file count could only ever return a near identical cost per file whatever the truth was (L107, L63). Both the shares and the finding were wrong.",
+      "measured_from": "two cold build-for-testing runs into throwaway derived data paths, one as the job builds it and one with batch mode off, both with -showBuildTimingSummary and OTHER_SWIFT_FLAGS=-stats-output-dir",
+      "re_measure_with": "xcodebuild -project PostRollApp/PostRoll.xcodeproj -scheme PostRollTests -destination 'platform=macOS' -derivedDataPath <fresh dir> SWIFT_ENABLE_BATCH_MODE=NO OTHER_SWIFT_FLAGS='-stats-output-dir <fresh dir>' build-for-testing, then sum each stats file's swift-frontend wall by whether its file sits under Sources or Tests"
     },
     "unreached_sources": {
       "machine": "Daniels-MacBook-Pro-2, 12 cores",
@@ -72,9 +79,11 @@
       "with_zero_executed_lines": 22,
       "executable_lines_never_executed": 9339,
       "executable_lines_in_sources": 58332,
-      "what_it_says": "16% of the app's executable lines are compiled into the test bundle and never run, which is about 19 CPU-seconds, or roughly 6 seconds of wall on three cores. Not a lever: it is small, and it stops being true the first time a test touches one of those files.",
-      "measured_from": "the suite run with -enableCodeCoverage YES, read through `xcrun xccov view --report --json`",
-      "re_measure_with": "xcodebuild ... -enableCodeCoverage YES -resultBundlePath <path> test, then xcrun xccov view --report --json <path>"
+      "what_it_says": "22 of the 226 Sources files in the test bundle execute no line at all, 9,339 of 58,332 executable lines, and they cost a measured 19.4 CPU-seconds of the 282.9, which is 7%. On three cores that is a handful of seconds of wall. Still not a lever: it is small, and it stops being true the first time a test touches one of those files. The largest are CollagePreviewThumbnail at 3.02s, InstagramMockup at 2.68s and ReelStripPreviewThumbnail at 1.89s.",
+      "measured_from": "the suite run with -enableCodeCoverage YES read through `xcrun xccov view --report --json`, joined to the per-file frontend times from the batch-mode-off build",
+      "re_measure_with": "xcodebuild ... -enableCodeCoverage YES -resultBundlePath <path> test, then xcrun xccov view --report --json <path>",
+      "cpu_seconds": 19.4,
+      "share_of_the_compile": "7%"
     },
     "packing": {
       "what": "Whether the 212s run is bounded by one heavy class or by how the classes are dealt.",

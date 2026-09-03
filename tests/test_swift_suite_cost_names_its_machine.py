@@ -230,31 +230,71 @@ def test_every_part_of_the_step_reading_can_be_taken_again(block: str) -> None:
         "still holds")
 
 
+#: How the split MUST have been taken. The first reading apportioned each
+#: BATCH's time across its own files, and all 22 batches were mixed at a nearly
+#: constant ratio, so that method could only ever return a near identical cost
+#: per file whatever the truth was: it reported 0.53s against 0.51s and called
+#: it a finding. A number produced by a definition written beside the code
+#: rather than by the code is not a measurement (L107), and one that can only
+#: produce the answer it produced is not a check (L63).
+UNAPPORTIONED = "one frontend job per file"
+
+
+def test_the_split_says_how_it_was_taken_and_was_not_apportioned() -> None:
+    split = _step()["compile"]["split"]
+    assert UNAPPORTIONED in split.get("method", ""), (
+        "the split does not say it was measured one file at a time, so it may "
+        "be the apportionment that could only ever report the two halves as "
+        f"costing the same: {split.get('method')!r}")
+
+
 def test_the_compile_split_adds_up_to_what_was_measured() -> None:
     """Two halves that do not sum to the total mean one of the three numbers was
     edited on its own, and a split that does not add up is worse than no split:
     it reads as an attribution."""
-    compile = _step()["compile"]
-    halves = compile["sources"]["cpu_seconds"] + compile["tests"]["cpu_seconds"]
-    assert halves == pytest.approx(compile["frontend_cpu_seconds"], abs=1.0), (
+    split = _step()["compile"]["split"]
+    halves = split["sources"]["cpu_seconds"] + split["tests"]["cpu_seconds"]
+    assert halves == pytest.approx(split["frontend_cpu_seconds"], abs=1.0), (
         f"{halves} of attributed seconds against a measured "
-        f"{compile['frontend_cpu_seconds']}")
-    files = compile["sources"]["files"] + compile["tests"]["files"]
-    assert files == compile["files"], (
-        f"{files} files attributed against {compile['files']} compiled")
+        f"{split['frontend_cpu_seconds']}")
+    files = split["sources"]["files"] + split["tests"]["files"]
+    assert files == _step()["compile"]["files"], (
+        f"{files} files attributed against {_step()['compile']['files']} compiled")
 
 
 def test_the_per_file_costs_are_the_ones_the_split_implies() -> None:
-    """The finding is that the two halves cost the SAME per file, so the split
-    follows the file count. If that stops being derivable from the numbers
-    beside it, the sentence saying so is no longer supported by anything."""
-    compile = _step()["compile"]
+    """Each half's cost per file has to follow from its own seconds and its own
+    count, so a field edited alone is caught. This is arithmetic on two
+    independent measurements now, where before the split itself was derived
+    from the counts and this check could not fail."""
+    split = _step()["compile"]["split"]
     for half in ("sources", "tests"):
-        implied = compile[half]["cpu_seconds"] / compile[half]["files"]
-        assert implied == pytest.approx(compile["seconds_per_file"][half], abs=0.02), (
+        implied = split[half]["cpu_seconds"] / split[half]["files"]
+        assert implied == pytest.approx(split[half]["seconds_per_file"], abs=0.02), (
             f"the recorded {half} cost per file does not follow from its own "
-            f"seconds and file count: {implied:.2f} against "
-            f"{compile['seconds_per_file'][half]}")
+            f"seconds and file count: {implied:.3f} against "
+            f"{split[half]['seconds_per_file']}")
+
+
+def test_the_recorded_ratio_is_the_one_the_two_halves_give() -> None:
+    """The finding is that a Sources file costs more than a Tests file. It is
+    the one thing the old method was structurally unable to see, so it is the
+    one worth holding to the numbers under it."""
+    split = _step()["compile"]["split"]
+    implied = (split["sources"]["seconds_per_file"]
+               / split["tests"]["seconds_per_file"])
+    assert implied == pytest.approx(split["sources_cost_ratio"], abs=0.02)
+
+
+def test_the_job_pays_for_the_batched_build_not_the_split_one() -> None:
+    """The split is measured one file at a time, which is NOT how the job
+    builds. Both totals are kept and named, because quoting the single file
+    total as the job's cost would overstate what the step pays (L102)."""
+    built = _step()["compile"]["as_the_job_builds_it"]
+    assert built["batches"] < _step()["compile"]["files"], (
+        "the recorded build is one job per file, which is the measuring "
+        "instrument rather than what CI runs")
+    assert built["frontend_cpu_seconds"] > 0 and built["emit_module_cpu_seconds"] > 0
 
 
 def test_no_makespan_is_below_what_the_work_allows() -> None:
