@@ -1,0 +1,8 @@
+{
+  "name": "an-installing-job-caches-its-wheels",
+  "file": ".github/workflows/record-durations.yml",
+  "find": "          python-version: \"3.11\"\n          cache: pip",
+  "replace": "          python-version: \"3.11\"",
+  "test": "tests/test_no_dead_build_cache.py::test_every_python_setup_that_installs_anything_still_caches_pip",
+  "breaks": "a job that installs the pinned wheels re-downloads every one of them on every run, and the rule that says it must not is scoped to installing jobs since #1099, so this is the half of that scoping that has to keep working"
+}
