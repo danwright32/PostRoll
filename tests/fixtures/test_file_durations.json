@@ -170,6 +170,7 @@
     "test_permission_is_asked_after_launch.py": 0.0,
     "test_perturbation_lock.py": 0.32999999999999996,
     "test_phone_safe_area.py": 21.07,
+    "test_photo_coverage_registry.py": 3.13,
     "test_posting_preset.py": 0.0,
     "test_prd_matches_the_build.py": 0.13,
     "test_print_rect.py": 0.12,
@@ -929,6 +930,10 @@
     "test_phone_safe_area.py": {
       "run": "full-2026-09-02T04:01Z",
       "scale": 1.0
+    },
+    "test_photo_coverage_registry.py": {
+      "run": "partial-2026-09-03T00:38Z",
+      "scale": 0.438
     },
     "test_posting_preset.py": {
       "run": "full-2026-09-02T04:01Z",
