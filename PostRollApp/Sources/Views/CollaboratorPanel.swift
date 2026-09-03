@@ -238,7 +238,7 @@ struct AccountNumbersSheet: View {
     /// Dan will never invite it. Any of the three figures may be nil, which
     /// stores as "not counted" rather than zero. Both marks are always stated,
     /// because this form is the only thing that can set or clear either.
-    let onSave: (Int?, Int?, Int?, Bool, Bool) -> Void
+    let onSave: (Int?, Int?, Int?, Bool, Bool, Int?, Int?) -> Void
     let onCancel: () -> Void
 
     @State private var followers: String = ""
@@ -246,6 +246,8 @@ struct AccountNumbersSheet: View {
     @State private var comments: String = ""
     @State private var isPrivate: Bool = false
     @State private var neverInvite: Bool = false
+    @State private var accepted: String = ""
+    @State private var declined: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
@@ -282,6 +284,13 @@ struct AccountNumbersSheet: View {
             // A standing decision rather than a figure (#1271). Here beside the
             // private mark because both are facts about the account that only
             // Dan can record, and this is the one form that records them.
+            // What came of the invites already sent (#986). Here rather than on
+            // the day's panel because Instagram answers days after the post,
+            // and this is the form that is opened per account whenever
+            // anything about one is recorded.
+            field(CollaboratorPick.acceptedInvitesLabel, text: $accepted)
+            field(CollaboratorPick.declinedInvitesLabel, text: $declined)
+
             Toggle("Never invite as a collaborator", isOn: $neverInvite)
                 .font(.system(size: 12))
             Text(CollaboratorPick.neverInviteFormNote)
@@ -308,7 +317,9 @@ struct AccountNumbersSheet: View {
                     onSave(AccountNumbersEntry.parse(followers),
                            AccountNumbersEntry.parse(likes),
                            AccountNumbersEntry.parse(comments),
-                           isPrivate, neverInvite)
+                           isPrivate, neverInvite,
+                           AccountNumbersEntry.parse(accepted),
+                           AccountNumbersEntry.parse(declined))
                 }
                 .keyboardShortcut(.defaultAction)
             }
@@ -325,6 +336,8 @@ struct AccountNumbersSheet: View {
             // correction cannot silently unmark the account.
             isPrivate = stats?.isPrivate ?? false
             neverInvite = stats?.neverInvite ?? false
+            accepted = AccountNumbersEntry.text(stats?.acceptedInvites)
+            declined = AccountNumbersEntry.text(stats?.declinedInvites)
         }
     }
 
