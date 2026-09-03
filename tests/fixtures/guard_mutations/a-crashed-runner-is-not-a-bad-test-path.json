@@ -1,0 +1,8 @@
+{
+  "name": "a-crashed-runner-is-not-a-bad-test-path",
+  "file": "tools/check_guards.py",
+  "find": "    trap = TRAP.search(output)",
+  "replace": "    trap = None",
+  "test": "tests/test_check_guards.py::test_a_mutation_that_crashed_the_runner_is_not_reported_as_a_bad_test_path",
+  "breaks": "a mutation that TRAPS the xctest process is reported as a test spec matching nothing, so the reader is sent to check a test path that was right all along and the crash, which is a real defect in the code under test, goes unnamed (#1186)"
+}
