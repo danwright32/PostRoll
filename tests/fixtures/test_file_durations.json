@@ -89,6 +89,7 @@
     "test_codec_fidelity.py": 0.0,
     "test_collaborator_constants_match_the_population.py": 0.0,
     "test_collaborator_metric.py": 0.0,
+    "test_collage_arrangement_sheet.py": 1.08,
     "test_collage_arrangements.py": 0.0,
     "test_collage_crop_budget_warning.py": 0.0,
     "test_collage_design_version.py": 0.33,
@@ -606,6 +607,10 @@
     "test_collaborator_metric.py": {
       "run": "full-2026-09-02T04:01Z",
       "scale": 1.0
+    },
+    "test_collage_arrangement_sheet.py": {
+      "run": "partial-2026-09-03T01:14Z",
+      "scale": 0.73
     },
     "test_collage_arrangements.py": {
       "run": "full-2026-09-02T04:01Z",

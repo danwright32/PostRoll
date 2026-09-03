@@ -346,6 +346,7 @@ three need ffmpeg and the macOS system fonts.
 make build           # compile the app without installing it
 make install-force   # install WITHOUT running the test suites first
 make review-sheet    # render every screen the checks measure into one folder
+make collage-arrangements  # draw every collage arrangement the chooser could pick
 make check-guards    # prove the registered guard tests still go red
 make clean           # empty the build cache
 ```
