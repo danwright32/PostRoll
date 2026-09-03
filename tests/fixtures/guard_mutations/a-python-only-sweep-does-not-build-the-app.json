@@ -1,0 +1,8 @@
+{
+  "name": "a-python-only-sweep-does-not-build-the-app",
+  "file": "tools/check_guards.py",
+  "find": "    if not any(e.test.startswith(\"PostRollTests/\") for e in entries):\n        return None",
+  "replace": "    if False:\n        return None",
+  "test": "tests/test_check_guards.py::test_a_run_with_no_swift_entry_does_not_build_the_app",
+  "breaks": "the changed job on a Python-only diff builds the whole app to warm a cache nothing in the run reads, adding two minutes to the job every pull request waits on (#1096)"
+}

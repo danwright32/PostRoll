@@ -540,106 +540,38 @@ def derived_data_path(repo_root: Path) -> str | None:
     return path or None
 
 
+def swift_invocation(repo_root: Path) -> list[str]:
+    """The part every xcodebuild here shares: the project, the scheme, the
+    destination and the cache.
+
+    One spelling, because the warm build (#1096) has to fill exactly the cache
+    the entries read. Two spellings of that would warm one location and read
+    another, and the failure is silent: every entry would simply go on paying
+    for its own build while the log said the app had been built once (L370).
+
+    One warm cache across every entry (#621). Each entry perturbs a single file,
+    so a shared cache recompiles that file and its dependents rather than the
+    whole app: the sweep used to pass no path at all, which sends xcodebuild to
+    a location of its own choosing that starts empty and is never the one
+    `make build` has already filled.
+    """
+    cmd = [
+        "xcodebuild",
+        "-project", str(repo_root / "PostRollApp" / "PostRoll.xcodeproj"),
+        "-scheme", "PostRollTests",
+        "-destination", "platform=macOS",
+    ]
+    cache = derived_data_path(repo_root)
+    if cache is not None:
+        cmd += ["-derivedDataPath", cache]
+    return cmd
+
+
 def command_for(entry: Entry, repo_root: Path) -> list[str]:
     if entry.test.startswith("PostRollTests/"):
-        cmd = [
-            "xcodebuild",
-            "-project", str(repo_root / "PostRollApp" / "PostRoll.xcodeproj"),
-            "-scheme", "PostRollTests",
-            "-destination", "platform=macOS",
-            f"-only-testing:{entry.test}",
-        ]
-        # One warm cache across every entry (#621). Each entry perturbs a single
-        # file, so a shared cache recompiles that file and its dependents rather
-        # than the whole app: the sweep used to pass no path at all, which sends
-        # xcodebuild to a location of its own choosing that starts empty and is
-        # never the one `make build` has already filled.
-        cache = derived_data_path(repo_root)
-        if cache is not None:
-            cmd += ["-derivedDataPath", cache]
-        return cmd + ["test"]
+        return swift_invocation(repo_root) + [
+            f"-only-testing:{entry.test}", "test"]
     return [python_for(repo_root), "-m", "pytest", entry.test, "-q"]
-
-
-def python_for(repo_root: Path) -> str:
-    """Which interpreter runs the Python guards.
-
-    The repo's venv when there is one, because that is where this project's
-    pytest and its dependencies live and it is how every local run is invoked.
-    Otherwise the interpreter running this file, which is what a CI runner has:
-    the path was hardcoded, so every Python entry reported "the runner failed:
-    no such file" the first time this ran anywhere but Dan's Mac (#541).
-
-    Note that is the tool being honest rather than the tool working. An entry
-    whose command cannot start is an ERROR, not a pass, which is why the job
-    went red rather than reporting the guards proven.
-    """
-    venv = repo_root / "venv" / "bin" / "python"
-    return str(venv) if venv.exists() else sys.executable
-
-
-#: A Swift runtime trap in an xcodebuild transcript (#1186).
-#:
-#: Keyed on the trap itself rather than on the word "crash", and read only in
-#: the two branches below where nothing executed: a run that produced a real
-#: total is judged by that total, so a guard whose test legitimately talks about
-#: a fatal error is unaffected.
-TRAP = re.compile(
-    r"((?:Fatal error|Precondition failed|Assertion failed|"
-    r"Swift runtime failure)[^\n]*)")
-
-#: The test xcodebuild had started when the process died. A crash prints this
-#: line and then the trap; a spec that matched nothing prints no such line at
-#: all, which is the discriminator measured on 2026-09-01.
-STARTED = re.compile(r"Test Case '-\[\S+ (\w+)\]' started\.")
-
-
-def crash_verdict(output: str) -> Verdict | None:
-    """The verdict for a transcript whose process TRAPPED, or None.
-
-    Returns a verdict rather than a boolean so the trap is quoted once, where it
-    is read, instead of at both call sites.
-    """
-    trap = TRAP.search(output)
-    if trap is None:
-        return None
-    started = STARTED.findall(output)
-    where = f" while running {started[-1]}" if started else ""
-    return Verdict(Outcome.ERROR,
-                   f"the mutated code CRASHED the test runner{where}: "
-                   f"{trap.group(1).strip()}. xcodebuild reports no executed "
-                   "tests after a trap, so this is not a verdict on the guard. "
-                   "The trap is itself a finding: the code under test is not "
-                   "total on the mutated input, and fixing that is what lets "
-                   "the mutation land as a failing assertion (#1186)")
-
-
-def classify_swift(returncode: int, output: str) -> Verdict:
-    totals = EXECUTED.findall(output)
-    if not totals:
-        return crash_verdict(output) or Verdict(
-            Outcome.ERROR,
-            "the test never ran: no executed-tests total in the "
-            "transcript, so the build broke or the test does not "
-            "exist, and neither is a verdict on the guard")
-    executed, failures = (int(n) for n in totals[-1])
-    if executed == 0:
-        return crash_verdict(output) or Verdict(
-            Outcome.ERROR,
-            "0 tests executed: the spec matched nothing, which is "
-            "not a green run (L98)")
-    if failures > 0:
-        # xcodebuild counts assertion failures, so this can exceed the number
-        # of tests when one test records several.
-        return Verdict(Outcome.KILLED,
-                       f"{failures} failure{'s' if failures != 1 else ''} "
-                       f"across {executed} test{'s' if executed != 1 else ''}")
-    if returncode == 0:
-        return Verdict(Outcome.SURVIVED,
-                       f"all {executed} passed on the broken code")
-    return Verdict(Outcome.ERROR,
-                   f"xcodebuild exited {returncode} with no failing test, "
-                   "which is a tooling problem rather than a verdict")
 
 
 #: A pytest summary reporting skips and nothing that ran.
@@ -1151,9 +1083,153 @@ def costs_or_fallback(kinds: dict[str, bool],
         return guard_entry_costs.by_cost_class(kinds)
 
 
+@dataclass(frozen=True)
+class WarmBuild:
+    """What the one shared app build cost, and whether it worked."""
+    seconds: float
+    ok: bool
+
+
+def warm_the_build(entries: list[Entry], repo_root: Path, runner,
+                   log=say) -> WarmBuild | None:
+    """Build the app ONCE, before any entry runs (#1096).
+
+    The first Swift entry of each shard used to pay for the cold build that
+    every entry after it reused. Measured on run 33409212726, one reading per
+    shard and always that one: 85.0, 90.4, 120.2, 126.6, 127.9 and 137.8 seconds
+    against a Swift median of 24.0. #1090 set those readings aside rather than
+    price six ordinary guards at five times their cost, which is right and
+    leaves a permanent gap, because a shard runs its entries in registry order
+    and the same entries are first every time.
+
+    With the build out here no entry carries it and every reading is the
+    steady-state cost. The total is unchanged: the same build happens, once,
+    somewhere the record can name.
+
+    None when there is nothing to warm. A run holding no Swift entry must not
+    pay a build for a cache nothing in it reads, which is the `changed` job on
+    a Python-only diff, the job every pull request waits on.
+    """
+    if not any(e.test.startswith("PostRollTests/") for e in entries):
+        return None
+    if derived_data_path(repo_root) is None:
+        # The caller has already said the sweep will pay per entry. Building
+        # here would fill a location nothing else reads.
+        return None
+    command = swift_invocation(repo_root) + ["build-for-testing"]
+    log("building the app once before the loop, so no entry below carries it "
+        "(#1096)")
+    started = time.monotonic()
+    with build_lock(build_lock_path(repo_root), log=log):
+        code, output = runner(command, repo_root)
+    seconds = time.monotonic() - started
+    if code != 0:
+        # Loud, and NOT fatal. Every Swift entry below will report ERROR for a
+        # reason that has nothing to do with its guard, and this is the one line
+        # that explains all of them (L11). Stopping here would abandon the
+        # Python entries, which are unaffected and still have verdicts to reach.
+        log(f"the shared app build FAILED in {seconds:.1f}s (exit {code}), so "
+            "every Swift entry below will report ERROR for this reason rather "
+            "than for anything about its guard. What the build said:")
+        for line in output.strip().splitlines()[-12:]:
+            log(f"  {line}")
+        return WarmBuild(seconds, ok=False)
+    log(f"built the app once in {seconds:.1f}s; every reading below is the "
+        "steady-state cost of its own entry")
+    return WarmBuild(seconds, ok=True)
+
+
+def python_for(repo_root: Path) -> str:
+    """Which interpreter runs the Python guards.
+
+    The repo's venv when there is one, because that is where this project's
+    pytest and its dependencies live and it is how every local run is invoked.
+    Otherwise the interpreter running this file, which is what a CI runner has:
+    the path was hardcoded, so every Python entry reported "the runner failed:
+    no such file" the first time this ran anywhere but Dan's Mac (#541).
+
+    Note that is the tool being honest rather than the tool working. An entry
+    whose command cannot start is an ERROR, not a pass, which is why the job
+    went red rather than reporting the guards proven.
+    """
+    venv = repo_root / "venv" / "bin" / "python"
+    return str(venv) if venv.exists() else sys.executable
+
+
+#: A Swift runtime trap in an xcodebuild transcript (#1186).
+#:
+#: Keyed on the trap itself rather than on the word "crash", and read only in
+#: the two branches below where nothing executed: a run that produced a real
+#: total is judged by that total, so a guard whose test legitimately talks about
+#: a fatal error is unaffected.
+TRAP = re.compile(
+    r"((?:Fatal error|Precondition failed|Assertion failed|"
+    r"Swift runtime failure)[^\n]*)")
+
+#: The test xcodebuild had started when the process died. A crash prints this
+#: line and then the trap; a spec that matched nothing prints no such line at
+#: all, which is the discriminator measured on 2026-09-01.
+STARTED = re.compile(r"Test Case '-\[\S+ (\w+)\]' started\.")
+
+
+def crash_verdict(output: str) -> Verdict | None:
+    """The verdict for a transcript whose process TRAPPED, or None.
+
+    Returns a verdict rather than a boolean so the trap is quoted once, where it
+    is read, instead of at both call sites.
+    """
+    trap = TRAP.search(output)
+    if trap is None:
+        return None
+    started = STARTED.findall(output)
+    where = f" while running {started[-1]}" if started else ""
+    return Verdict(Outcome.ERROR,
+                   f"the mutated code CRASHED the test runner{where}: "
+                   f"{trap.group(1).strip()}. xcodebuild reports no executed "
+                   "tests after a trap, so this is not a verdict on the guard. "
+                   "The trap is itself a finding: the code under test is not "
+                   "total on the mutated input, and fixing that is what lets "
+                   "the mutation land as a failing assertion (#1186)")
+
+
+def classify_swift(returncode: int, output: str) -> Verdict:
+    totals = EXECUTED.findall(output)
+    if not totals:
+        return crash_verdict(output) or Verdict(
+            Outcome.ERROR,
+            "the test never ran: no executed-tests total in the "
+            "transcript, so the build broke or the test does not "
+            "exist, and neither is a verdict on the guard")
+    executed, failures = (int(n) for n in totals[-1])
+    if executed == 0:
+        return crash_verdict(output) or Verdict(
+            Outcome.ERROR,
+            "0 tests executed: the spec matched nothing, which is "
+            "not a green run (L98)")
+    if failures > 0:
+        # xcodebuild counts assertion failures, so this can exceed the number
+        # of tests when one test records several.
+        return Verdict(Outcome.KILLED,
+                       f"{failures} failure{'s' if failures != 1 else ''} "
+                       f"across {executed} test{'s' if executed != 1 else ''}")
+    if returncode == 0:
+        return Verdict(Outcome.SURVIVED,
+                       f"all {executed} passed on the broken code")
+    return Verdict(Outcome.ERROR,
+                   f"xcodebuild exited {returncode} with no failing test, "
+                   "which is a tooling problem rather than a verdict")
+
+
+#: What the shared build is filed as in the `cold` reading. Not a registry
+#: entry's name, deliberately: it is not one, and a reader that took it for one
+#: would price a guard at two minutes.
+SHARED_BUILD = "the shared app build (#1096)"
+
+
 def write_timings(path: Path, results: list[Result], repo_root: Path,
                   shard: tuple[int, int] | None = None,
-                  unproven: list[Entry] | None = None) -> int:
+                  unproven: list[Entry] | None = None,
+                  warm: WarmBuild | None = None) -> int:
     """Write one run's per-entry readings, for `tools/record_guard_costs.py`.
 
     Only entries that reached a VERDICT are written. An entry that errored
@@ -1200,10 +1276,29 @@ def write_timings(path: Path, results: list[Result], repo_root: Path,
     # loop, so no entry pays for it and every reading is the steady-state cost;
     # that is a change to what the sweep does rather than to what it records,
     # which is why it is not in #1090.
-    cold = next((r for r in usable
-                 if r.entry.test.startswith("PostRollTests/")), None)
-    if cold is not None:
-        usable = [r for r in usable if r is not cold]
+    #
+    # Since #1096 the sweep builds the app ONCE before the loop, so on any run
+    # that did there is no first entry carrying it: every reading below is the
+    # steady-state cost, and the `cold` slot holds the shared build's own time
+    # instead. The old behaviour stays for the runs it still describes, which is
+    # a checkout naming no shared cache, where each entry really does build.
+    #
+    # A FAILED shared build records no cold reading. It took whatever time a
+    # broken build takes, and filing that as the cold build's cost puts a number
+    # nothing downstream can tell from a real one into the record (L331).
+    cold_payload: dict | None = None
+    if warm is None:
+        cold = next((r for r in usable
+                     if r.entry.test.startswith("PostRollTests/")), None)
+        if cold is not None:
+            usable = [r for r in usable if r is not cold]
+            cold_payload = {"entry": cold.entry.name,
+                            "seconds": round(cold.seconds, 2)}
+    else:
+        cold = None
+        if warm.ok:
+            cold_payload = {"entry": SHARED_BUILD,
+                            "seconds": round(warm.seconds, 2)}
     run = os.environ.get("GITHUB_RUN_ID") or f"local-{platform.node()}"
     payload = {
         "run": run,
@@ -1218,8 +1313,7 @@ def write_timings(path: Path, results: list[Result], repo_root: Path,
         "seconds": {r.entry.name: round(r.seconds, 2) for r in usable},
         "kinds": {r.entry.name: r.entry.test.startswith("PostRollTests/")
                   for r in usable},
-        "cold": ({"entry": cold.entry.name, "seconds": round(cold.seconds, 2)}
-                 if cold is not None else None),
+        "cold": cold_payload,
         # Whether this shard ran out of time. A shard that hit its deadline
         # measured the entries it reached and NOTHING about the ones it did
         # not, and its file is indistinguishable from a complete one by its
@@ -1415,7 +1509,13 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
 
     results = []
     unproven: list[Entry] = []
+    # Started BEFORE the shared build, so the build's time is inside the
+    # deadline rather than free of it. A deadline that cannot see two minutes of
+    # building is two minutes short, and what catches the overrun is the
+    # runner's own cap, which reports CANCELLED: the same thing a superseded run
+    # reports, which is the confusion #1086 exists to remove.
     started = time.monotonic()
+    warm = warm_the_build(entries, repo_root, runner, log=log)
     for number, entry in enumerate(entries, start=1):
         # Stop ourselves rather than let the runner's cap do it. A job killed by
         # `timeout-minutes` reports CANCELLED, which is also what a superseded
@@ -1469,7 +1569,7 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
     log(guard_work_line(results))
     if timings_path is not None:
         written = write_timings(timings_path, results, repo_root, shard=shard,
-                                unproven=unproven)
+                                unproven=unproven, warm=warm)
         log(f"wrote {written} entry timing(s) to {timings_path}")
     for skipped in unproven:
         edited = blocking_names is None or skipped.name in blocking_names

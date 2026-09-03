@@ -1,0 +1,8 @@
+{
+  "name": "the-app-is-built-once-before-the-loop",
+  "file": "tools/check_guards.py",
+  "find": "    warm = warm_the_build(entries, repo_root, runner, log=log)",
+  "replace": "    warm = None",
+  "test": "tests/test_check_guards.py::test_the_app_is_built_once_before_any_entry_runs",
+  "breaks": "the first Swift entry of every shard pays for the cold app build again, so six ordinary guards are priced at five times their cost, the deal spreads six phantoms one per shard, and the entries that are always first are estimated from their kind's median indefinitely (#1096, #1090)"
+}
