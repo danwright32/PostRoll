@@ -190,3 +190,98 @@ def test_the_superseded_local_figure_is_not_still_stated_as_this_jobs_cost() -> 
     assert "106s wall in parallel" not in text, (
         "swift.yml still records the local Mac's 106s wall clock as this job's cost"
     )
+
+
+# ── where the test STEP's time goes (#1250) ──────────────────────────────────
+#
+# With #1103 answered and #1242 closed, the two largest costs in swift-unit are
+# both inside the test step and nothing tracked either. The readings live beside
+# the suite's, in the same record and under the same rule: each says which
+# machine it came from and how to take it again.
+
+def _step() -> dict:
+    step = _record().get("test_step")
+    assert step, (
+        f"{FIXTURE} holds no test_step block, so the step every pull request "
+        "waits on is unmeasured again (#1250)")
+    return step
+
+
+#: The blocks that are a measurement rather than prose, and so have to say
+#: where they were taken.
+MEASURED_BLOCKS = ("runner_seconds", "compile", "unreached_sources", "packing")
+
+
+@pytest.mark.parametrize("block", MEASURED_BLOCKS)
+def test_every_part_of_the_step_reading_says_where_it_came_from(block: str) -> None:
+    held = _step()[block]
+    assert held.get("measured_on"), f"{block} carries no date"
+    assert held.get("measured_from"), (
+        f"{block} does not say what it was read off, so nobody after can tell "
+        "a measurement from an estimate")
+
+
+@pytest.mark.parametrize("block", ("compile", "unreached_sources", "packing"))
+def test_every_part_of_the_step_reading_can_be_taken_again(block: str) -> None:
+    """A dated number with no command behind it is the thing #1243 was about:
+    it reads as MORE trustworthy the older it gets (L316)."""
+    assert _step()[block].get("re_measure_with"), (
+        f"{block} cannot be re-measured, so nothing can ever tell whether it "
+        "still holds")
+
+
+def test_the_compile_split_adds_up_to_what_was_measured() -> None:
+    """Two halves that do not sum to the total mean one of the three numbers was
+    edited on its own, and a split that does not add up is worse than no split:
+    it reads as an attribution."""
+    compile = _step()["compile"]
+    halves = compile["sources"]["cpu_seconds"] + compile["tests"]["cpu_seconds"]
+    assert halves == pytest.approx(compile["frontend_cpu_seconds"], abs=1.0), (
+        f"{halves} of attributed seconds against a measured "
+        f"{compile['frontend_cpu_seconds']}")
+    files = compile["sources"]["files"] + compile["tests"]["files"]
+    assert files == compile["files"], (
+        f"{files} files attributed against {compile['files']} compiled")
+
+
+def test_the_per_file_costs_are_the_ones_the_split_implies() -> None:
+    """The finding is that the two halves cost the SAME per file, so the split
+    follows the file count. If that stops being derivable from the numbers
+    beside it, the sentence saying so is no longer supported by anything."""
+    compile = _step()["compile"]
+    for half in ("sources", "tests"):
+        implied = compile[half]["cpu_seconds"] / compile[half]["files"]
+        assert implied == pytest.approx(compile["seconds_per_file"][half], abs=0.02), (
+            f"the recorded {half} cost per file does not follow from its own "
+            f"seconds and file count: {implied:.2f} against "
+            f"{compile['seconds_per_file'][half]}")
+
+
+def test_no_makespan_is_below_what_the_work_allows() -> None:
+    """A best-effort deal cannot beat either the total over the workers or the
+    single heaviest class. A recorded figure under both is arithmetic nobody
+    checked, and this whole block exists to say which of the two binds."""
+    packing = _step()["packing"]
+    for label, makespan in packing["best_effort_makespan_seconds"].items():
+        workers = int(label.split("_")[0])
+        floor = max(packing["serial_test_body_seconds"] / workers,
+                    packing["heaviest_class_seconds"])
+        assert makespan >= floor - 0.1, (
+            f"{label}: {makespan}s is below the {floor:.1f}s the work allows")
+
+
+def test_the_runners_measured_wall_is_not_better_than_its_best_deal() -> None:
+    """The finding itself: the runner takes 212.2s where a cost-aware deal
+    reaches 158.6s, so the loss is scheduling rather than one class. A measured
+    wall UNDER the best effort would mean one of the two came from a different
+    run."""
+    packing = _step()["packing"]
+    assert (packing["measured_runner_wall_seconds"]
+            >= packing["best_effort_makespan_seconds"]["3_workers"])
+
+
+def test_the_unreached_sources_are_a_subset_of_what_is_compiled() -> None:
+    held = _step()["unreached_sources"]
+    assert held["with_zero_executed_lines"] <= held["sources_files_in_the_bundle"]
+    assert (held["executable_lines_never_executed"]
+            <= held["executable_lines_in_sources"])

@@ -1,0 +1,8 @@
+{
+  "name": "no-makespan-beats-the-work",
+  "file": "tests/fixtures/swift_suite_cost.json",
+  "find": "\"3_workers\": 158.6",
+  "replace": "\"3_workers\": 100.0",
+  "test": "tests/test_swift_suite_cost_names_its_machine.py::test_no_makespan_is_below_what_the_work_allows",
+  "breaks": "a recorded best-effort deal claims to finish faster than the work divides across its workers, which is the arithmetic the whole packing finding rests on: it is what says the runner's 212s is scheduling loss rather than one class that cannot be split (#1250)"
+}
