@@ -1,5 +1,5 @@
 """
-PostRoll — Blog Post Generator
+PostRoll: Blog Post Generator
 
 Generates a Squarespace-ready blog draft for one event in Dan Wright's
 brand voice. 10-12 short paragraphs, continuous prose, no headings, with
@@ -79,7 +79,7 @@ from ..blog_draft import blog_draft_text
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
 
-# Shared prose rules — imported by revise_blog.py so both prompts stay in sync.
+# Shared prose rules, imported by revise_blog.py so both prompts stay in sync.
 # Update here; revise_blog picks up the change automatically.
 BLOG_WRITING_RULES = """\
 - STRUCTURAL: CONTINUOUS NARRATIVE, NOT IMAGE BY IMAGE. THIS IS THE
@@ -350,12 +350,12 @@ BLOG_WRITING_RULES = """\
   earns its place, drop the bridge entirely and let the CTA follow directly from
   the final performance observation. Closing options: [last observation] →
   [optional fresh working detail, never restatement] → [CTA].
-- FACTUAL ACCURACY — CRITICAL: Only attribute conducting, soloist roles,
+- FACTUAL ACCURACY, CRITICAL: Only attribute conducting, soloist roles,
   speaking roles, voice parts (soprano/alto/tenor/bass), instruments, or
   any specific performance duty to a named individual if the program text
   EXPLICITLY states it. Do NOT infer from a person's title, billing order,
   or presence on stage that they took a particular role in the performance.
-  If the program lists "Jennifer Lucy Cook — composer/arranger" and her
+  If the program lists "Jennifer Lucy Cook, composer/arranger" and her
   pieces appear on the program, that does NOT mean she conducted them. And
   you cannot tell from a photo who sings which part or where they stood:
   "Kiki Porter on alto, Kate Logan on soprano, Munya Fashu-Kanu on tenor"
@@ -473,8 +473,8 @@ BLOG_WRITING_RULES = """\
   the sound.
 - FIRST PERSON IS REQUIRED. Dan ("I", "my") must be present from the OPENING
   paragraph through the body. A draft where Dan only appears in the second-to-
-  last paragraph is broken. He's the subject of the post — a photographer
-  writing about working a show — not an observer who shows up at the end. If
+  last paragraph is broken. He's the subject of the post, a photographer
+  writing about working a show, not an observer who shows up at the end. If
   a paragraph could appear in a music review by anyone, rewrite it from
   Dan's perspective behind the camera ("I framed for…", "I waited on the
   conductor's downbeat to…", "from where I was at house left…").
@@ -522,7 +522,7 @@ BLOG_WRITING_RULES = """\
   across the keys, a head bent close over the instrument, a horn's bell
   raised. If it can't be pointed to in a specific frame, cut it.
 - NO single-word pivot sentences for literary effect. "Not sloppy, present.",
-  "Loud. Then quiet.", "Stillness." — these are LLM tells. Use complete
+  "Loud. Then quiet.", "Stillness." are LLM tells. Use complete
   sentences. If a clause feels like it wants to stand alone for drama, fold
   it back into the prior sentence. This includes antithesis fragments like
   "Not managing a choir but leading one." Fold it into the previous sentence:
@@ -537,9 +537,9 @@ BLOG_WRITING_RULES = """\
   sentence: "Her conducting in those passages was unhurried, both arms
   open, mouth moving, asking for something without rushing toward it."
 - NO constructed cleverness. Sentences that sound profound but are really
-  pattern-matched music writing — "the audience came to listen rather than
+  pattern-matched music writing ("the audience came to listen rather than
   to be seen listening," "the silence before the applause was its own
-  movement" — are banned. Replace with a concrete, specific thing Dan
+  movement") are banned. Replace with a concrete, specific thing Dan
   actually noticed while working. This includes paradox and "the whole
   point" turns: "That's a real constraint and also the whole point." Cut
   it; the concrete sentence before it (what the wide frame shows that a
@@ -568,13 +568,13 @@ BLOG_WRITING_RULES = """\
   (who a piece was written for, when, by whom, what the dedication was)
   UNLESS the fact directly explains a photographic decision Dan made.
   Music facts are not photography voice. If you find yourself writing
-  two factual sentences in a row about a piece, you're filling space —
+  two factual sentences in a row about a piece, you're filling space.
   cut it. The good version folds at most one detail into a photographer's
   thought ("Crosett has played the Franck extensively, and you can hear
   that in how settled he was in it"), not a paragraph of program-note
   recitation.
 - OPENING. The opening must be a specific working observation tied to
-  THIS event — what the room, the stage setup, or the ensemble's
+  THIS event: what the room, the stage setup, or the ensemble's
   particular challenge meant for how Dan was going to shoot. NOT
   ambient scene-setting ("the hall was filling up"), NOT a date or
   venue introduction. The opening paragraph should tell someone who
@@ -616,7 +616,7 @@ BLOG_WRITING_RULES = """\
   out, the gold ironwork soft behind her). Cut the tail; the frame is it.
 - WHEN LISTING practical uses for the photographs (grants, season
   decks, archive, portfolios, press kits), name TWO OR THREE naturally
-  — never four-or-more strung together. Exhaustive use-case lists are
+  and never four-or-more strung together. Exhaustive use-case lists are
   a tell that the model is hitting every possibility instead of
   picking the right ones for this event.
 - NO PARENTHETICAL HEDGES. Phrases like "or at least that's what I was
@@ -639,7 +639,7 @@ BLOG_WRITING_RULES = """\
 - LEAD WITH THE STRONGEST LINE in any paragraph that has one. If a
   paragraph contains a sentence that genuinely sounds like Dan ("the
   photographer is not invisible", "you can't fake being settled in a
-  piece"), that sentence is the LEAD of the paragraph — not buried
+  piece"), that sentence is the LEAD of the paragraph, not buried
   three sentences in after logistics. Logistics flow from the line, not
   the other way around.
 - DAN SHOOTS AT CARNEGIE HALL REGULARLY. Never write about Carnegie Hall
@@ -650,11 +650,11 @@ BLOG_WRITING_RULES = """\
   in", "Carnegie Hall, where I was shooting…", anything that introduces
   the venue. Write from familiarity. If the venue is worth noting at
   all, note what was specific or different about THIS particular night
-  in that space — not what the space is like in general. A presenter
+  in that space, not what the space is like in general. A presenter
   reading the post should hear someone who knows the building, not a
   visitor.
 
-  FACTUAL CONSTRAINT — CARNEGIE HALL POSITIONING: At Carnegie Hall,
+  FACTUAL CONSTRAINT, CARNEGIE HALL POSITIONING: At Carnegie Hall,
   Dan is required to shoot from BEHIND THE AUDIENCE at the back of
   the hall. He is NOT allowed to move from that area during the
   performance. This means:
@@ -667,7 +667,7 @@ BLOG_WRITING_RULES = """\
       "behind the last row" / "shooting long from the rear of the
       house".
     • The constraint itself is worth one specific mention in the
-      Approach beat when relevant — it's part of how Dan thinks
+      Approach beat when relevant, since it's part of how Dan thinks
       about working a Carnegie shoot ("at Carnegie I'm fixed at
       the back, so the work is figuring out which moments will
       read at that distance").
@@ -688,7 +688,7 @@ BLOG_WRITING_RULES = """\
     • "If something similar is on your calendar, let me know."
   Vary the shape across posts. If the previous post used "I'd be
   glad to talk…", pick a different opener this time. Selling > 2
-  sentences is wrong — keep it conversational. Do NOT pad the CTA with
+  sentences is wrong. Keep it conversational. Do NOT pad the CTA with
   context the post already established. After a paragraph that already
   laid out the premieres, "especially one with new work or premieres"
   in the CTA is redundant; cut it. "If there's a choral concert coming
@@ -698,7 +698,7 @@ BLOG_WRITING_RULES = """\
   "the first thing I saw", or any similar construction that announces
   the act of perceiving before stating what was perceived. Make the
   observation directly. "Weill was close to full on a Monday night.
-  Not the count — the particular quiet of an audience that had
+  Not the count, the particular quiet of an audience that had
   already settled into listening." beats "I noticed when I walked in
   that Weill was close to full…"
 - LITERARY VERBS reaching beyond Dan's register are out. "Accumulate"
@@ -709,11 +709,11 @@ BLOG_WRITING_RULES = """\
   use a shorter, more concrete verb.
 - PHOTO-USE FRAMING. Avoid "recapping the event" or any framing that
   reduces Dan's photos to a record-of-what-happened. The point is
-  long-term usefulness — debuts, season openers, residencies, runs,
+  long-term usefulness: debuts, season openers, residencies, runs,
   showcases all produce material that ends up in grant decks, season
   announcements, artist portfolios, archive, press kits. "Coverage of
   a single night" beats "recap of the event". Match the frame to the
-  event type — a debut recital isn't a "recap"; it's a launch
+  event type: a debut recital isn't a "recap"; it's a launch
   document.
 - VERIFY PROGRAM ORDER AGAINST THE OCR DATA before drafting. The
   pieces appear in the prompt in the order they appeared on the
@@ -721,11 +721,11 @@ BLOG_WRITING_RULES = """\
   pacing reasons, that's a deliberate choice you must acknowledge.
   Silently reordering pieces ("Beethoven → Moya → Shostakovich →
   Franck" when the program ran "Beethoven → Shostakovich → Moya →
-  Franck") is a factual error — the night Dan worked had a real
+  Franck") is a factual error. The night Dan worked had a real
   shape, and the post should reflect it.
 - NO STATING OBVIOUS PHYSICAL PROPERTIES OF THE VENUE as if they were
   observations. Audiences face the stage, performers are lit, the hall
-  is quiet during music, applause comes between pieces — these are
+  is quiet during music, applause comes between pieces. These are
   defaults of any concert hall and don't carry meaning when stated.
   If you're reaching for a sentence about how attentive the audience
   was, the quality of the listening, or the atmosphere in the room,
@@ -733,7 +733,7 @@ BLOG_WRITING_RULES = """\
   physical description ("the hall faced forward", "the stage was
   bright") that's true of every concert and means nothing on its own.
 - NO INSTAGRAM HANDLES in the blog body. Blog posts go on Dan's website,
-  not on Instagram — handles like "@rainercello" or "@carnegiehall"
+  not on Instagram. Handles like "@rainercello" or "@carnegiehall"
   read as social-media residue and don't help a reader on the website.
   Refer to people and organizations by their actual names. Handles are
   a captions-only thing.
@@ -742,10 +742,10 @@ BLOG_WRITING_RULES = """\
   description. Skip the meta-clause and go straight to the description.
   "Crosett's bow arm in that movement ran long and deliberate, very
   little hurry." beats "Crosett's bow arm was doing something specific
-  in that movement — it ran long and deliberate…". The meta-clause is
+  in that movement, it ran long and deliberate…". The meta-clause is
   filler that announces an observation is coming.
 - VENUE-DESCRIPTOR PHRASING. "Not a sold-out crush" / "a sold-out
-  crush" / "a packed house" — words like "crush" aren't in Dan's
+  crush" / "a packed house". Words like "crush" aren't in Dan's
   register, and stock phrases for full audiences read generic. If the
   count matters, say it plainly ("close to full", "not a sellout but
   close"). Better still: cut the audience-size clause entirely if the
@@ -754,7 +754,7 @@ BLOG_WRITING_RULES = """\
   precise but aren't how anyone actually talks: "performatively
   expectant", "quietly attentive in that particular way", "almost
   ceremonially still", "deliberately unhurried". These are LLM tells
-  — they reach for a precision that real speech doesn't have. Cut
+  because they reach for a precision that real speech doesn't have. Cut
   the qualifier or replace with a plain word. "The audience was
   attentive" or just describe what they did. If you can't picture a
   human saying the phrase out loud in a normal sentence, don't write
@@ -763,11 +763,11 @@ BLOG_WRITING_RULES = """\
   shooting condition", "this creates a particular kind of frame",
   "what this means for the photographer is…", "the upshot is…". They
   announce that an explanation is coming and add no information. The
-  next sentence is the actual point — make it lead. Cut the meta
+  next sentence is the actual point. Make it lead. Cut the meta
   connector entirely.
 - NO APHORISTIC UNIVERSAL STATEMENTS. "The camera question is always
   whose moment it is", "with a solo performer it always comes down
-  to X", "in a recital like this the work is really about Y" —
+  to X", "in a recital like this the work is really about Y".
   sentences that turn one shoot into a universal rule of photography
   read as generated wisdom, not Dan thinking out loud. Dan describes
   THIS show, not the eternal truths of concert photography. Cut
@@ -776,7 +776,7 @@ BLOG_WRITING_RULES = """\
   musicology, not photography voice. "The Delsart transcription
   with the piano part carried over intact from the original violin
   version", "Liszt's piano transcription of the Beethoven symphony",
-  "the Schoenberg edition" — NEVER include facts about who arranged
+  "the Schoenberg edition". NEVER include facts about who arranged
   or transcribed a piece, what the original instrumentation was, or
   which edition was performed UNLESS it directly explains a
   photographic decision Dan made. This is a stricter version of the
@@ -785,7 +785,7 @@ BLOG_WRITING_RULES = """\
 - AT MOST ONE PUNCHY / APHORISTIC SENTENCE PER POST. If a sentence
   reads like it was crafted to be a pull quote ("Those are the frames
   I was after, not the big gestures but the exchanges.", "They're a
-  launch document.", "The work isn't to be invisible — it's to be
+  launch document.", "The work isn't to be invisible, it's to be
   ignored."), one is fine. Two is suspicious. Three is a pattern and
   the post is broken. Real observations don't land this neatly this
   often. If a draft has multiple punchy beats, fold all but one into
@@ -865,7 +865,7 @@ BLOG_WRITING_RULES = """\
 - NO PAIRED DECLARATIVE CLOSES. Do not end a paragraph with two short
   back-to-back sentences where the second one lands as a punchline or
   conclusion. Patterns like "X is Y. It should Z." / "X happened.
-  That's what matters." / "I made the frame. The rest was timing." —
+  That's what matters." / "I made the frame. The rest was timing.":
   cut the second sentence. The preceding paragraph almost always does
   the job without it. The closer is the LLM signaling "this is the
   point" instead of trusting the prose.
@@ -908,7 +908,7 @@ BLOG_WRITING_RULES = """\
   the program data or describe them without a name. The reader never
   sees the writer's doubt.
 - NO FABRICATED BODY LANGUAGE OR PERFORMANCE-WIDE POSTURE. The model
-  has the photos and the program — NOT footage of the full
+  has the photos and the program, NOT footage of the full
   performance. Sentences that describe how a performer moves over the
   course of the night, how they carry themselves on stage in general,
   or how their physical presence compares between performers are
@@ -932,15 +932,15 @@ BLOG_WRITING_RULES = """\
       was stiller, and "which made the contrast work" is a verdict on
       top of it. Describe only what one frame shows.
   These claim sustained observation Dan made with his eyes during the
-  performance — the model wasn't there. Even if a photo happens to
+  performance. The model wasn't there. Even if a photo happens to
   show a moment that supports the claim, generalizing it across the
   performance is invention.
 
   WHAT YOU CAN WRITE: observations grounded in a SPECIFIC photo Dan
   is placing in the post. "In this frame his bow arm is fully extended
-  on a downstroke" is fine — the photo shows that. "Crosett spent the
-  whole Largo with his bow arm running long" is not — the model
-  doesn't know what happened during the rest of the Largo.
+  on a downstroke" is fine, because the photo shows that. "Crosett
+  spent the whole Largo with his bow arm running long" is not, because
+  the model doesn't know what happened during the rest of the Largo.
 
   When in doubt: describe what's in the photo, not what the
   performer was like across the evening. If you find yourself
@@ -1002,7 +1002,7 @@ BLOG_WRITING_RULES = """\
   shutter speed conservative." / "I stayed where I was for longer
   than I usually would." / "I worked quietly from the back." These
   signal competence to the reader instead of letting the work do it.
-  Technique enters the post WHEN IT SERVES A SPECIFIC MOMENT — "the
+  Technique enters the post WHEN IT SERVES A SPECIFIC MOMENT: "the
   Largo went so quiet I had to give up on the shutter sound and shoot
   through the rests" is a story; "I was conscious of my shutter
   noise" is performance. Cut every "I [did professional thing]"
@@ -1057,17 +1057,17 @@ BLOG_WRITING_RULES = """\
   thoughts should carry across two or three paragraphs without a
   photo break. Sometimes jump from a performance observation to a
   logistical aside and back. If every paragraph in the draft is
-  3-4 sentences, the structure is too regular — break the rhythm.
+  3-4 sentences, the structure is too regular. Break the rhythm.
 - DAN ARRIVES BEFORE THE AUDIENCE. He is the working photographer,
   not a ticketholder. He's in the room scouting angles, talking with
-  the production team, and watching the hall fill up — not arriving
+  the production team, and watching the hall fill up, not arriving
   to a settled house. Phrasings like "by the time I was in position",
   "by the time I got there", "as I walked in", "when I arrived"
   imply he showed up late or as a concertgoer and are banned. If the
   audience filling in is part of the opening observation, frame it
   from the working perspective: "I was set up at house left as the
   hall filled in" or "the room had nearly filled by the start of the
-  first piece" — Dan watching it happen, not joining it. The reader
+  first piece": Dan watching it happen, not joining it. The reader
   should always sense Dan was there before showtime doing his job,
   not arriving with the crowd.
 - NEVER STRUCTURE THE BLOG AS A SEQUENCE OF SUBJECT-THEN-PHOTO
@@ -1126,7 +1126,7 @@ BLOG_WRITING_RULES = """\
 """
 
 
-# The 5-beat blog structure — the single authoritative source. Injected into
+# The 5-beat blog structure, the single authoritative source. Injected into
 # the Pass 1 generation prompt (PROMPT_TEMPLATE) and the revise prompt. This
 # is deliberately NOT duplicated in brand-voice.md: the voice (Pass 2) and
 # humanizer (Pass 3) passes clean prose without restructuring, so they don't
@@ -1134,20 +1134,20 @@ BLOG_WRITING_RULES = """\
 # drift out of sync. revise_blog.py imports this so both stay aligned.
 BLOG_STRUCTURE = """\
 **Required structure (all five beats, in order):**
-  1. Venue / opening — drop the reader into the room from where Dan was
+  1. Venue / opening: drop the reader into the room from where Dan was
      working. One specific observation. NOT "Last [day] I had the…"
-  2. Performance — two or three specific moments worth a paragraph
+  2. Performance: two or three specific moments worth a paragraph
      each, from a photographer's perspective. NOT a piece-by-piece recap.
-  3. Approach — how Dan worked the room, distributed. Working details
+  3. Approach: how Dan worked the room, distributed. Working details
      (position decisions, choices about when to move, what he was
      watching for) are woven into the paragraphs where those decisions
      actually happened. There is no standalone approach block. If every
      working detail in the post can be lifted out into one self-contained
      section, it's wrong.
-  4. Practical value — why documentation of an event like this matters
+  4. Practical value: why documentation of an event like this matters
      to the kind of org that put it on (grant decks, season announcements,
      artist portfolios, archive). 1 paragraph.
-  5. Closing + CTA — one sentence placing Dan in the room, then ONE
+  5. Closing + CTA: one sentence placing Dan in the room, then ONE
      short specific CTA.
 
 If beats 3 (approach), 4 (practical value), or 5 (the closing CTA) are
@@ -1165,7 +1165,7 @@ Your task: write a blog post draft for Dan Wright's photography website
 about an event he photographed.
 
 **Audience.** This post is written for performing-arts directors,
-presenters, producers, and managers — people who hire concert/theater
+presenters, producers, and managers, people who hire concert/theater
 photographers for their season decks, grant applications, press kits,
 and artist portfolios. They are NOT general classical-music fans. They
 do NOT need a music-criticism review. They need to know: was Dan in the
@@ -1173,7 +1173,7 @@ room, did he notice the right things, would he be unobtrusive at our
 event, and is his work usable for our marketing/archive needs?
 
 **Voice.** First person from the opening paragraph onward. Dan ("I",
-"my") is the subject of every paragraph — a photographer working the
+"my") is the subject of every paragraph, a photographer working the
 show. If a paragraph reads like a review with Dan absent, you've drifted
 from the brand voice. Rewrite from behind the camera.
 
@@ -1242,7 +1242,7 @@ the person to know, cut it.
 
 {blog_structure}
 
-Follow the blog post rules in the brand voice above EXACTLY — 10-12
+Follow the blog post rules in the brand voice above EXACTLY: 10-12
 short paragraphs, continuous prose, no headings, no bullets, no section
 breaks.
 
@@ -1269,11 +1269,11 @@ Performers (from program OCR):
 Repertoire (from program OCR):
 {pieces}
 
-Organization notes (from program OCR — use this to add depth, ONCE,
+Organization notes (from program OCR, use this to add depth, ONCE,
 naturally, not as a press release paragraph):
 {organization_notes}
 
-Program notes (from program OCR — composer/piece context to weave into
+Program notes (from program OCR, composer/piece context to weave into
 the discussion of each piece):
 {program_notes}
 
@@ -1293,7 +1293,7 @@ list is identical: the first attached image is the first item, the
 second image is the second item, and so on. READ EACH IMAGE so the
 prose can refer to what's actually visible in it, and use the
 filename from that image's own label when you write its [PHOTO:]
-marker — never guess a filename and never invent visuals.
+marker. Never guess a filename and never invent visuals.
 {photo_list}
 
 Photo placement rules:
@@ -1305,17 +1305,17 @@ Photo placement rules:
   before their paragraph, some after) are a broken pattern and
   the post must be rewritten until every marker follows its
   paragraph.
-- Place each photo in the prose at a moment where it makes sense — a
+- Place each photo in the prose at a moment where it makes sense: a
   reference to a specific piece, performer, or moment that the photo
   shows.
 - Use this EXACT format on its own line between paragraphs:
     [PHOTO: filename.jpg | alt text description of what is in the photo]
   The filename MUST be copied verbatim from the `Photo N: …` label
-  attached to that specific image — do NOT reorder, swap, or
+  attached to that specific image. Do NOT reorder, swap, or
   hallucinate filenames. The alt text MUST describe what is actually
   visible in THAT image (the one whose label you copied), 15-25 words:
   who, what, where, lighting, gestures. If the photo is of a poster,
-  building exterior, empty stage, or program book, say so — do not
+  building exterior, empty stage, or program book, say so. Do not
   describe a performance that is not in the frame.
   NAME THE PERFORMER AND THE VENUE IN EVERY MARKER. Write "Joseph
   Medeiros ... at Greenwich House Theater", never "A male performer".
@@ -1341,12 +1341,12 @@ Photo placement rules:
     [PHOTO: DSC4821.jpg | Conductor leading a full chorus from the
     podium at Carnegie Hall, arms raised mid-phrase, blue stage light
     behind the choir risers]
-- Use ALL {photo_count} photos. Spread them through the post — not
+- Use ALL {photo_count} photos. Spread them through the post, not
   clustered at the start or end.
 
 Return JSON ONLY (no markdown fences around the outer object, no
 commentary) in this shape. The title is set deterministically by the
-caller as "{{event}} at {{venue}}" — do not write one. Just emit body
+caller as "{{event}} at {{venue}}". Do not write one. Just emit body
 and photo_count:
 
 {{
@@ -1385,7 +1385,7 @@ def _format_pieces(pieces: list[dict[str, Any]]) -> str:
         composer = p.get("composer", "?")
         title = p.get("title", "?")
         notes = p.get("notes")
-        line = f"- {composer} — {title}"
+        line = f"- {composer}: {title}"
         if notes:
             line += f"\n    notes: {notes}"
         lines.append(line)
@@ -1682,9 +1682,9 @@ def generate_blog(
             if event_url else ""
         )
         # Specific room inside the venue (e.g. Weill Recital Hall inside Carnegie
-        # Hall) — used only for prose context. Graphics still show top-level venue.
+        # Hall). Used only for prose context. Graphics still show top-level venue.
         venue_context_line = (
-            f" — performed in {venue_context.strip()}"
+            f", performed in {venue_context.strip()}"
             if venue_context and venue_context.strip() else ""
         )
 
@@ -1758,7 +1758,7 @@ def generate_blog(
                 runner=run_json_prompt, validate=markers_preserved_validator,
             )
 
-        # === Pass 3: humanizer — always last, non-negotiable ===
+        # === Pass 3: humanizer, always last, non-negotiable ===
         # Runs after the voice pass so it catches any AI tells the voice pass
         # introduced. skip_humanizer exists for tests only.
         if not skip_humanizer and is_humanizer_available(humanizer_path):
