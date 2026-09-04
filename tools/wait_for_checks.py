@@ -285,6 +285,20 @@ def _skips_on_pull_request(job: str, body: str) -> bool:
         return False
     if text == SKIPS_ON_PULL_REQUEST:
         return True
+    # A conjunction whose first half is the known condition (#1259). The guard
+    # sweep waits to be told whether it has anything to prove, so it carries
+    # `not a pull request AND the answer was yes`. On a pull request the first
+    # half is false and the job skips whatever the rest says.
+    #
+    # AND only, and deliberately not `||`: `A || B` can be TRUE on a pull
+    # request through B, so reading it as skipping would take a real check out
+    # of the bar, and a check nobody waits for cannot block a merge (L98).
+    if "||" not in text:
+        halves = [half.strip() for half in text.split("&&")]
+        if SKIPS_ON_PULL_REQUEST in halves:
+            return True
+        if RUNS_ON_PULL_REQUEST in halves:
+            return False
     raise UnreadableWorkflow(
         f"the {job!r} job carries `if: {text}`, which this cannot classify. "
         "Teach it that condition rather than leaving the bar to a guess: a "

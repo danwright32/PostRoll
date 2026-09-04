@@ -2,6 +2,7 @@
   "seconds": {
     "test_a_new_test_file_is_measured.py": 0.9199999999999999,
     "test_a_pull_request_fits_the_runner_limit.py": 0.02,
+    "test_a_quiet_day_costs_no_mac.py": 0.0,
     "test_a_refusal_and_a_failure_are_visible.py": 0.85,
     "test_a_wedged_test_names_itself.py": 24.02,
     "test_account_numbers.py": 0.0,
@@ -284,6 +285,10 @@
     "test_a_pull_request_fits_the_runner_limit.py": {
       "run": "full-2026-09-04T03:02Z",
       "scale": 1.0
+    },
+    "test_a_quiet_day_costs_no_mac.py": {
+      "run": "partial-2026-09-04T19:50Z",
+      "scale": 1.042
     },
     "test_a_refusal_and_a_failure_are_visible.py": {
       "run": "full-2026-09-04T03:02Z",

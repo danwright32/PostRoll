@@ -1,8 +1,8 @@
 {
   "name": "guard-sweep-reports-even-when-it-skips",
   "file": ".github/workflows/guards.yml",
-  "find": "      - name: Say whether the scheduled sweep is still running\n        if: always() && matrix.shard == 1\n",
-  "replace": "      - name: Say whether the scheduled sweep is still running\n        if: always() && steps.due.outputs.due == 'true' && matrix.shard == 1\n",
+  "find": "      - name: Say whether the scheduled sweep is still running\n        if: always()\n",
+  "replace": "      - name: Say whether the scheduled sweep is still running\n        if: always() && steps.ask.outputs.due == 'true'\n",
   "test": "tests/test_ci_gates.py::test_the_steps_that_report_are_not_behind_the_gate",
-  "breaks": "the only step that would report a gate stuck shut runs only when the gate is open, so a sweep that proves nothing for a month reports a healthy schedule throughout (#989, L106)"
+  "breaks": "the only step that would report the sweep's gate stuck shut runs only when the gate is open, so a sweep that proves nothing for a month reports a healthy schedule throughout (#989, #1259, L106)"
 }

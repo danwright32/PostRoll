@@ -20,8 +20,8 @@ commit's run. The mirror is a superseded run that PASSED reporting green for a
 commit nothing has judged. So every row here is now sourced through the head
 SHA and refused if it names another one (L173).
 
-The fixtures are real replies for pull request 667 at
-84e9dbf2b77495a73348cb81bd9de852f2edcf9b, recorded on 2026-08-17, not shapes
+The fixtures are real replies for pull request 1341 at
+825b338131f9f9cd1f6dbb2881a54e6c8c6b9cb4, recorded on 2026-09-04, not shapes
 invented here (L48):
 
     gh api "repos/danwright32/PostRoll/actions/runs?head_sha=<sha>&per_page=100"
@@ -36,9 +36,11 @@ this tool touches is as GitHub sent it.
 `gh pr checks --json name,state,bucket,workflow` reply, which is what the
 verdict rules were calibrated against and still are.
 
-Re-recorded by #1095 from pull request 1102, all seven checks green, because
-that change removed the `reference-frames (thursday-reel)` job and the previous
-recording, from pull request 561 on 2026-08-14, described eight. It is a whole
+Re-recorded by #1259 from pull request 1341, all eight checks settled and
+green, because that change ADDED the `Guard proofs / due` job. Before it, by
+#1095 from pull request 1102, because that one removed
+`reference-frames (thursday-reel)` and the recording from pull request 561 on
+2026-08-14 described eight. It is a whole
 reply as GitHub gave it, not the old one with a row taken out: an intermediate
 commit did delete that row to get the pull request green, and it was replaced
 with this the moment a real green reply of the new shape existed, because a
@@ -96,8 +98,8 @@ REAL_REPLY = REPO_ROOT / "tests" / "fixtures" / "gh_pr_checks_real.json"
 REAL_RUNS = REPO_ROOT / "tests" / "fixtures" / "gh_actions_runs_real.json"
 REAL_JOBS = REPO_ROOT / "tests" / "fixtures" / "gh_actions_jobs_real.json"
 
-#: The head commit of pull request 667, which every recorded reply is about.
-HEAD_SHA = "84e9dbf2b77495a73348cb81bd9de852f2edcf9b"
+#: The head commit of pull request 1341, which every recorded reply is about.
+HEAD_SHA = "825b338131f9f9cd1f6dbb2881a54e6c8c6b9cb4"
 OTHER_SHA = "0ef38b2c1d4e5f60718293a4b5c6d7e8f9a0b1c2"
 REPO = "danwright32/PostRoll"
 
@@ -119,7 +121,7 @@ def real_jobs() -> dict[str, dict]:
 
 
 class FakeApi:
-    """Answers `gh api` paths out of the recorded replies for #667.
+    """Answers `gh api` paths out of the recorded replies for #1341.
 
     A real seam rather than a reimplementation: the replies are GitHub's own,
     so a field renamed here would be a field renamed in the recording (L52).
@@ -239,6 +241,53 @@ def test_a_job_condition_this_cannot_read_refuses_to_answer(tmp_path: Path) -> N
         expected_checks(workflows)
 
 
+def test_a_job_that_also_waits_on_another_job_still_reads_as_skipping(
+        tmp_path: Path) -> None:
+    """A conjunction whose first half is the known condition (#1259).
+
+    The guard sweep now waits to be told whether it has anything to prove, so
+    its condition is `not a pull request AND the answer was yes`. On a pull
+    request the first half is false, so the job skips whatever the second half
+    says, and the bar is unchanged.
+
+    Only AND. `A || B` would be the opposite: the job could run on a pull
+    request through B, and treating it as skipping would drop a check nobody
+    then waits for.
+    """
+    workflows = tmp_path / "workflows"
+    workflows.mkdir()
+    (workflows / "guards.yml").write_text(
+        "name: Guard proofs\non:\n  pull_request:\n  schedule:\n"
+        "    - cron: '0 7 * * *'\njobs:\n"
+        "  full:\n    if: github.event_name != 'pull_request' && "
+        "needs.due.outputs.due == 'true'\n    runs-on: macos-26\n",
+        encoding="utf-8")
+
+    checks = expected_checks(workflows)
+
+    assert {(c.name, c.skips_on_pull_request) for c in checks} == {("full", True)}
+
+
+def test_a_job_that_could_run_on_a_pull_request_through_an_or_is_refused(
+        tmp_path: Path) -> None:
+    """The other half of the rule above, and the one that matters.
+
+    `A || B` can be true on a pull request through B. Reading it as skipping
+    would take a real check out of the bar, and a check nobody waits for is a
+    check that cannot block a merge (L98).
+    """
+    workflows = tmp_path / "workflows"
+    workflows.mkdir()
+    (workflows / "guards.yml").write_text(
+        "name: Guard proofs\non:\n  pull_request:\njobs:\n"
+        "  full:\n    if: github.event_name != 'pull_request' || "
+        "needs.due.outputs.due == 'true'\n    runs-on: macos-26\n",
+        encoding="utf-8")
+
+    with pytest.raises(UnreadableWorkflow, match="if:"):
+        expected_checks(workflows)
+
+
 def test_a_matrix_this_cannot_expand_refuses_to_answer(tmp_path: Path) -> None:
     workflows = tmp_path / "workflows"
     workflows.mkdir()
@@ -296,8 +345,13 @@ def test_one_missing_check_is_never_green() -> None:
 
 
 def test_a_failed_check_is_red() -> None:
+    # The row is chosen by NAME. It used to be `rows[0]`, and the order a
+    # recorded reply happens to arrive in is not a property of anything: the
+    # re-recording in #1259 put a different check first and this asserted the
+    # wrong label while testing the right behaviour (L237).
     rows = real_reply()
-    rows[0] = dict(rows[0], bucket="fail", state="FAILURE")
+    at = next(i for i, row in enumerate(rows) if row["name"] == "changed")
+    rows[at] = dict(rows[at], bucket="fail", state="FAILURE")
     answer = verdict(real_expected(), rows)
     assert answer.state == "red"
     assert answer.failed == ["Guard proofs / changed"]
@@ -376,7 +430,7 @@ def test_the_rows_read_out_of_a_real_reply_are_the_checks_the_workflows_promise(
     Two independent routes to the same set, the workflow files and what GitHub
     actually ran, so agreement means something (L70).
     """
-    poll = poll_checks("667", api=FakeApi())
+    poll = poll_checks("1341", api=FakeApi())
     reported = {(row["workflow"], row["name"]) for row in poll.rows}
     assert reported == {(check.workflow, check.name) for check in real_expected()}
     assert poll.head_sha == HEAD_SHA
@@ -386,8 +440,8 @@ def test_the_rows_read_out_of_a_real_reply_are_the_checks_the_workflows_promise(
 def test_the_head_sha_is_asked_for_and_carried_into_the_query() -> None:
     """The whole point of #669: the question names a commit."""
     api = FakeApi()
-    poll_checks("667", api=api)
-    assert any("/pulls/667" in path for path in api.paths), api.paths
+    poll_checks("1341", api=api)
+    assert any("/pulls/1341" in path for path in api.paths), api.paths
     assert any(f"head_sha={HEAD_SHA}" in path for path in api.paths), api.paths
 
 
@@ -402,7 +456,7 @@ def test_a_run_at_another_commit_is_refused_rather_than_counted() -> None:
     runs = real_runs()
     runs["workflow_runs"][0] = dict(runs["workflow_runs"][0], head_sha=OTHER_SHA)
     with pytest.raises(GhUnusable, match=OTHER_SHA[:12]):
-        poll_checks("667", api=FakeApi(runs=runs))
+        poll_checks("1341", api=FakeApi(runs=runs))
 
 
 def test_a_job_at_another_commit_is_refused_rather_than_counted() -> None:
@@ -411,11 +465,17 @@ def test_a_job_at_another_commit_is_refused_rather_than_counted() -> None:
     A run object and its jobs are two API replies, so a job carrying another
     SHA is caught even when the run it came from claims the right one.
     """
+    # Found by the job it needs rather than by a recorded run id: every id in
+    # these fixtures changes when they are re-recorded, and a stale one is a
+    # KeyError rather than a failed assertion (L15).
     jobs = real_jobs()
-    jobs["32065034890"]["jobs"][1] = dict(
-        jobs["32065034890"]["jobs"][1], head_sha=OTHER_SHA)
+    run = next(rid for rid, payload in jobs.items()
+               if any(job["name"] == "python" for job in payload["jobs"]))
+    at = next(i for i, job in enumerate(jobs[run]["jobs"])
+              if job["name"] == "python")
+    jobs[run]["jobs"][at] = dict(jobs[run]["jobs"][at], head_sha=OTHER_SHA)
     with pytest.raises(GhUnusable, match="python"):
-        poll_checks("667", api=FakeApi(jobs=jobs))
+        poll_checks("1341", api=FakeApi(jobs=jobs))
 
 
 def test_a_run_still_in_flight_is_never_green() -> None:
@@ -424,10 +484,14 @@ def test_a_run_still_in_flight_is_never_green() -> None:
     All eight jobs can be listed and settled in the seconds a run spends
     finalising, and a green read there is a green for work still going on.
     """
+    # By NAME, for the reason given in test_a_failed_check_is_red: which run
+    # sits at index 2 changes every time these replies are re-recorded (L237).
     runs = real_runs()
-    runs["workflow_runs"][2] = dict(
-        runs["workflow_runs"][2], status="in_progress", conclusion=None)
-    poll = poll_checks("667", api=FakeApi(runs=runs))
+    at = next(i for i, run in enumerate(runs["workflow_runs"])
+              if run["name"] == "Tests")
+    runs["workflow_runs"][at] = dict(
+        runs["workflow_runs"][at], status="in_progress", conclusion=None)
+    poll = poll_checks("1341", api=FakeApi(runs=runs))
     assert poll.unfinished == ["Tests"]
     answer = verdict(real_expected(), poll.rows, poll.unfinished)
     assert answer.state == "running"
@@ -447,7 +511,7 @@ def test_a_run_triggered_by_something_other_than_the_pull_request_is_not_the_bar
     runs["workflow_runs"].append(
         dict(runs["workflow_runs"][2], id=99999999999, event="push"))
     api = FakeApi(runs=runs)
-    poll = poll_checks("667", api=api)
+    poll = poll_checks("1341", api=api)
     assert not any("/99999999999/jobs" in path for path in api.paths), api.paths
     assert len(poll.rows) == len(real_expected())
 
@@ -456,7 +520,7 @@ def test_a_reply_that_did_not_fit_on_one_page_is_refused() -> None:
     """A short page is a smaller bar, and a smaller bar is a cheaper green."""
     runs = dict(real_runs(), total_count=9)
     with pytest.raises(GhUnusable, match="9"):
-        poll_checks("667", api=FakeApi(runs=runs))
+        poll_checks("1341", api=FakeApi(runs=runs))
 
 
 def test_gh_failing_is_unusable_rather_than_an_empty_answer() -> None:
@@ -465,7 +529,7 @@ def test_gh_failing_is_unusable_rather_than_an_empty_answer() -> None:
         raise GhUnusable("gh: authentication required")
 
     with pytest.raises(GhUnusable, match="authentication"):
-        poll_checks("667", api=api)
+        poll_checks("1341", api=api)
 
 
 # ── what a status and a conclusion mean ───────────────────────────────────────
@@ -648,7 +712,7 @@ def test_the_default_voice_flushes_every_line() -> None:
     original = sys.stdout
     sys.stdout = recorder  # type: ignore[assignment]
     try:
-        say("120s elapsed at 84e9dbf2b774")
+        say("120s elapsed at 825b338131f9")
     finally:
         sys.stdout = original
 

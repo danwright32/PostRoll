@@ -125,6 +125,66 @@ def decide(*, sha: str, shard: int, history: list[Sweep] | None,
         "newest proof is inside the window, so this shard has nothing to do."))
 
 
+@dataclass(frozen=True)
+class SweepDecision:
+    """Whether to take any Mac at all, and which shards asked for it (#1259).
+
+    The per-shard decision above stays: it is what keeps a shard that was
+    already proved from redoing its share when a NEIGHBOUR is why the sweep
+    ran. This is the question asked BEFORE any of them start.
+
+    It exists because the cost is per JOB rather than per minute of work.
+    GitHub bills every job rounded up to a whole minute and a macOS minute
+    draws ten from the allowance, so seven shards each spending 21 seconds
+    discovering they have nothing to do cost 70 allowance minutes a day, 2,100
+    a month, against the 2,000 a private repository on the free plan gets
+    (L306, L310). Asked once, on Linux, the same quiet day costs one.
+    """
+
+    due_shards: tuple[int, ...]
+    decisions: tuple[Decision, ...]
+
+    @property
+    def run(self) -> bool:
+        return bool(self.due_shards)
+
+    @property
+    def message(self) -> str:
+        if not self.due_shards:
+            return ("Every shard has already proved this tree, inside the "
+                    "window, so the sweep starts no macOS runner today.")
+        which = ", ".join(str(shard) for shard in self.due_shards)
+        # The reasons, deduplicated, because seven shards saying the same
+        # thing seven times buries the one that differs (L11).
+        reasons = sorted({d.due.value for d in self.decisions if d.run})
+        return (f"Shard(s) {which} have something to prove ({'; '.join(reasons)}), "
+                f"so the sweep runs.")
+
+
+def decide_sweep(*, sha: str, shards: int, history: list[Sweep] | None,
+                 now: datetime,
+                 unconditional_after: timedelta = UNCONDITIONAL_AFTER,
+                 ) -> SweepDecision:
+    """Whether ANY shard of a `shards`-wide sweep has something to prove.
+
+    `history` is an argument rather than something fetched here, and that is
+    the point: one read answers for every shard. Seven reads to answer one
+    question is the cost this was written to remove.
+    """
+    if shards < 1:
+        raise ValueError(
+            f"a sweep of {shards} shard(s) has nothing to run, so asking "
+            f"whether it is due would answer 'no' about a broken workflow")
+
+    decisions = tuple(
+        decide(sha=sha, shard=shard, history=history, now=now,
+               unconditional_after=unconditional_after)
+        for shard in range(1, shards + 1))
+    due = tuple(shard for shard, decision in enumerate(decisions, start=1)
+                if decision.run)
+    return SweepDecision(due_shards=due, decisions=decisions)
+
+
 def _head_sha() -> str:
     recorded = os.environ.get("GITHUB_SHA")
     if recorded:
@@ -155,7 +215,13 @@ def _history(sha: str, repo: str | None, run_id: int | None,
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--shard", type=int, required=True)
+    # One or the other, never neither. `--shard N` is the gate INSIDE a shard,
+    # which keeps a shard that was already proved from redoing its share when a
+    # neighbour is why the sweep ran. `--shards N` is the gate BEFORE any of
+    # them start, asked once on Linux so a quiet day takes no Mac (#1259).
+    which = parser.add_mutually_exclusive_group(required=True)
+    which.add_argument("--shard", type=int)
+    which.add_argument("--shards", type=int)
     parser.add_argument("--sha", default=None)
     parser.add_argument("--repo", default=None)
     parser.add_argument("--window-days", type=int,
@@ -163,6 +229,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", default=os.environ.get("GITHUB_OUTPUT"),
                         help="where to write due=true|false for later steps")
     args = parser.parse_args(argv)
+
+    if args.shards is not None:
+        return _whole_sweep(args)
 
     sha = args.sha or _head_sha()
     if not sha:
@@ -189,6 +258,33 @@ def main(argv: list[str] | None = None) -> int:
         with open(args.output, "a", encoding="utf-8") as fh:
             fh.write(f"due={'true' if decision.run else 'false'}\n")
             fh.write(f"reason={decision.due.value}\n")
+    return 0
+
+
+def _whole_sweep(args) -> int:
+    """Answer for every shard at once, before any macOS runner is taken."""
+    sha = args.sha or _head_sha()
+    window = timedelta(days=args.window_days)
+    if not sha:
+        print("::warning::no commit to ask about, so the sweep runs")
+        history = None
+    else:
+        run_id = int(os.environ.get("GITHUB_RUN_ID") or 0) or None
+        history = _history(sha, args.repo, run_id, window)
+
+    decision = decide_sweep(sha=sha or "unknown", shards=args.shards,
+                            history=history, now=datetime.now(timezone.utc),
+                            unconditional_after=window)
+
+    print(decision.message)
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with open(summary, "a", encoding="utf-8") as fh:
+            fh.write(f"### Guard sweep\n\n{decision.message}\n")
+    if args.output:
+        with open(args.output, "a", encoding="utf-8") as fh:
+            fh.write(f"due={'true' if decision.run else 'false'}\n")
+            fh.write("shards=" + ",".join(str(s) for s in decision.due_shards) + "\n")
     return 0
 
 
