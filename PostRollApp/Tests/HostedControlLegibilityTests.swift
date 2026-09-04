@@ -1111,24 +1111,46 @@ extension HostedControlLegibilityTests {
         surfaces.append(("settings, a key and a full handle book",
                          { try self.renderSettings(key: "sk-ant-api03-not-a-real-key",
                                                    book: Self.filledBook()) }))
-        surfaces.append(("screen: ProgramUploadView",
-                         { try self.renderProgramUploadScreen() }))
-        surfaces.append(("screen: OCRProgressView",
-                         { try self.renderOCRProgressScreen(estimateSeconds: 95) }))
-        surfaces.append(("screen: OCRProgressView, no estimate yet",
-                         { try self.renderOCRProgressScreen(estimateSeconds: nil) }))
-        surfaces.append(("screen: PhotoAssignmentView",
-                         { try self.renderPhotoAssignmentScreen() }))
-        surfaces.append(("screen: AssetGenerationView",
-                         { try self.renderAssetGenerationScreen() }))
-        surfaces.append(("screen: OCRReviewView",
-                         { try self.renderOCRReviewScreen() }))
-        surfaces.append(("screen: ExportView",
-                         { try self.renderExportScreen() }))
-        surfaces.append(("screen: CaptionReviewView",
-                         { try self.renderCaptionReviewScreen() }))
+        // From the one list, so the sheet and the check that each of these
+        // actually DREW something cannot disagree about which screens there
+        // are (#947, L70).
+        for screen in wholeScreens {
+            surfaces.append((screen.name, { try screen.render(false) }))
+        }
 
         return surfaces
+    }
+
+    /// Every whole screen the sheet draws, and how to draw it either way.
+    ///
+    /// `(Bool) throws -> NSBitmapImageRep` rather than a plain closure, because
+    /// #947 needs each one rendered TWICE: once normally and once with its
+    /// words switched off. The difference between the two is what proves type
+    /// reached the page, and a surface whose renderer produced a blank image,
+    /// an error state, or a screen that failed to lay out satisfies a check on
+    /// the NAME completely (L98, L84).
+    ///
+    /// Ink alone would be the wrong measure: a screen paints its own background
+    /// and chrome, and that measures as presence (L141, L146).
+    var wholeScreens: [(name: String, render: (Bool) throws -> NSBitmapImageRep)] {
+        [
+            ("screen: ProgramUploadView",
+             { try self.renderProgramUploadScreen(wordless: $0) }),
+            ("screen: OCRProgressView",
+             { try self.renderOCRProgressScreen(estimateSeconds: 95, wordless: $0) }),
+            ("screen: OCRProgressView, no estimate yet",
+             { try self.renderOCRProgressScreen(estimateSeconds: nil, wordless: $0) }),
+            ("screen: PhotoAssignmentView",
+             { try self.renderPhotoAssignmentScreen(wordless: $0) }),
+            ("screen: AssetGenerationView",
+             { try self.renderAssetGenerationScreen(wordless: $0) }),
+            ("screen: OCRReviewView",
+             { try self.renderOCRReviewScreen(wordless: $0) }),
+            ("screen: ExportView",
+             { try self.renderExportScreen(wordless: $0) }),
+            ("screen: CaptionReviewView",
+             { try self.renderCaptionReviewScreen(wordless: $0) }),
+        ]
     }
 
     /// What the sheet holds, by name, for a check in another file (#937).
@@ -1460,12 +1482,13 @@ extension HostedControlLegibilityTests {
     /// that moves the event on, below the cut and out of every review.
     static let screenSize = CGSize(width: 900, height: 1100)
 
-    private func renderScreen(_ view: some View) throws -> NSBitmapImageRep {
+    private func renderScreen(_ view: some View,
+                              wordless: Bool = false) throws -> NSBitmapImageRep {
         try WordFootprint.hosted(
             ScrollView { view }
                 .frame(width: Self.screenSize.width, height: Self.screenSize.height)
                 .background(PaintedSurfaces.page),
-            size: Self.screenSize, wordless: false)
+            size: Self.screenSize, wordless: wordless)
     }
 
     /// A scratch directory per render, so nothing drawn here can read or write
@@ -1503,12 +1526,13 @@ extension HostedControlLegibilityTests {
     }
 
     /// Stage 1: the screen that asks for the program (#937).
-    private func renderProgramUploadScreen() throws -> NSBitmapImageRep {
+    private func renderProgramUploadScreen(wordless: Bool = false) throws -> NSBitmapImageRep {
         let event = Self.sampleEvent(stage: .created)
         return try renderScreen(
             ProgramUploadView(event: event)
                 .environment(Self.scratchAppState(event))
-                .withAppOwners(AppOwners()))
+                .withAppOwners(AppOwners()),
+                                wordless: wordless)
     }
 
     /// Stage 2: the screen shown while the program is being read (#937).
@@ -1517,7 +1541,8 @@ extension HostedControlLegibilityTests {
     /// long this usually takes, and a store with nothing in it draws the
     /// screen's other half. An empty one is what a first run shows and is worth
     /// having too, so both are on the sheet.
-    private func renderOCRProgressScreen(estimateSeconds: Double?) throws -> NSBitmapImageRep {
+    private func renderOCRProgressScreen(estimateSeconds: Double?,
+                                         wordless: Bool = false) throws -> NSBitmapImageRep {
         let event = Self.sampleEvent(stage: .programUploaded)
         let timings = TimingStore(defaults: Self.scratchDefaults())
         if let estimateSeconds {
@@ -1526,7 +1551,8 @@ extension HostedControlLegibilityTests {
         return try renderScreen(
             OCRProgressView(event: event, timings: timings)
                 .environment(Self.scratchAppState(event))
-                .withAppOwners(AppOwners()))
+                .withAppOwners(AppOwners()),
+                                wordless: wordless)
     }
 
     /// Stage 3: the screen where photographs are dealt across the week (#937).
@@ -1535,7 +1561,7 @@ extension HostedControlLegibilityTests {
     /// event and the app's state and nothing else, which is why parts of it
     /// (the photo grid, the tag fields panel) were already renderable and on
     /// the sheet before the screen around them was.
-    private func renderPhotoAssignmentScreen() throws -> NSBitmapImageRep {
+    private func renderPhotoAssignmentScreen(wordless: Bool = false) throws -> NSBitmapImageRep {
         let event = Self.sampleEvent(stage: .photosAssigned)
         return try renderScreen(
             PhotoAssignmentView(event: event)
@@ -1546,7 +1572,8 @@ extension HostedControlLegibilityTests {
                 // owner. The posting layout control does, and a missing
                 // Observable is a FATAL ERROR rather than a failing assertion,
                 // so the whole sheet died and said nothing about the screen.
-                .withAppOwners(AppOwners()))
+                .withAppOwners(AppOwners()),
+                                wordless: wordless)
     }
 
     /// Stage 4: the screen that runs the week's generation (#937).
@@ -1556,7 +1583,7 @@ extension HostedControlLegibilityTests {
     /// makes a decision on. The timings carry a history, so the phase timeline
     /// and the estimate are drawn from real arithmetic rather than the "~6:00"
     /// fallback, which is a different picture and a rarer one.
-    private func renderAssetGenerationScreen() throws -> NSBitmapImageRep {
+    private func renderAssetGenerationScreen(wordless: Bool = false) throws -> NSBitmapImageRep {
         let event = Self.sampleEvent(stage: .assetsGenerated)
         let timings = TimingStore(defaults: Self.scratchDefaults())
         timings.recordGeneration(seconds: 372)
@@ -1565,7 +1592,8 @@ extension HostedControlLegibilityTests {
             AssetGenerationView(event: event, timings: timings,
                                 bakery: ProgramPDFBakery())
                 .environment(Self.scratchAppState(event))
-                .withAppOwners(AppOwners()))
+                .withAppOwners(AppOwners()),
+                                wordless: wordless)
     }
 
     /// Stage 5: the screen where what was read off the program is corrected (#937).
@@ -1575,7 +1603,7 @@ extension HostedControlLegibilityTests {
     /// looking at is the one with performers, pieces and a handle the book
     /// guessed. The guessed handle matters: it is marked as a guess for as long
     /// as it is untouched (#459), and that mark is a thing only a render shows.
-    private func renderOCRReviewScreen() throws -> NSBitmapImageRep {
+    private func renderOCRReviewScreen(wordless: Bool = false) throws -> NSBitmapImageRep {
         var event = Self.sampleEvent(stage: .ocrDone)
         var result = OCRResult()
         result.performers = [
@@ -1592,7 +1620,8 @@ extension HostedControlLegibilityTests {
         return try renderScreen(
             OCRReviewView(event: event, book: book)
                 .environment(Self.scratchAppState(event))
-                .withAppOwners(AppOwners()))
+                .withAppOwners(AppOwners()),
+                                wordless: wordless)
     }
 
     /// Stage 7: the screen the week is exported from (#937).
@@ -1601,7 +1630,7 @@ extension HostedControlLegibilityTests {
     /// real follower counts for real accounts, so a render reaching the shared
     /// one would read Dan's numbers into the suite and could write them back
     /// (L2, L222).
-    private func renderExportScreen() throws -> NSBitmapImageRep {
+    private func renderExportScreen(wordless: Bool = false) throws -> NSBitmapImageRep {
         let event = Self.sampleEvent(stage: .exported)
         let root = Self.scratchRoot()
         return try renderScreen(
@@ -1610,7 +1639,8 @@ extension HostedControlLegibilityTests {
                         fileURL: root.appendingPathComponent("accounts.json")),
                        previews: PreviewGraphicsManager())
                 .environment(Self.scratchAppState(event))
-                .withAppOwners(AppOwners()))
+                .withAppOwners(AppOwners()),
+                                wordless: wordless)
     }
 
     /// Stage 6: the screen the week's captions are read and edited on (#937).
@@ -1619,7 +1649,7 @@ extension HostedControlLegibilityTests {
     /// while DRAWING are handed in; what it does when a button is pressed goes
     /// through PythonBridge and NotificationService, and no render presses a
     /// button.
-    private func renderCaptionReviewScreen() throws -> NSBitmapImageRep {
+    private func renderCaptionReviewScreen(wordless: Bool = false) throws -> NSBitmapImageRep {
         let event = Self.sampleEvent(stage: .captionsReviewed)
         let root = Self.scratchRoot()
         return try renderScreen(
@@ -1629,7 +1659,8 @@ extension HostedControlLegibilityTests {
                               previews: PreviewGraphicsManager())
                 .environment(Self.scratchAppState(event))
                 .environment(HashtagStore(loadingSaved: false))
-                .withAppOwners(AppOwners()))
+                .withAppOwners(AppOwners()),
+                                wordless: wordless)
     }
 
     /// The Settings screen, which nothing rendered until now (#918).
