@@ -236,6 +236,115 @@ def test_the_scroll_reels_gallery_is_measured_against_the_caption_band(tmp_path)
         f"has to reserve more or the layout has to stop making cells this short.")
 
 
+def test_the_closing_hold_leaves_no_photograph_behind_the_caption(tmp_path):
+    """#1238's decision, taken on a measurement rather than by preference.
+
+    The overlap above is under the line partly BECAUSE the strip is moving: a
+    photograph is only in the caption band while it passes through. The one
+    moment that reasoning does not cover is the hold at the bottom, where the
+    scroll stops for a second before the closing frame and whatever is in the
+    band is stationary there.
+
+    Measured, and the answer is that nothing is: the strip carries a mat below
+    its last photograph that is far deeper than the 60px the caption covers, so
+    at `max_scroll` the band holds no photograph at all. Measured 2026-09-04
+    across 6, 9, 12, 15, 18 and 24 photographs and four seeds each, the gap
+    between the last photograph and the top of the band was 218px every time
+    and 309px at six.
+
+    So the overlap is deliberate and costs nothing. Raising `FOOTER_H` to
+    `SAFE_BOTTOM` would take 60px of gallery height off every Thursday reel, and
+    a design version with it, to fix something that does not happen.
+
+    This is the guard on that decision, not a restatement of it: a layout change
+    that starts putting a photograph in the band during the hold turns it red.
+    """
+    overlap = SAFE_BOTTOM - scroll.FOOTER_H
+    paths = _landscape_photos(tmp_path)
+
+    tightest = None
+    for seed in range(4):
+        strip, layout = scroll.build_collage_strip(paths, seed=seed,
+                                                   return_layout=True)
+        assert layout, "the strip produced no cells to measure"
+
+        # Where the viewport sits during the hold, in strip coordinates.
+        held_at = scroll.max_scroll_for(strip.height)
+        band_top = held_at + scroll.VIEWPORT_H - overlap
+        band_bottom = held_at + scroll.VIEWPORT_H
+
+        # The band has to be INSIDE the strip, or it holds nothing for a
+        # reason that has nothing to do with the layout and every assertion
+        # below passes on an empty region (L98). A strip shorter than the
+        # viewport does not scroll, so `max_scroll_for` clamps to 0 and the
+        # band lands past the end of it. Found by mutation: shrinking the mat
+        # below the last row made this check pass while putting the last
+        # photograph exactly where it is supposed to catch it.
+        assert band_bottom <= strip.height, (
+            f"seed {seed}: the caption band ends at {band_bottom} and the "
+            f"strip is {strip.height} tall, so the band is past the end of it "
+            f"and this measurement is about nothing. The strip is shorter than "
+            f"the viewport, which means it does not scroll and there is no "
+            f"hold to measure.")
+
+        for cell in layout:
+            top, bottom = cell["y"], cell["y"] + cell["h"]
+            covered = max(0, min(bottom, band_bottom) - max(top, band_top))
+            assert covered == 0, (
+                f"seed {seed} leaves {covered}px of a {cell['h']}px photograph "
+                f"behind Instagram's caption for the whole closing hold, which "
+                f"is the one moment the 'it is only passing through' reasoning "
+                f"does not cover (#1238). Either the mat below the last row "
+                f"shrank or the footer has to reserve more.")
+
+        clear = band_top - max(cell["y"] + cell["h"] for cell in layout)
+        tightest = clear if tightest is None else min(tightest, clear)
+
+    assert tightest > 0, (
+        "the last photograph now reaches the top of the caption band exactly, "
+        "so the next layout change puts it behind the caption with nothing "
+        "between (L172)")
+
+
+def test_the_hold_measurement_is_taken_where_the_scroll_actually_stops(tmp_path):
+    """The control (L159, L171).
+
+    "No photograph is in the band" is also what a measurement taken at the
+    WRONG place reports, and the most likely wrong place is the top of the
+    scroll, where the band is empty for a different reason. This asserts the
+    band being measured is the one at the end, and that a photograph really is
+    in it at some point during the scroll, so the check above is about the hold
+    rather than about the caption band never holding anything.
+    """
+    paths = _landscape_photos(tmp_path)
+    overlap = SAFE_BOTTOM - scroll.FOOTER_H
+    strip, layout = scroll.build_collage_strip(paths, seed=0, return_layout=True)
+    held_at = scroll.max_scroll_for(strip.height)
+
+    assert held_at > 0, (
+        "the strip does not scroll at all, so there is no hold at the bottom "
+        "and this measurement is about a still image")
+
+    # Somewhere mid-scroll a photograph IS behind the caption. Without this the
+    # check above passes on a reel whose gallery never reaches the band.
+    passed_through = False
+    for scroll_y in range(0, held_at + 1, max(1, held_at // 20)):
+        band_top = scroll_y + scroll.VIEWPORT_H - overlap
+        band_bottom = scroll_y + scroll.VIEWPORT_H
+        for cell in layout:
+            top, bottom = cell["y"], cell["y"] + cell["h"]
+            if min(bottom, band_bottom) - max(top, band_top) > 0:
+                passed_through = True
+                break
+        if passed_through:
+            break
+
+    assert passed_through, (
+        "no photograph is behind the caption at any point in the scroll, so "
+        "the gallery never reaches the band and the check above is measuring "
+        "an overlap that does not exist")
+
+
 def test_the_measurement_is_taken_on_a_strip_that_actually_scrolls(tmp_path):
     """The check above is satisfied by a strip so short it never moves, whose
     cells are whatever one screenful happens to hold (L159, L101)."""
