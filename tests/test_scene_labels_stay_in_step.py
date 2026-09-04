@@ -143,3 +143,42 @@ def test_labels_a_pass_left_alone_are_not_reported(two_photos):
         f"a pass that changed nothing was reported as having rewritten the "
         f"alt text: {result['findings']}")
     assert result["scene_labels"] == DRAFT["scene_labels"]
+
+
+def test_a_draft_with_no_scene_labels_at_all_is_not_a_fault(two_photos):
+    """The false positive this nearly shipped with.
+
+    `scene_labels` is optional in the reply, and `data.get` returns None when
+    the key is absent. Comparing None against None reported "returned NoneType
+    where the draft had NoneType", so every post whose draft omitted the field
+    would carry a finding saying a review pass rewrote something that was never
+    there.
+
+    A check that fires on ordinary operation is one that teaches everybody to
+    skim the whole panel (L36), and this is the panel Dan reads. Found by
+    driving the rule with the shapes the field actually takes rather than the
+    one the fixture happened to have (L48).
+    """
+    no_labels = {k: v for k, v in DRAFT.items() if k != "scene_labels"}
+
+    result = run([no_labels, no_labels], photo_paths=two_photos,
+                 post_type="carousel_photo")
+
+    codes = [f["code"] for f in result["findings"]]
+    assert "alt_text_rewritten_by_review" not in codes, (
+        f"a draft that never had scene labels was reported as having had them "
+        f"rewritten: {result['findings']}")
+
+
+def test_a_pass_that_drops_the_whole_label_list_is_still_caught(two_photos):
+    """The other side of that. The draft HAD labels and the pass returned
+    none, which is a real loss and must not be excused by the tolerance
+    above (L324: a stand down condition no broader than its reason)."""
+    dropped = {k: v for k, v in DRAFT.items() if k != "scene_labels"}
+
+    result = run([DRAFT, dropped], photo_paths=two_photos,
+                 post_type="carousel_photo")
+
+    assert result["scene_labels"] == DRAFT["scene_labels"], (
+        f"a review pass dropped the whole scene label list and it shipped: "
+        f"{result['scene_labels']}")

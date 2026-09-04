@@ -1135,8 +1135,21 @@ def generate_caption(
     # The labels are judged by the SAME rule, because the fault is the same
     # fault: a count change or a reorder is wrong about the whole list's
     # alignment to the photographs (#1220).
-    label_fault = _alt_shape_fault(post_type, draft_scene_labels,
-                                   data.get("scene_labels"))
+    #
+    # Only when the DRAFT had labels. `scene_labels` is optional in the reply
+    # and `data.get` answers None when the key is absent, so comparing None
+    # against None reported "returned NoneType where the draft had NoneType"
+    # and put a finding on every post whose draft omitted the field. A check
+    # that fires on ordinary operation teaches everybody to skim the whole
+    # panel (L36), and this is the panel Dan reads.
+    #
+    # Deliberately narrow: a draft that HAD labels and a pass that returned
+    # none is a real loss and still a fault, which is the case the test below
+    # this one pins (L324).
+    label_fault = (
+        _alt_shape_fault(post_type, draft_scene_labels,
+                         data.get("scene_labels"))
+        if isinstance(draft_scene_labels, list) else None)
     if shape_fault is None and label_fault is not None:
         # The alt texts survived and the labels did not. Reported under the
         # code that already exists rather than a second one: two codes for one
