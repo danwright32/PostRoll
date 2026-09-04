@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -487,3 +488,121 @@ def test_a_seeded_world_can_also_have_the_broken_code_folder(world: Path, shoot:
     assert "not-a-checkout" in result.stdout, (
         f"nothing says the app is being pointed away from the checkout: {result.stdout}"
     )
+
+
+# --- the script's own output must reach whoever ran it (#1334) ---------------
+
+
+def _assert_the_fake_was_launched(done, binary: Path) -> None:
+    """Refuse the run unless the process it started is the stand-in.
+
+    Checked by asking the operating system what the reported pid actually IS,
+    rather than by trusting that the override was read: those are different
+    questions, and only the second one was asked when this test launched the
+    real app (L70).
+    """
+    import re
+    match = re.search(r"PostRoll is running as pid (\d+)", done.stdout)
+    assert match, (
+        "the script never said it launched anything, so nothing can be said "
+        f"about WHAT it launched: {done.stdout!r} {done.stderr!r}")
+    pid = match.group(1)
+    running = subprocess.run(["ps", "-o", "command=", "-p", pid],
+                             capture_output=True, text=True).stdout
+    assert str(binary) in running, (
+        f"the script launched {running.strip()!r} rather than the stand-in at "
+        f"{binary}. That is the REAL application on this machine, and a test "
+        "must be structurally unable to reach it (L2)")
+    subprocess.run(["kill", pid], check=False)
+
+
+def _fake_app(tmp_path: Path) -> Path:
+    """A stand-in for the installed app that stays alive after being launched.
+
+    COMPILED rather than a shell script, because the script finds what it
+    launched with `pgrep -f "^${BINARY}$"`, matching the whole command line. A
+    `#!` script runs as `/bin/bash <path>`, which that pattern does not match,
+    so the script waits its full 30 seconds and gives up: the stand-in has to be
+    a process whose command line IS the path (L237).
+
+    Staying alive is the point. The defect under test is that the LAUNCHED
+    process inherits the caller's stdout and holds it open, so nothing the
+    script printed can be read until that process exits (L235).
+    """
+    binary = tmp_path / "FakePostRoll"
+    source = "#include <unistd.h>\nint main(void){ for(;;) pause(); return 0; }\n"
+    built = subprocess.run(["cc", "-x", "c", "-o", str(binary), "-"],
+                           input=source, text=True, capture_output=True)
+    if built.returncode != 0:
+        pytest.skip(f"no C compiler to build the stand-in: {built.stderr[:200]}")
+    return binary
+
+
+@pytest.mark.skipif(
+    sys.platform != "darwin",
+    reason="drives the real launch path: it starts a process and asks the OS "
+           "what it started, and the script it drives launches a macOS app "
+           "bundle. The macos leg runs the same suite, so this is covered "
+           "rather than exempt (L129)")
+def test_the_scripts_own_output_arrives_before_the_app_exits(tmp_path):
+    """Its four lines say which process to watch and where the world is, and
+    they are the whole point of running it. A caller that pipes or captures the
+    script got NONE of them until PostRoll was quit, which on 2026-09-04 meant
+    ten minutes of a terminal that looked hung (#1334)."""
+    binary = _fake_app(tmp_path)
+    # Named PostRollHandCheck because launch_in refuses any other data path, which
+    # is the safety assertion that has kept every other test out of this branch.
+    world = tmp_path / "PostRollHandCheck"
+    photos = tmp_path / "photos"
+    photos.mkdir()
+    for n in range(3):
+        (photos / f"shot{n}.jpg").write_bytes(b"\xff\xd8\xff\xd9")
+
+    done = subprocess.run(
+        ["bash", str(SCRIPT), "seeded", str(photos)],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+        timeout=25,
+        env={**os.environ,
+             "POSTROLL_HAND_CHECK_WORLD": str(world),
+             "POSTROLL_HAND_CHECK_BINARY": str(binary)},
+    )
+
+    # FIRST, that the stand-in was actually used. A double selected by a name
+    # the script does not read is no double at all, and the run then launches
+    # the REAL installed PostRoll on this machine, which is what happened the
+    # first time this test was written (L143, L2).
+    _assert_the_fake_was_launched(done, binary)
+
+    assert "PostRoll is running as pid" in done.stdout, (
+        "the script's own output did not reach its caller, so a piped or "
+        f"captured run learns nothing: {done.stdout!r} {done.stderr!r}")
+
+
+@pytest.mark.skipif(
+    sys.platform != "darwin",
+    reason="drives the real launch path: it starts a process and asks the OS "
+           "what it started, and the script it drives launches a macOS app "
+           "bundle. The macos leg runs the same suite, so this is covered "
+           "rather than exempt (L129)")
+def test_the_launched_app_does_not_hold_the_callers_output_open(tmp_path):
+    """The control, and the actual mechanism: capturing IS a pipe, so a script
+    that returns at all here is one whose child let go of it."""
+    binary = _fake_app(tmp_path)
+    world = tmp_path / "PostRollHandCheck"
+    photos = tmp_path / "photos"
+    photos.mkdir()
+    (photos / "one.jpg").write_bytes(b"\xff\xd8\xff\xd9")
+
+    # Times out rather than hanging the suite if the defect comes back.
+    done = subprocess.run(
+        ["bash", str(SCRIPT), "seeded", str(photos)],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+        timeout=25,
+        env={**os.environ,
+             "POSTROLL_HAND_CHECK_WORLD": str(world),
+             "POSTROLL_HAND_CHECK_BINARY": str(binary)},
+    )
+
+    _assert_the_fake_was_launched(done, binary)
+    assert done.returncode == 0, (done.stdout, done.stderr)
+    subprocess.run(["pkill", "-f", str(binary)], check=False)

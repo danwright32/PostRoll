@@ -48,20 +48,43 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-#: The fixtures that RECORD measurements, named rather than matched.
+#: What makes a fixture a RECORD of something measured rather than a
+#: SPECIFICATION of what the code must produce.
 #:
-#: Named because "a file with a seconds key in it" also catches the shared
-#: contract fixtures, whose numbers are a specification the code must satisfy
-#: rather than a reading anybody took: `collage_gutter.json` says what the gutter
-#: MUST be, and asking it how many runs produced that is a category error.
-MEASUREMENT_FIXTURES = (
-    "alt_text_call_timing.json",
-    "changed_job_timing.json",
-    "guard_entry_costs.json",
-    "guard_sweep_timing.json",
-    "swift_suite_cost.json",
-    "test_file_durations.json",
-)
+#: This was a hand written list of six filenames, which is the trap this whole
+#: tool exists to close, one level up: a new fixture recording timings was
+#: exempt until somebody remembered to add its name, and exempt silently (L96,
+#: #1337). Derived from the content instead, so a fixture cannot be missed by
+#: being forgotten.
+#:
+#: The distinction is real and a wider glob would get it wrong. `collage_gutter`
+#: and `crop_geometry` state numbers the code must SATISFY; asking those how
+#: many runs produced them is a category error. What separates the two is that a
+#: measurement says where it came from. Any one of these keys, at any depth, is
+#: a file claiming to record something somebody went and measured.
+PROVENANCE_KEYS = frozenset({
+    "measured_on", "measured_from", "measured_from_run", "measured_at_commit",
+    "re_measure_with", "machine", "runner_image", "runs", "passes", "samples",
+})
+
+#: Where the fixtures live.
+FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures"
+
+
+def _every_key(node: object, found: set[str]) -> set[str]:
+    if isinstance(node, dict):
+        found |= set(node)
+        for value in node.values():
+            _every_key(value, found)
+    elif isinstance(node, list):
+        for value in node:
+            _every_key(value, found)
+    return found
+
+
+def records_a_measurement(loaded: object) -> bool:
+    """Whether this fixture claims to record something somebody measured."""
+    return bool(_every_key(loaded, set()) & PROVENANCE_KEYS)
 
 #: A key whose value is a duration somebody measured.
 DURATION_SUFFIXES = ("_seconds", "_ms", "_seconds_at_least")
@@ -117,16 +140,51 @@ def _is_duration(key: str, value: object) -> bool:
 
 
 def scanned_files(root=None) -> list[Path]:
-    """Every fixture this reads, in a stable order.
+    """Every fixture that records a measurement, in a stable order.
 
-    A named fixture that is not there is SKIPPED here rather than refused,
-    because `--root` is pointed at trees that hold one file. That would make a
-    name gone stale silently exempt from its own check (L96), so the refusal
-    lives in the test instead: `test_every_named_fixture_is_actually_there`
-    fails when a name in MEASUREMENT_FIXTURES names nothing in this repository.
+    Decided by reading each file rather than by a list of names, so a fixture
+    added tomorrow is covered the day it lands. A file that cannot be parsed is
+    RAISED rather than skipped here, because a skipped file reads exactly like a
+    clean one (L98).
     """
-    base = Path(root) if root is not None else REPO_ROOT / "tests" / "fixtures"
-    return [base / name for name in MEASUREMENT_FIXTURES if (base / name).is_file()]
+    base = Path(root) if root is not None else FIXTURE_DIR
+    found = []
+    for path in sorted(base.glob("*.json")):
+        loaded = _load(path)
+        # Either half is enough. Provenance alone brings in a record that has no
+        # durations YET, so one added later is covered the day it lands. A
+        # duration alone catches a file that states a reading and says nothing
+        # about where it came from, which is the very thing this refuses and
+        # would otherwise be invisible for lacking the keys that put it in
+        # scope. Requiring provenance ALONE was tried first and opened exactly
+        # that hole while closing another (L387).
+        if records_a_measurement(loaded) or _holds_a_duration(loaded):
+            found.append(path)
+    return found
+
+
+def _holds_a_duration(node: object) -> bool:
+    """Whether anything anywhere in this fixture states a measured duration.
+
+    Safe to use as scope here, measured rather than assumed: on 2026-09-04 every
+    fixture in this repository holding a duration also carried provenance, and
+    no specification fixture used a duration shaped key at all, so this widens
+    the net without catching a single value that is a requirement rather than a
+    reading.
+    """
+    if isinstance(node, dict):
+        return any(_is_duration(key, value) or _holds_a_duration(value)
+                   for key, value in node.items())
+    if isinstance(node, list):
+        return any(_holds_a_duration(value) for value in node)
+    return False
+
+
+def _load(path: Path):
+    try:
+        return json.loads(path.read_text())
+    except (json.JSONDecodeError, UnicodeDecodeError) as bad:
+        raise CannotRead(f"{path.name} could not be read: {bad}") from bad
 
 
 def _walk(node: object, where: str, sampled: bool, found: list[Unsourced],
@@ -157,11 +215,7 @@ def unsourced(root=None) -> list[Unsourced]:
     """Every recorded duration that does not say how many runs it came from."""
     found: list[Unsourced] = []
     for path in scanned_files(root=root):
-        try:
-            loaded = json.loads(path.read_text())
-        except (json.JSONDecodeError, UnicodeDecodeError) as bad:
-            raise CannotRead(f"{path.name} could not be read: {bad}") from bad
-        _walk(loaded, "", False, found, path.name)
+        _walk(_load(path), "", False, found, path.name)
     return found
 
 

@@ -1,0 +1,8 @@
+{
+  "name": "a-cramped-window-is-opened-out",
+  "file": "PostRollApp/Sources/Services/WindowFit.swift",
+  "find": "        guard frame.width < crampedWidth else { return frame }",
+  "replace": "        guard frame.width < 0 else { return frame }",
+  "test": "PostRollTests/WindowFitTests/testACrampedRestoredFrameIsOpenedOut",
+  "breaks": "a window macOS restored at a cramped width stays cramped, so PostRoll opens into a sliver of the screen and every screen inside it is judged at a width the app was never meant to be used at. Until #1335 this rule was computed inline against NSScreen.main, which is why it had no test either way: a decision read off a global at the point of use cannot be driven (L196)"
+}

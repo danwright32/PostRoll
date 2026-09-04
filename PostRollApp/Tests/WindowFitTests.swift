@@ -316,4 +316,55 @@ final class WindowFitTests: XCTestCase {
         XCTAssertEqual(window.frame, before,
                        "the clamp resized a full screen window")
     }
+
+    // MARK: - The opening size, when macOS restored a cramped frame (#1335)
+
+    /// The rule lived inline in `MainWindowView` against the live `NSScreen`,
+    /// with its four numbers written where nothing could reach them. A rule
+    /// somebody decided, computed from a global at the point of use, is a rule
+    /// no test can check either way, which is the whole of #1335.
+    private var screen: NSRect { NSRect(x: 0, y: 100, width: 1728, height: 984) }
+
+    func testACrampedRestoredFrameIsOpenedOut() {
+        let restored = NSRect(x: 40, y: 140, width: 820, height: 600)
+
+        let opened = WindowFit.opening(from: restored, on: screen)
+
+        XCTAssertGreaterThan(opened.width, restored.width,
+                             "a window macOS restored too narrow was left that way")
+        XCTAssertEqual(opened.width, (screen.width * 0.82).rounded())
+        XCTAssertEqual(opened.height, (screen.height * 0.84).rounded())
+    }
+
+    func testAFrameThatIsAlreadyRoomyIsLeftExactlyAlone() {
+        // The control. Without it the rule above is satisfied by one that
+        // resizes every window on every launch, which would throw away a size
+        // Dan chose (L159).
+        let roomy = NSRect(x: 10, y: 120, width: 1400, height: 800)
+
+        XCTAssertEqual(WindowFit.opening(from: roomy, on: screen), roomy)
+    }
+
+    func testTheOpenedWindowIsCentredOnTheVisibleArea() {
+        let opened = WindowFit.opening(
+            from: NSRect(x: 0, y: 0, width: 500, height: 400), on: screen)
+
+        XCTAssertEqual(opened.midX, screen.midX, accuracy: 1)
+        XCTAssertEqual(opened.midY, screen.midY, accuracy: 1)
+    }
+
+    func testTheOpenedWindowStaysInsideTheScreenItWasGiven() {
+        // On a display smaller than the width the rule wants, the screen wins,
+        // the same way `clamped` lets it.
+        let small = NSRect(x: 0, y: 0, width: 900, height: 600)
+
+        let opened = WindowFit.opening(
+            from: NSRect(x: 0, y: 0, width: 400, height: 300), on: small)
+
+        XCTAssertLessThanOrEqual(opened.maxX, small.maxX)
+        XCTAssertLessThanOrEqual(opened.maxY, small.maxY)
+        XCTAssertGreaterThanOrEqual(opened.minX, small.minX)
+        XCTAssertGreaterThanOrEqual(opened.minY, small.minY)
+    }
 }
+
