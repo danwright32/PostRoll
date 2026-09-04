@@ -521,15 +521,16 @@ private struct WindowConfigurator: NSViewRepresentable {
             // the PostRoll window only.
             if let root = window.contentView { Self.fixVibrancy(root) }
 
-            // Ensure the window opens large enough to feel like a real workspace.
-            // If macOS restored a small frame (< 1000pt wide), expand to ~80% of screen.
-            if let screen = NSScreen.main, window.frame.width < 1000 {
-                let visible = screen.visibleFrame
-                let w = (visible.width * 0.82).rounded()
-                let h = (visible.height * 0.84).rounded()
-                let x = (visible.minX + (visible.width - w) / 2).rounded()
-                let y = (visible.minY + (visible.height - h) / 2).rounded()
-                window.setFrame(NSRect(x: x, y: y, width: w, height: h), display: true, animate: false)
+            // Ensure the window opens large enough to feel like a real
+            // workspace when macOS restored a cramped frame. The rule itself
+            // lives in WindowFit, which takes the visible area rather than
+            // reading NSScreen, so it can be driven by a test (#1335).
+            if let screen = NSScreen.main {
+                let opened = WindowFit.opening(from: window.frame,
+                                               on: screen.visibleFrame)
+                if opened != window.frame {
+                    window.setFrame(opened, display: true, animate: false)
+                }
             }
 
             // Last, so it judges the frame this method leaves behind rather

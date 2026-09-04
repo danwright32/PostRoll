@@ -72,6 +72,38 @@ enum WindowFit {
         return NSRect(x: x, y: y, width: size.width, height: size.height)
     }
 
+    /// How wide and tall to open, as a share of the visible screen.
+    ///
+    /// Named rather than written into the arithmetic, because four bare numbers
+    /// inside a view are four numbers nobody can check (#1335).
+    static let openingWidthShare: CGFloat = 0.82
+    static let openingHeightShare: CGFloat = 0.84
+
+    /// Below this width, a restored frame is treated as macOS having given back
+    /// something cramped rather than as a size anybody chose.
+    static let crampedWidth: CGFloat = 1000
+
+    /// `frame` opened out to a workspace sized window, or `frame` itself when it
+    /// is already roomy enough.
+    ///
+    /// Takes the visible area as an argument rather than reading `NSScreen.main`
+    /// itself. That read was the reason this rule had no test: a decision
+    /// computed from a global at the point of use cannot be driven either way,
+    /// so the rule and its absence produced the same evidence (L196, #1335).
+    ///
+    /// Unchanged in the roomy case deliberately. A rule that resized on every
+    /// launch would throw away whatever size Dan had chosen, and would be
+    /// indistinguishable from one that only rescues the cramped case (L159).
+    static func opening(from frame: NSRect, on visible: NSRect) -> NSRect {
+        guard frame.width < crampedWidth else { return frame }
+
+        let width = min((visible.width * openingWidthShare).rounded(), visible.width)
+        let height = min((visible.height * openingHeightShare).rounded(), visible.height)
+        let x = (visible.minX + (visible.width - width) / 2).rounded()
+        let y = (visible.minY + (visible.height - height) / 2).rounded()
+        return NSRect(x: x, y: y, width: width, height: height)
+    }
+
     /// What to write to the log when the clamp fired, or nil when it did not.
     ///
     /// A backstop that silently corrects forever hides the layout defect it is
