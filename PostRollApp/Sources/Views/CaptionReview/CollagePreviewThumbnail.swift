@@ -490,7 +490,7 @@ struct CollagePreviewThumbnail: View {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 11))
                         .foregroundStyle(PaintedSurfaces.iconAccent)
-                    Text("Frame changes saved — they'll appear in the exported collage")
+                    Text("Frame changes saved. They'll appear in the exported collage")
                         .font(.system(size: 11))
                         .foregroundStyle(PaintedSurfaces.secondaryText)
                     Spacer()

@@ -163,7 +163,7 @@ enum OrphanedMediaCleanup {
         // events.json made every photo look unreferenced.)
         if files >= 4, orphans.count * 2 > files {
             NSLog("OrphanedMediaCleanup: refusing to delete \(orphans.count)/\(files) files in "
-                + "\(dir.lastPathComponent) — reference set looks wrong, skipping for safety.")
+                + "\(dir.lastPathComponent): reference set looks wrong, skipping for safety.")
             return 0
         }
 
