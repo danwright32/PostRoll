@@ -1,0 +1,8 @@
+{
+  "name": "the-badge-counts-only-what-was-missed",
+  "file": "PostRollApp/Sources/Services/NotificationService.swift",
+  "find": "    func incrementBadge() {\n        guard !isFrontmost() else { return }",
+  "replace": "    func incrementBadge() {\n        guard true else { return }",
+  "test": "PostRollTests/WorkWithNoWindowTests/testTheBadgeAlsoStaysAwayWhilePostRollIsInFront",
+  "breaks": "the Dock badge counts work the person watched finish, so the number stops meaning finished work waiting to be looked at and starts meaning work that finished. The same predicate guards this and notifyWorkFailed, and a rule enforced at one of two sites is not enforced (L280), so both need their own proof"
+}

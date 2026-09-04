@@ -1,0 +1,8 @@
+{
+  "name": "a-failure-banner-stays-silent-in-front",
+  "file": "PostRollApp/Sources/Services/NotificationService.swift",
+  "find": "    func notifyWorkFailed(work: String, eventName: String, reason: String?) {\n        guard !isFrontmost() else { return }",
+  "replace": "    func notifyWorkFailed(work: String, eventName: String, reason: String?) {\n        guard true else { return }",
+  "test": "PostRollTests/WorkWithNoWindowTests/testAFailedRunIsSilentWhilePostRollIsInFront",
+  "breaks": "a failed run banners over the screen that is already showing the failure. The suppression is deliberate (#879): a banner there is noise, and noise in the one place failures are announced is what teaches somebody to wave every banner away, including the ones that arrive while they are looking elsewhere. Until this test the rule read as an implementation detail, because it was written against NSApplication.shared.isActive and nothing could drive it either way"
+}
