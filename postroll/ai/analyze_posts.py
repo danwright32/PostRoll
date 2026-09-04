@@ -33,7 +33,6 @@ from typing import Any
 from postroll.ai.claude_client import load_brand_voice, run_json_prompt
 
 
-ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 
 def findings_shell() -> dict[str, list]:
     """The four lists a findings track always carries.

@@ -42,10 +42,6 @@ from typing import Optional
 SEO_MIN_CHARS = 50
 SEO_MAX_CHARS = 300
 
-#: What the description aims for. Not enforced (a short event at a short venue
-#: legitimately lands under it), but it is what the wording is shaped around.
-SEO_TARGET_CHARS = 150
-
 #: Closes the description. Constant rather than derived, and long enough on its
 #: own that the 50 character floor cannot be breached by a sparse event.
 BRAND_TAIL = "Concert and theater photography in New York by Dan Wright."

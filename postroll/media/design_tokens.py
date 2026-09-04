@@ -681,7 +681,6 @@ FONT_DETAIL_BOLD = 1
 FONT_DETAIL_MEDIUM = 10
 #: The default detail weight. Thin renders spindly at these sizes.
 FONT_DETAIL_LIGHT = 7
-FONT_DETAIL_THIN = 12
 
 #: How text is shaped, named rather than left to Pillow to choose (#656).
 #:

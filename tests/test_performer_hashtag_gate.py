@@ -308,3 +308,44 @@ def test_an_ordinary_performer_is_still_stripped_through_the_same_path(monkeypat
     )
 
     assert "#bradballiett" not in result["hashtags"]
+
+
+# ── the two role lists cannot come to contradict each other (#1105) ──────────
+
+def test_no_role_is_both_gated_and_repertoire():
+    """`REPERTOIRE_ROLES` was read by nothing at all.
+
+    The gate acts on `GATED_ROLES` and lets everything else through, so the
+    repertoire list describes the complement rather than deciding it: it is the
+    DATA of a rule whose logic lives elsewhere, which is how the two come to
+    disagree with nobody noticing (L370, L46).
+
+    Deleted, it would take a real product decision with it, which roles are a
+    credit on the WORK rather than a person on the stage. So it is made
+    load-bearing instead: adding "composer" to the gated list would now fail
+    here rather than silently contradicting the sentence above it.
+    """
+    from postroll.ai.performer_hashtags import GATED_ROLES, REPERTOIRE_ROLES
+
+    both = sorted(GATED_ROLES & REPERTOIRE_ROLES)
+
+    assert not both, (
+        f"{both} are listed as roles whose names must not become hashtags AND "
+        f"as roles that keep their hashtags, so the module says two opposite "
+        f"things about them and only one of them is what the code does")
+
+
+def test_the_repertoire_roles_really_do_keep_their_hashtags():
+    """The positive control (L159). Disjointness alone is satisfied by an empty
+    repertoire list, and the claim being protected is that a composer's name
+    still becomes a tag."""
+    from postroll.ai.performer_hashtags import REPERTOIRE_ROLES, gated_names
+
+    assert REPERTOIRE_ROLES, "the list is empty, so the check above proves nothing"
+
+    program = {"performers": [{"name": "A Composer", "role": role}
+                              for role in sorted(REPERTOIRE_ROLES)]}
+
+    assert gated_names(program=program) == set(), (
+        "a repertoire credit is being gated, so the names repertoire search "
+        "runs on are being kept out of the hashtags")

@@ -46,7 +46,6 @@ from .select_cover_photo import (
     _cover_candidates_from_friday_plan,
 )
 
-ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 
 # The same owner generate_media reads it through (#334). This module used to
 # declare its own copy of the path and its own "or no mark at all" fallback.
