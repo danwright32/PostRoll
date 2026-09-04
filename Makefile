@@ -19,6 +19,23 @@ LOCKED = /usr/bin/env python3 tools/with_build_lock.py
 APP_NAME  := PostRoll
 PROJECT   := PostRollApp/PostRoll.xcodeproj
 
+# The Python interpreter every recipe below runs on, from the shared
+# definition rather than spelled here as well (#960, and the same reason
+# BUILD_DIR is not spelled here either).
+#
+# `venv/` is gitignored, so it exists in the PRIMARY checkout and nowhere else.
+# Every recipe used to name `venv/bin/python` directly, so the whole Python
+# half of this file failed from a git worktree with "no such file or
+# directory", and a worktree is what keeps one session from editing the
+# primary checkout underneath another (#956, #957).
+#
+# venv-python.sh resolves it through git's common dir, so a worktree gets the
+# checkout it belongs to, and it refuses rather than falling back to a system
+# python: that interpreter has none of the pinned dependencies, so the suite
+# would fail on an import and report a missing package rather than a missing
+# virtualenv (L11).
+PY := $(shell . ./venv-python.sh; printf %s "$$POSTROLL_PYTHON")
+
 .PHONY: install install-force build test test-swift test-python \
 	test-python-fast \
 	check-guards check-toolchain record-fingerprints record-test-durations \
@@ -136,7 +153,7 @@ SWIFT_RESULTS := $(BUILD_DIR)/swift-suite.xcresult
 # tests/test_both_swift_runners_agree.py holds this target and the CI step to
 # the same flags, so local and CI cannot disagree about what they ran (L41).
 test-swift:
-	@venv/bin/python tools/suite_counts.py run swift \
+	@$(PY) tools/suite_counts.py run swift \
 		--result-bundle "$(SWIFT_RESULTS)" -- \
 		$(LOCKED) xcodebuild -project "$(PROJECT)" -scheme PostRollTests \
 		-derivedDataPath "$(BUILD_DIR)" -destination 'platform=macOS' \
@@ -160,8 +177,8 @@ test-swift:
 # generates or asserts is stale the moment the suite grows, while reading as a
 # current fact (L32). `pytest -q` prints the real one at the end of every run.
 test-python:
-	@venv/bin/python tools/suite_counts.py run python -- \
-		venv/bin/python -m pytest tests/ -q -n auto
+	@$(PY) tools/suite_counts.py run python -- \
+		$(PY) -m pytest tests/ -q -n auto
 
 # The loop between edits: the fast subset alone, for when even two minutes is too
 # long to wait on a one line change. Deselects the files measured above the floor
@@ -178,7 +195,7 @@ test-python:
 # 138s serial against 34.7s with the workers, on the same 3168 tests.
 
 test-python-fast:
-	@venv/bin/python -m pytest tests/ -q -m "not slow" -n auto
+	@$(PY) -m pytest tests/ -q -m "not slow" -n auto
 
 # Re-measure what each test file costs, which is what decides the set above.
 #
@@ -188,7 +205,8 @@ test-python-fast:
 # the total 31.7% and unevenly, carrying a file across the expensive floor and
 # turning a guard red on a suite nobody had changed (#1038).
 #
-#     venv/bin/python tools/record_test_durations.py --add tests/test_new.py
+#     . ./venv-python.sh && "$$POSTROLL_PYTHON" \
+#         tools/record_test_durations.py --add tests/test_new.py
 #
 # That measures the new file beside seven files already in the record, in one
 # run, scales the reading onto the record's own run by the median of their
@@ -200,7 +218,7 @@ test-python-fast:
 # goes red once most of the record has been scaled on from elsewhere rather than
 # measured in one run.
 record-test-durations:
-	@venv/bin/python tools/record_test_durations.py
+	@$(PY) tools/record_test_durations.py
 
 # Proves the registered guard tests still go red on deliberately broken code
 # (#416). Not part of `make test`: it mutates the working tree, and each entry
@@ -215,19 +233,20 @@ record-test-durations:
 # not name.
 #
 # Run it whenever a guard is added or changed; for just the entries your diff
-# touches, `venv/bin/python tools/check_guards.py --changed` (#426). The
+# touches, `. ./venv-python.sh && "$$POSTROLL_PYTHON" tools/check_guards.py
+# --changed` (#426), which resolves the interpreter from a worktree too. The
 # registry lives in tests/fixtures/guard_mutations/, one file per guard (#506),
 # and is held to the code on every normal suite run by
 # tests/test_guard_mutation_registry.py.
 check-guards:
-	@venv/bin/python tools/check_guards.py
+	@$(PY) tools/check_guards.py
 
 # Whether a green build here still means anything (#528). Fails only when THIS
 # Mac's Xcode is newer than the one CI is pinned to, because that is the
 # direction where locally-clean code can be rejected on a runner and nothing
 # here can tell you. Run by build-install.sh before it installs.
 check-toolchain:
-	@venv/bin/python tools/check_toolchain.py
+	@$(PY) tools/check_toolchain.py
 
 # The only supported way to record a media design fingerprint (#660).
 #
@@ -241,7 +260,7 @@ check-toolchain:
 # only what they vouch for. It renders real reels, so it is not fast, and it
 # refuses rather than guessing: see the tool's docstring for every case.
 record-fingerprints:
-	@venv/bin/python tools/record_design_fingerprints.py
+	@$(PY) tools/record_design_fingerprints.py
 
 # A picture of every screen the checks measure, in one folder (#623).
 #
@@ -283,7 +302,7 @@ record-fingerprints:
 # This draws the pool instead, rejected arrangements included, because a sheet
 # of survivors looks exactly like a filter that rejects nothing.
 collage-arrangements:
-	@venv/bin/python tools/render_collage_arrangements.py \
+	@$(PY) tools/render_collage_arrangements.py \
 		--out "$(BUILD_DIR)/collage-arrangements" $(if $(COUNT),--count $(COUNT),)
 
 review-sheet:
@@ -366,7 +385,7 @@ clean:
 # moved a template's source without moving a pixel. This refuses, by name, when
 # that is the case it is looking at.
 record-design-change:
-	@venv/bin/python tools/record_design_change.py
+	@$(PY) tools/record_design_change.py
 
 # The third door (#818): the pixels moved and the design did not.
 #
@@ -382,4 +401,4 @@ record-design-change:
 # the frames back to be looked at, and `record-fingerprints` records them once
 # they are committed and passing.
 record-codec-change:
-	@venv/bin/python tools/record_codec_change.py
+	@$(PY) tools/record_codec_change.py

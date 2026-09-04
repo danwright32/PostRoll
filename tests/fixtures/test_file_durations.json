@@ -181,6 +181,7 @@
     "test_progress_reporting.py": 0.9099999999999999,
     "test_project_plugin_settings.py": 0.02,
     "test_project_root_recorded.py": 0.0,
+    "test_python_suite_runs_from_a_worktree.py": 0.93,
     "test_readme_documents_every_make_target.py": 0.0,
     "test_real_handle.py": 0.03,
     "test_record_codec_change.py": 26.31,
@@ -980,6 +981,10 @@
     "test_project_root_recorded.py": {
       "run": "full-2026-09-04T03:02Z",
       "scale": 1.0
+    },
+    "test_python_suite_runs_from_a_worktree.py": {
+      "run": "partial-2026-09-04T03:34Z",
+      "scale": 1.211
     },
     "test_readme_documents_every_make_target.py": {
       "run": "full-2026-09-04T03:02Z",
