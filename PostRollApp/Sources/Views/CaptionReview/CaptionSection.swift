@@ -148,7 +148,7 @@ struct CaptionSection: View {
         guard let paths = previewPaths else { return nil }
         // Wednesday uses the collage as its right-column preview
         if day == .wednesday {
-            if let p = paths["collage"], FileManager.default.fileExists(atPath: p) {
+            if present.has("collage"), let p = paths["collage"] {
                 return URL(fileURLWithPath: p)
             }
             return nil
@@ -159,12 +159,9 @@ struct CaptionSection: View {
         let keys: [String] = day == .tuesday
             ? ["reel"]
             : ["collage", "reel", "before_after", "story_cover", "story"]
-        for key in keys {
-            if let p = paths[key], FileManager.default.fileExists(atPath: p) {
-                return URL(fileURLWithPath: p)
-            }
-        }
-        return nil
+        guard let best = present.firstPresent(of: keys.map { ($0, $0) }),
+              let p = paths[best.key] else { return nil }
+        return URL(fileURLWithPath: p)
     }
 
     /// A day whose feed is a carousel + collage story (Wednesday always; Sunday
@@ -177,7 +174,12 @@ struct CaptionSection: View {
     /// broken image, same guard FridayReviewDisplay.showsDualSlot uses).
     private var coverURL: URL? {
         let path = previewPaths?["cover"]
-        guard CoverReviewDisplay.showsCover(coverPath: path, fileExists: FileManager.default.fileExists(atPath:)) else {
+        // Through the held reading rather than the filesystem (#1117). The
+        // display rule stays where it is; only WHERE the existence answer comes
+        // from moves, so the two cannot come to disagree (L70).
+        guard CoverReviewDisplay.showsCover(
+                coverPath: path,
+                fileExists: { _ in present.has("cover") }) else {
             return nil
         }
         return path.map { URL(fileURLWithPath: $0) }
@@ -255,6 +257,15 @@ struct CaptionSection: View {
         return "STORY"
     }
 
+    /// Which of this day's preview files are on disk (#1117).
+    ///
+    /// Held in state and refreshed when the paths change, rather than asked of
+    /// the filesystem from inside `body`, which runs on every redraw. A `stat`
+    /// is cheap next to the JPEG decodes #966 removed, which is why this is the
+    /// remainder rather than the freeze, but it is still file IO on the main
+    /// thread for an answer that changes only when the day is regenerated.
+    @State private var present = PresentPreviewFiles.none
+
     var body: some View {
         VStack(spacing: 0) {
             Button(action: onToggle) {
@@ -295,7 +306,7 @@ struct CaptionSection: View {
                    FridayReviewDisplay.showsDualSlot(
                        fridayClipPlan: postingDay?.fridayClipPlan,
                        reelPath: previewPaths?["reel"],
-                       fileExists: FileManager.default.fileExists(atPath:)
+                       fileExists: { _ in present.has("reel") }
                    ),
                    let plan = postingDay?.fridayClipPlan,
                    let reelPath = previewPaths?["reel"] {
@@ -353,8 +364,8 @@ struct CaptionSection: View {
                             // Story slot: same before/after asset Friday already
                             // produces today, relabeled as the Story post here
                             // alongside the Feed Post reel.
-                            if let storyPath = previewPaths?["before_after"],
-                               FileManager.default.fileExists(atPath: storyPath) {
+                            if present.has("before_after"),
+                               let storyPath = previewPaths?["before_after"] {
                                 let storyURL = URL(fileURLWithPath: storyPath)
                                 Text("STORY")
                                     .font(.system(size: 9, weight: .medium))
@@ -1016,6 +1027,10 @@ struct CaptionSection: View {
         // clearing on the press would throw away the text a failed brand voice
         // note still needs (#462, #718).
         .onChange(of: isRevising) { revisionSettled() }
+        .onAppear { present = PresentPreviewFiles.of(previewPaths) }
+        .onChange(of: previewPaths) { _, _ in
+            present = PresentPreviewFiles.of(previewPaths)
+        }
     }
 
     /// Hand the feedback over and let go of it.

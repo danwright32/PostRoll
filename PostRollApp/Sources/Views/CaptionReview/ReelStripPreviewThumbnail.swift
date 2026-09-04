@@ -375,12 +375,17 @@ struct ReelStripPreviewThumbnail: View {
             }
         }
         .task(id: url) {
-            async let bytes = ImageLoad.bytes(url)
+            // Through `ImageLoad.read` rather than bytes plus `NSImage(data:)`
+            // (#1117): that pair reads off the main actor and then DECODES on
+            // it, which is the lazy main thread decode #966 removed everywhere
+            // else. This strip carries no colour sampling, so nothing here
+            // depends on the pixels beyond drawing them.
+            async let loaded = ImageLoad.read(url, fitting: maxHeight)
             async let decoded = Task.detached {
                 (try? JSONDecoder().decode(ReelStripLayout.self, from: Data(contentsOf: layoutURL)))
             }.value
-            let (loadedBytes, layout) = await (bytes, decoded)
-            let loadedImage = loadedBytes.flatMap { NSImage(data: $0) }
+            let (load, layout) = await (loaded, decoded)
+            let loadedImage = load.image
             await MainActor.run {
                 image = loadedImage
                 if let layout {
@@ -393,12 +398,12 @@ struct ReelStripPreviewThumbnail: View {
         .onChange(of: isRegenerating) { _, nowRegenerating in
             if !nowRegenerating {
                 Task {
-                    async let bytes = ImageLoad.bytes(url)
+                    async let loaded = ImageLoad.read(url, fitting: maxHeight)
                     async let decoded = Task.detached {
                         (try? JSONDecoder().decode(ReelStripLayout.self, from: Data(contentsOf: layoutURL)))
                     }.value
-                    let (loadedBytes, layout) = await (bytes, decoded)
-                    let loadedImage = loadedBytes.flatMap { NSImage(data: $0) }
+                    let (load, layout) = await (loaded, decoded)
+                    let loadedImage = load.image
                     await MainActor.run {
                         image = loadedImage
                         if let layout {

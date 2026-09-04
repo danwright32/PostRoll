@@ -47,7 +47,10 @@ struct CollagePreviewThumbnail: View {
     private static let canvasW: Double = 1080
     private static let canvasH: Double = 1920
 
-    private static func sampleGapColor(from nsImage: NSImage?) -> Color {
+    /// Not private, so `CollageGapColorTests` can pin what it produces (#1117).
+    /// The decode behind it moved to `ImageLoad.read`, and the whole question
+    /// there was whether sampling a SMALLER image gives the same answer.
+    static func sampleGapColor(from nsImage: NSImage?) -> Color {
         guard let nsImage,
               let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil)
         else { return PaintedSurfaces.deepPage }
@@ -505,12 +508,17 @@ struct CollagePreviewThumbnail: View {
         // MainActor.run so SwiftUI fires exactly one render — no intermediate flash
         // where the PNG is visible but the cell overlays haven't appeared yet.
         .task(id: url) {
-            async let bytes   = ImageLoad.bytes(url)
+            async let loaded  = ImageLoad.read(url, fitting: maxCollageHeight)
             async let decoded = Task.detached {
                 LayoutSidecar.read(at: layoutURL)
             }.value
-            let (loadedBytes, sidecar) = await (bytes, decoded)
-            let loadedImage = loadedBytes.flatMap { NSImage(data: $0) }
+            let (load, sidecar) = await (loaded, decoded)
+            // Through `ImageLoad.read` rather than bytes plus `NSImage(data:)`
+            // (#1117). That pair reads off the main actor and then DECODES on
+            // it, which is the lazy main thread decode #966 removed everywhere
+            // else. `CollageGapColorTests` settled the question this change
+            // turned on: the smaller image samples the same gap colour.
+            let loadedImage = load.image
             let sampledGap = Self.sampleGapColor(from: loadedImage)
             await MainActor.run {
                 image = loadedImage
@@ -525,12 +533,12 @@ struct CollagePreviewThumbnail: View {
         .onChange(of: isRegenerating) { _, nowRegenerating in
             if !nowRegenerating {
                 Task {
-                    async let bytes   = ImageLoad.bytes(url)
+                    async let loaded  = ImageLoad.read(url, fitting: maxCollageHeight)
                     async let decoded = Task.detached {
                         LayoutSidecar.read(at: layoutURL)
                     }.value
-                    let (loadedBytes, sidecar) = await (bytes, decoded)
-                    let loadedImage = loadedBytes.flatMap { NSImage(data: $0) }
+                    let (load, sidecar) = await (loaded, decoded)
+                    let loadedImage = load.image
                     let sampledGap = Self.sampleGapColor(from: loadedImage)
                     // Commit image, cells, and override-clear in one render cycle.
                     await MainActor.run {

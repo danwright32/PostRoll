@@ -1,8 +1,8 @@
 {
   "name": "review-staleness-refresh",
   "file": "PostRollApp/Sources/Views/CaptionReview/ReviewMediaStrip.swift",
-  "find": ".onAppear { refreshDesignStaleness() }",
-  "replace": ".onAppear { }",
+  "find": "        .onAppear {\n            refreshDesignStaleness()\n            refreshPresentFiles()\n        }",
+  "replace": "        .onAppear {\n            refreshPresentFiles()\n        }",
   "test": "PostRollTests/LayoutSidecarContentsTests/testTheReviewScreenReadsTheStampOnceRatherThanEveryRedraw",
-  "breaks": "the review screen never refreshes design staleness on appear"
+  "breaks": "the review screen never refreshes design staleness on appear, so the badge shows whatever the last day it drew left behind and a redesign leaves old assets looking current (#286)"
 }
