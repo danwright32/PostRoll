@@ -24,6 +24,51 @@ fi
 . "${CACHE_PATH_FILE}"
 BUILD_DIR="${POSTROLL_DERIVED_DATA}"
 
+# What the gate is about to vouch FOR, checked before it spends four minutes
+# proving something about it (#957).
+#
+# On 2026-08-29 an update ran the pre-install Swift suite against a checkout
+# carrying another session's uncommitted work AND a branch switch mid run. It
+# failed after four minutes on a source-scanning test reading a file swapped out
+# underneath it (#956). The build the gate was protecting was fine; what Dan saw
+# was that his app was out of date, the update had stopped, and a test name that
+# meant nothing to him.
+#
+# Two separable defects: the gate could not say which commit it vouched for, and
+# it paid the whole cost before discovering the checkout was unusable. Both are
+# answered here, in the first second.
+#
+# `tools/check_guards.py` refuses to perturb a file with uncommitted changes for
+# exactly this reason, so the precedent and the wording are its.
+#
+# ALLOW_DIRTY_INSTALL=1 is the deliberate case, the way SKIP_INSTALL_TESTS is.
+REPO_ROOT="$(cd .. && pwd)"
+HEAD_BEFORE=""
+if [[ "${ALLOW_DIRTY_INSTALL:-0}" == "1" ]]; then
+  echo "==> Not checking the checkout (ALLOW_DIRTY_INSTALL=1). This install"
+  echo "    vouches for whatever is on disk, which may be nobody's commit."
+elif ! git -C "${REPO_ROOT}" rev-parse --git-dir >/dev/null 2>&1; then
+  # Not a checkout at all. Said out loud rather than skipped silently: an
+  # exported copy is a legitimate thing to build from, and a person reading a
+  # green install has to know it was not held to a commit (L98).
+  echo "==> Not a git checkout, so this install names no commit"
+else
+  DIRTY="$(git -C "${REPO_ROOT}" status --porcelain)"
+  if [[ -n "${DIRTY}" ]]; then
+    echo "Error: the checkout has uncommitted changes, so the suite below would" >&2
+    echo "       spend four minutes proving something about a tree that is" >&2
+    echo "       nobody's commit, and a green install would vouch for it." >&2
+    echo "" >&2
+    echo "${DIRTY}" >&2
+    echo "" >&2
+    echo "       Commit or stash them, or re-run with ALLOW_DIRTY_INSTALL=1 to" >&2
+    echo "       install from the working tree on purpose." >&2
+    exit 1
+  fi
+  HEAD_BEFORE="$(git -C "${REPO_ROOT}" rev-parse HEAD)"
+  echo "==> Checkout is clean at ${HEAD_BEFORE}"
+fi
+
 # Nothing ran the tests before a build reached /Applications, so a red suite
 # could be installed and used without anyone noticing (#98). The gate lives
 # here rather than only in the Makefile because the `postroll` alias calls this
@@ -74,7 +119,6 @@ else
   fi
 
   echo "==> Running the Python tests before installing"
-  REPO_ROOT="$(cd .. && pwd)"
   if [[ -x "${REPO_ROOT}/venv/bin/python" ]]; then
     # Is the green suite above worth anything? If this Mac's Xcode has moved
     # ahead of the one CI is pinned to, it can pass on code the runner cannot
@@ -113,6 +157,22 @@ else
     echo "       SKIP_INSTALL_TESTS=1 to install without it." >&2
     exit 1
   fi
+fi
+
+# The tree must still be the tree that was judged (#957). A branch switch
+# during a four minute suite leaves a green run vouching for a commit nobody
+# tested, which is the more dangerous half: a red run at least stops.
+if [[ -n "${HEAD_BEFORE}" ]]; then
+  HEAD_AFTER="$(git -C "${REPO_ROOT}" rev-parse HEAD)"
+  if [[ "${HEAD_AFTER}" != "${HEAD_BEFORE}" ]]; then
+    echo "Error: the checkout moved while the suite ran, from ${HEAD_BEFORE}" >&2
+    echo "       to ${HEAD_AFTER}. Whatever just passed was about a tree this" >&2
+    echo "       install is no longer building, so it vouches for nothing." >&2
+    echo "       Re-run against a settled checkout, or work in a git worktree" >&2
+    echo "       of your own, which is what keeps two sessions off one tree." >&2
+    exit 1
+  fi
+  echo "==> Tests passed against ${HEAD_BEFORE}"
 fi
 
 echo "==> Building ${SCHEME} (${CONFIG})"

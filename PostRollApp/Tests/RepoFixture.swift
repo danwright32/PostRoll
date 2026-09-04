@@ -79,6 +79,102 @@ enum RepoFixture {
         return .other(path: path, description: ns.localizedDescription)
     }
 
+    // MARK: - The tree these tests are reading is not always the one they were
+    // compiled from (#956)
+
+    /// What the checkout is pointing at, as cheaply as it can be asked.
+    ///
+    /// Several suites here read the app's own source at RUN time, so they see
+    /// what is on disk at the instant they run rather than what the bundle was
+    /// compiled from. Anything that edits the checkout mid run therefore makes
+    /// them report a violation that was never committed.
+    ///
+    /// Measured on 2026-08-29: `build-install.sh` ran the pre-install suite
+    /// while a branch switch happened in the same checkout, and
+    /// `RepoFixtureTests/testNoSuiteDerivesARelativePathByTrimmingARootOffTheFront`
+    /// failed naming `DeepLinkWiringTests.swift`. That was accurate about the
+    /// file on disk at that moment and wrong about the commit, so it read
+    /// exactly like a genuine regression and cost a four minute run.
+    ///
+    /// Two plain file reads rather than a `git` subprocess, because this is
+    /// consulted on every fixture read and a process per read would cost more
+    /// than the suites it protects. A branch switch rewrites both.
+    ///
+    /// Nil when the checkout cannot be read at all, which is its own state: a
+    /// fingerprint that silently answered the same thing every time would make
+    /// the comparison below pass forever (L98, L215).
+    static func checkoutFingerprint(root: URL? = nil,
+                                    file: StaticString = #filePath) -> String? {
+        let base = root ?? repoRoot(file: file)
+        let dot = base.appendingPathComponent(".git")
+
+        // A worktree's `.git` is a FILE naming the real gitdir, so following it
+        // is what makes this work from one at all, and a worktree is exactly
+        // where a session runs to avoid this hazard in the first place.
+        var gitDir = dot
+        if let pointer = try? String(contentsOf: dot, encoding: .utf8),
+           pointer.hasPrefix("gitdir:") {
+            let named = pointer.dropFirst("gitdir:".count)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            gitDir = named.hasPrefix("/") ? URL(fileURLWithPath: named)
+                                          : base.appendingPathComponent(named)
+        }
+
+        guard let head = try? String(contentsOf: gitDir.appendingPathComponent("HEAD"),
+                                     encoding: .utf8) else { return nil }
+        let index = gitDir.appendingPathComponent("index")
+        let stamp = (try? FileManager.default.attributesOfItem(atPath: index.path)[.modificationDate]
+                        as? Date)?.timeIntervalSince1970
+        return "\(head.trimmingCharacters(in: .whitespacesAndNewlines))@\(stamp ?? 0)"
+    }
+
+    /// The fingerprint as it was when this process first read anything.
+    ///
+    /// Taken lazily on first use rather than at load, so it records the tree
+    /// the run actually started against.
+    static let fingerprintAtStart: String? = checkoutFingerprint()
+
+    /// Whether the checkout still is what this run began against.
+    ///
+    /// Its own outcome, and that is the whole point (L11). A failure that
+    /// cannot tell "this code is wrong" from "this file changed while I read
+    /// it" teaches whoever sees it to re-run rather than to look, which is the
+    /// habit that makes every later real failure cost a run too.
+    ///
+    /// Unknown on both sides is treated as STABLE. A checkout with no readable
+    /// git directory is how this runs from an exported copy, and refusing there
+    /// would make the suite unrunnable for a reason unrelated to the code.
+    static func checkoutMoved(since start: String? = fingerprintAtStart,
+                              now: String? = nil,
+                              file: StaticString = #filePath) -> Bool {
+        let current = now ?? checkoutFingerprint(file: file)
+        guard let start, let current else { return false }
+        return start != current
+    }
+
+    /// What to say when it has.
+    static func treeMovedMessage(_ what: String) -> String {
+        """
+        THE CHECKOUT MOVED, not a rule violation: \(what)
+
+        These tests read the app's source at run time, so they see what is on         disk now rather than what this bundle was compiled from. Something         changed the checkout while the suite was running, most likely another         session switching a branch in the same working tree, so whatever was         reported is about a tree this run was never judging. Re-run against a         settled checkout, or work in a git worktree of your own, which is what         keeps two sessions off one tree.
+        """
+    }
+
+    /// Fail with the distinct outcome above when the tree has moved.
+    ///
+    /// Returns whether it is safe to go on judging, so a caller can stop rather
+    /// than pile a rule violation on top of an explanation of why it cannot be
+    /// trusted.
+    @discardableResult
+    static func stillJudgingTheSameTree(_ what: String,
+                                        file: StaticString = #filePath,
+                                        line: UInt = #line) -> Bool {
+        guard checkoutMoved(file: file) else { return true }
+        XCTFail(treeMovedMessage(what), file: file, line: line)
+        return false
+    }
+
     /// Read a repo-relative fixture, failing with a message that names the
     /// cause rather than leaving the suite looking broken.
     static func data(_ relativePath: String,
@@ -148,6 +244,13 @@ enum RepoFixture {
             return []
         }
         var found: [(relativePath: String, url: URL)] = []
+        // Checked once per WALK rather than per file: a sweep is the shape that
+        // reports a violation, and a branch switch mid sweep is what #956 is
+        // about. Reported as the tree having moved rather than as whatever the
+        // sweep was about to say.
+        stillJudgingTheSameTree("a sweep of \(base.path) is reading a checkout "
+                                + "that changed while it ran",
+                                file: file, line: line)
         for case let url as URL in walk where url.pathExtension == ext {
             guard let relative = relativePath(of: url, under: base) else {
                 XCTFail("\(url.path) came back from a walk of \(base.path) and is not "

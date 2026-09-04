@@ -110,6 +110,12 @@ def _run_install(tmp_path: Path, *, xcodebuild_exit: int, env_extra: dict | None
     env = dict(os.environ)
     env["PATH"] = f"{stubs}:{env['PATH']}"
     env.pop("SKIP_INSTALL_TESTS", None)
+    # These tests are about the TEST gate, and they run the real script against
+    # the real checkout, which is dirty whenever somebody is working. Without
+    # this they would pass or fail on whether the tree happened to be clean,
+    # which is a test asserting about the machine rather than the code (L205).
+    # The checkout gate has its own tests below, with git stubbed.
+    env["ALLOW_DIRTY_INSTALL"] = "1"
     env.update(env_extra or {})
     return subprocess.run(
         ["/bin/bash", str(BUILD_INSTALL)],
@@ -424,3 +430,157 @@ def test_the_sheet_selects_exactly_what_the_suite_skips():
 
     assert "$(foreach t,$(REVIEW_TESTS),-skip-testing:$(t))" in _recipe("test-swift")
     assert "$(foreach t,$(REVIEW_TESTS),-only-testing:$(t))" in selecting
+
+
+# ── the gate says what it vouched for, and refuses what it cannot (#957) ─────
+#
+# On 2026-08-29 an update ran the pre-install Swift suite against a checkout
+# carrying another session's uncommitted work AND a branch switch mid run. It
+# failed after four minutes on a source-scanning test reading a file swapped out
+# underneath it (#956). The build was fine; Dan saw that his app was out of
+# date, the update had stopped, and a test name that meant nothing to him.
+#
+# `git` is stubbed rather than the real checkout being dirtied, so nothing here
+# can touch the tree it is running from (L2).
+
+def _git_stub(d: Path, *, status: str = "", heads: list[str] | None = None) -> None:
+    """A `git` whose status and successive HEADs the test chooses.
+
+    The heads are consumed in order from a counter file, so a run that reads
+    HEAD twice can be given two different answers, which is the branch-switch
+    case and the one that cannot be staged any other way.
+    """
+    revs = heads or ["deadbeef"]
+    # POSIX `sh` only. `_write_stub` writes a `#!/bin/sh` shebang, and on Ubuntu
+    # that is dash: a first version used a bash ARRAY to hold the heads, which
+    # works on this Mac because /bin/sh is bash there and fails on every Linux
+    # CI run. That is the same trap `test_the_install_script_uses_no_bsd_only_
+    # shell_forms` exists for, one file along (L504).
+    _write_stub(d / "git", f"""
+counter="${{TMPDIR:-/tmp}}/postroll-git-stub-count"
+case "$*" in
+  *"rev-parse --git-dir"*) echo ".git" ;;
+  *"status --porcelain"*) printf '%s' {status!r} ;;
+  *"rev-parse HEAD"*)
+    n=$(cat "$counter" 2>/dev/null || echo 0)
+    echo $((n + 1)) > "$counter"
+    set -- {" ".join(revs)}
+    while [ "$n" -gt 0 ] && [ "$#" -gt 1 ]; do
+      shift
+      n=$((n - 1))
+    done
+    echo "$1"
+    ;;
+  *) echo "" ;;
+esac
+exit 0
+""")
+
+
+def _run_install_with_git(tmp_path: Path, *, status: str = "",
+                          heads: list[str] | None = None,
+                          xcodebuild_exit: int = 0,
+                          env_extra: dict | None = None):
+    stubs = _stub_dir(tmp_path, xcodebuild_exit=xcodebuild_exit)
+    _git_stub(stubs, status=status, heads=heads)
+    counter = Path(os.environ.get("TMPDIR", "/tmp")) / "postroll-git-stub-count"
+    counter.unlink(missing_ok=True)
+    env = dict(os.environ)
+    env["PATH"] = f"{stubs}:{env['PATH']}"
+    env.pop("SKIP_INSTALL_TESTS", None)
+    env.pop("ALLOW_DIRTY_INSTALL", None)
+    env.update(env_extra or {})
+    return subprocess.run(["/bin/bash", str(BUILD_INSTALL)],
+                          capture_output=True, text=True, env=env, timeout=600)
+
+
+@pytest.mark.skipif(not BUILD_INSTALL.exists(), reason="build-install.sh missing")
+def test_a_dirty_checkout_is_refused_before_the_suite_is_paid_for(tmp_path):
+    result = _run_install_with_git(tmp_path, status=" M PostRollApp/Sources/AppState.swift\n")
+
+    assert result.returncode != 0, "a dirty tree installed anyway"
+    combined = result.stdout + result.stderr
+    assert "AppState.swift" in combined, (
+        "it refused without naming what is uncommitted, so the person has to go "
+        f"and find out: {combined[-800:]}")
+    assert "Running the Swift tests" not in combined, (
+        "it paid for the four minute suite before discovering the checkout was "
+        "unusable, which is half of what #957 is about")
+
+
+@pytest.mark.skipif(not BUILD_INSTALL.exists(), reason="build-install.sh missing")
+def test_the_refusal_names_the_override(tmp_path):
+    # A message that tells somebody how to recover has to name a step that
+    # changes the state they are stuck in (L111), and installing from the
+    # working tree deliberately is a real thing to want.
+    result = _run_install_with_git(tmp_path, status=" M a.swift\n")
+
+    assert "ALLOW_DIRTY_INSTALL=1" in result.stdout + result.stderr
+
+
+@pytest.mark.skipif(not BUILD_INSTALL.exists(), reason="build-install.sh missing")
+def test_the_override_installs_from_the_working_tree_and_says_so(tmp_path):
+    # The positive control (L159). Without it, "a dirty tree is refused" is
+    # satisfied by a script that refuses everything.
+    result = _run_install_with_git(
+        tmp_path, status=" M a.swift\n",
+        env_extra={"ALLOW_DIRTY_INSTALL": "1", "SKIP_INSTALL_TESTS": "1"})
+
+    combined = result.stdout + result.stderr
+    assert "ALLOW_DIRTY_INSTALL=1" in combined
+    assert "vouches for whatever is on disk" in combined, (
+        "the override is silent about what it gave up, so a green install "
+        f"reads the same either way (L98): {combined[-800:]}")
+
+
+@pytest.mark.skipif(not BUILD_INSTALL.exists(), reason="build-install.sh missing")
+def test_a_clean_checkout_says_which_commit_it_vouched_for(tmp_path):
+    result = _run_install_with_git(tmp_path, status="", heads=["c0ffee1"],
+                                   env_extra={"SKIP_INSTALL_TESTS": "1"})
+
+    assert "c0ffee1" in result.stdout, (
+        "a green install names no commit, so nothing says what it green-lit: "
+        f"{result.stdout[-800:]}")
+
+
+@pytest.mark.skipif(not BUILD_INSTALL.exists(), reason="build-install.sh missing")
+def test_a_branch_switch_during_the_suite_stops_the_install(tmp_path):
+    # The more dangerous half. A red run at least stops; a green one that
+    # switched underneath vouches for a commit nobody tested (L179).
+    result = _run_install_with_git(tmp_path, status="",
+                                   heads=["before111", "after222"],
+                                   env_extra={"SKIP_INSTALL_TESTS": "1"})
+
+    combined = result.stdout + result.stderr
+    assert result.returncode != 0, "it built against a tree nothing had judged"
+    assert "before111" in combined and "after222" in combined, (
+        f"it did not say what moved: {combined[-800:]}")
+    assert "==> Building" not in combined, (
+        "it noticed after building rather than before")
+
+
+@pytest.mark.skipif(not BUILD_INSTALL.exists(), reason="build-install.sh missing")
+def test_a_checkout_that_did_not_move_is_not_refused(tmp_path):
+    # The other direction, or every install would be refused and the check
+    # would be noise rather than a signal (L36).
+    result = _run_install_with_git(tmp_path, status="", heads=["same333"],
+                                   env_extra={"SKIP_INSTALL_TESTS": "1"})
+
+    assert "the checkout moved" not in (result.stdout + result.stderr)
+
+
+@pytest.mark.skipif(not BUILD_INSTALL.exists(), reason="build-install.sh missing")
+def test_a_copy_that_is_not_a_checkout_says_it_names_no_commit(tmp_path):
+    # An exported copy is a legitimate thing to build from. Saying nothing
+    # would make a green install there read exactly like one held to a commit
+    # (L98).
+    stubs = _stub_dir(tmp_path, xcodebuild_exit=0)
+    _write_stub(stubs / "git", 'exit 1\n')
+    env = dict(os.environ)
+    env["PATH"] = f"{stubs}:{env['PATH']}"
+    env["SKIP_INSTALL_TESTS"] = "1"
+    env.pop("ALLOW_DIRTY_INSTALL", None)
+    result = subprocess.run(["/bin/bash", str(BUILD_INSTALL)],
+                            capture_output=True, text=True, env=env, timeout=600)
+
+    assert "names no commit" in result.stdout, result.stdout[-800:]
