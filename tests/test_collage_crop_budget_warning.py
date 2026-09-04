@@ -129,8 +129,9 @@ def test_a_last_resort_that_buries_nothing_says_only_what_it_crops(capsys):
     picked = distinct_collage_splits(7, ratios)
     said = capsys.readouterr().err
 
-    if hidden_by_the_caption(picked[0], ratios) > MOSTLY_HIDDEN:
-        pytest.skip("this fixture also buries a photograph, so it cannot show "
-                    "the quiet case")
+    assert hidden_by_the_caption(picked[0], ratios) <= MOSTLY_HIDDEN, (
+        "this fixture buries a photograph, so it cannot show the quiet case "
+        "and the assertion below would be about the wrong branch. A skip here "
+        "would read as a pass while checking nothing (L1)")
     assert "behind Instagram's caption" not in said, (
         f"it warned about the caption for a layout that hides nothing: {said}")
