@@ -13,10 +13,22 @@ struct MainWindowView: View {
     /// Links that arrived from an OmniFocus task note (#840). Read here rather
     /// than handled where they land, because on a cold launch the URL is
     /// delivered before this view exists.
-    private var deepLinks = DeepLinkInbox.shared
+    ///
+    /// TAKEN rather than reached for (#951, #937). A screen that builds its own
+    /// store draws whatever the run before it left behind, which is invisible
+    /// on a real launch and is exactly what the review sheet pictures.
+    private let deepLinks: DeepLinkInbox
 
     /// Whether a banner this app sends could reach anybody at all (#894).
-    private var notifications = NotificationService.shared
+    private let notifications: NotificationService
+
+    /// The shared instances are the DEFAULTS rather than the values, so the app
+    /// is unchanged and a test can hand this screen its own.
+    init(deepLinks: DeepLinkInbox = .shared,
+         notifications: NotificationService = .shared) {
+        self.deepLinks = deepLinks
+        self.notifications = notifications
+    }
 
     var body: some View {
         @Bindable var appState = appState
