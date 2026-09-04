@@ -31,7 +31,7 @@ from __future__ import annotations
 import re
 import unicodedata
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 # Re-exported so the eight test files and three scripts importing the pair out
 # of here are untouched by the move (#1128). The definitions live in a leaf
@@ -527,11 +527,82 @@ def _marker_name(block: str) -> str:
     return match.group(1).strip() if match else block
 
 
+
+def outside_markers(body: str, apply: Callable[[str], str]) -> str:
+    """`body` with `apply` run on the prose BETWEEN photo markers, never on one.
+
+    A `[PHOTO: file.jpg | alt]` marker is not prose. Its filename names a real
+    file on disk and its alt text is judged against the photograph, so a rule
+    written about Dan's writing must not reach either.
+
+    Code that decided this by looking at the CONTAINER, the whole body or a
+    whole paragraph, got it wrong in both directions the moment one container
+    held both (L361). `_fix_wrong_names` substituted over the whole body and
+    rewrote a filename into a file that does not exist (#975);
+    `_prose_paragraphs` dropped a block only when the WHOLE block began with a
+    marker, so one at the end of a paragraph leaked in and one at the start took
+    the prose after it out (#1163).
+
+    Each prose span is offered SEPARATELY rather than joined, so a pattern
+    cannot match across a marker: a whole-body regex otherwise reads a filename
+    and the sentence after it as one run.
+
+    The repo learned this once already. #109 moved `_fix_second_person` and
+    `_fix_missing_contractions` onto paragraph splicing for exactly this reason
+    and did not carry it to their sibling, which is how #975 survived.
+    """
+    out: list[str] = []
+    at = 0
+    for match in _PHOTO_MARKER.finditer(body):
+        out.append(apply(body[at:match.start()]))
+        out.append(match.group(0))
+        at = match.end()
+    out.append(apply(body[at:]))
+    return "".join(out)
+
+
 def _prose_paragraphs(body: str) -> list[str]:
+    """The body's blocks that are not purely a photo marker, markers KEPT.
+
+    This is the INDEXED list: `blog_repair_damage` licenses a repairer to
+    rewrite paragraph N of it, and refuses when that paragraph holds a marker
+    inline, because rewriting one sends the marker to a model and splices back
+    whatever comes out (#998). Both of those need the marker still in the text
+    and need the indices stable, so this deliberately keeps the old block
+    semantics.
+
+    The prose RULES want the opposite and take `prose_text_of` below. Serving
+    both from one function is what #1163 asked for and what a first attempt
+    did: stripping markers here made the inline-marker refusal unreachable,
+    because a block that no longer holds a marker can never be found to hold
+    one (L109, a refusal that cannot be spoken).
+    """
     out = []
     for block in body.split("\n\n"):
         text = block.strip()
         if text and not text.startswith("[PHOTO:"):
+            out.append(text)
+    return out
+
+
+def prose_text_of(body: str) -> list[str]:
+    """The same blocks with every marker CUT OUT, for the rules about writing.
+
+    Markers are removed by SPAN, which is what made the block test wrong in
+    both directions before #1163 (L361): one at the END of a block leaked in,
+    so every prose rule read a filename as words Dan wrote, and one at the
+    START took the prose after it out, so those words were checked by nothing.
+
+    Measured 2026-09-01 over the 21 stored bodies: 7 markers leaked on one
+    post, which is 8 of the 32 `invented_number` firings, a quarter of that
+    rule's entire rate, every one a false positive on a filename like
+    `-189.jpg`. Nothing was dropped out, which is reachable rather than
+    occurring.
+    """
+    out = []
+    for block in body.split("\n\n"):
+        text = _PHOTO_MARKER.sub(" ", block).strip()
+        if text:
             out.append(text)
     return out
 
@@ -838,7 +909,8 @@ def check_blog_targeted(
 
     # 8. never invent numbers
     known = _program_numbers(program, venue)
-    paragraphs = _prose_paragraphs(body)
+    # The rules read Dan's WRITING, so markers are cut out (#1163).
+    paragraphs = prose_text_of(body)
     prose = " ".join(paragraphs)
     # A count the surrounding prose supports is derivable, not invented (#226).
     known |= _counts_supported_by_names(paragraphs, program)
