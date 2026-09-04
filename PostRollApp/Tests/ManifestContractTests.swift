@@ -245,6 +245,54 @@ final class ManifestContractTests: XCTestCase {
             "blog_revision")
     }
 
+    func testTheBlogRepairRetryManifestSendsEveryRequiredKey() throws {
+        // #1187. This sender had no contract entry at all, because it built its
+        // manifest inline halfway through an async function that shells out and
+        // nothing here could populate one. Adding `event_id` in #1162 was
+        // caught for `week`, `blog_revision` and `blog_photo_swap` and passed
+        // silently on this path, which reads the same key.
+        try assertSends(
+            PythonBridge.buildBlogRepairRetryManifest(
+                currentBody: "a body with [PHOTO: DSC1.jpg | alt] in it",
+                markers: ["DSC1.jpg"],
+                photoPaths: [URL(fileURLWithPath: "/photos/DSC1.jpg")],
+                event: fullEvent()),
+            "blog_repair_retry")
+    }
+
+    func testTheBlogRepairRetryManifestSendsTheEventScopedKeysWithAnEvent() throws {
+        // The conditional keys, asserted against a fully populated event so
+        // their absence could only be the code's doing (L48). `event_id` is
+        // which post the repair journal's records belong to, and Dan shoots the
+        // same rooms repeatedly, so the name and the venue cannot answer it.
+        let manifest = PythonBridge.buildBlogRepairRetryManifest(
+            currentBody: "body", markers: ["DSC1.jpg"],
+            photoPaths: [URL(fileURLWithPath: "/photos/DSC1.jpg")],
+            event: fullEvent())
+
+        XCTAssertNotNil(manifest["event_id"])
+        XCTAssertEqual(manifest["venue"] as? String, "Carnegie Hall")
+        XCTAssertNotNil(manifest["program"],
+                        "the retry writes alt text with no idea what was on the "
+                        + "programme")
+    }
+
+    func testTheBlogRepairRetryManifestWithoutAnEventStillSendsTheAlwaysKeys() throws {
+        // The positive control for the condition being a real condition rather
+        // than a key that is simply always there (L159). Without an event the
+        // three unconditional keys still go, and the conditional three do not,
+        // which is what the contract says.
+        let manifest = PythonBridge.buildBlogRepairRetryManifest(
+            currentBody: "body", markers: ["DSC1.jpg"],
+            photoPaths: [URL(fileURLWithPath: "/photos/DSC1.jpg")],
+            event: nil)
+
+        try assertSends(manifest, "blog_repair_retry")
+        XCTAssertNil(manifest["event_id"])
+        XCTAssertNil(manifest["venue"])
+        XCTAssertNil(manifest["program"])
+    }
+
     func testTheBlogRevisionManifestSendsTheBlogPhotoFilenames() throws {
         // #962: without these Python skips both filename rules by its own
         // documented refusal, so a revision that renamed a marker, which the
@@ -404,7 +452,7 @@ final class ManifestContractTests: XCTestCase {
     private static let provenManifests = [
         "week", "week_day", "media", "media_day", "cover", "friday_override",
         "reel_preview", "swap_reel_audio", "caption_revision", "blog_revision",
-        "blog_photo_swap", "analytics", "learn_suggestion",
+        "blog_photo_swap", "blog_repair_retry", "analytics", "learn_suggestion",
         "account_numbers",
     ]
 

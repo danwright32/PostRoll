@@ -1377,6 +1377,42 @@ actor PythonBridge {
     /// paths, because a marker with no path is `blocked`, so trimming the paths
     /// instead would bring every other marker back reported as a failure it
     /// never had.
+    /// The retry manifest, in one pure function like every other (#266, #270,
+    /// #1187).
+    ///
+    /// It was assembled inline, which is why it was the one sender with no
+    /// entry under `manifests` in the payload contract: the contract's Swift
+    /// half populates a manifest and asserts on it, and it cannot do that to a
+    /// dictionary built halfway through an async function that shells out.
+    ///
+    /// The cost of the gap was measured: adding `event_id` in #1162 was caught
+    /// for `week`, `blog_revision` and `blog_photo_swap`, and passed silently
+    /// here, on a path that reads the same key.
+    ///
+    /// `event` stays optional because the signature it was extracted from has
+    /// it optional. Both callers pass one, so the conditional keys are sent in
+    /// practice; the contract records the CONDITION rather than asserting them,
+    /// which is what an entry for a conditional key buys.
+    nonisolated static func buildBlogRepairRetryManifest(
+        currentBody: String, markers: [String], photoPaths: [URL],
+        event: Event?) -> [String: Any] {
+        var manifest: [String: Any] = [
+            "body": currentBody,
+            "markers": markers,
+            "photo_paths": photoPaths.map(\.path),
+        ]
+        if let event {
+            manifest["event_id"] = event.id.uuidString
+            manifest["venue"] = event.venue
+            if let ocr = event.ocrResult,
+               let program = try? JSONSerialization.jsonObject(
+                   with: JSONEncoder().encode(ocr)) {
+                manifest["program"] = program
+            }
+        }
+        return manifest
+    }
+
     func runBlogRepairRetry(currentBody: String, markers: [String],
                             photoPaths: [URL], event: Event? = nil)
         async throws -> BlogRepairRetryResult {
@@ -1393,20 +1429,9 @@ actor PythonBridge {
             try? FileManager.default.removeItem(at: outputFile)
         }
 
-        var manifest: [String: Any] = [
-            "body": currentBody,
-            "markers": markers,
-            "photo_paths": photoPaths.map(\.path),
-        ]
-        if let event {
-            manifest["event_id"] = event.id.uuidString
-            manifest["venue"] = event.venue
-            if let ocr = event.ocrResult,
-               let program = try? JSONSerialization.jsonObject(
-                   with: JSONEncoder().encode(ocr)) {
-                manifest["program"] = program
-            }
-        }
+        let manifest = Self.buildBlogRepairRetryManifest(
+            currentBody: currentBody, markers: markers,
+            photoPaths: photoPaths, event: event)
         try JSONSerialization.data(withJSONObject: manifest,
                                    options: [.prettyPrinted, .sortedKeys])
             .write(to: manifestFile)

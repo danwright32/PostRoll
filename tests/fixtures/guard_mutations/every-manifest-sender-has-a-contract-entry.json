@@ -1,0 +1,8 @@
+{
+  "name": "every-manifest-sender-has-a-contract-entry",
+  "file": "tests/fixtures/bridge_payload_contract.json",
+  "find": "      \"swift\": \"PythonBridge.buildBlogRepairRetryManifest\",",
+  "replace": "      \"swift\": \"PythonBridge.buildSomethingElseEntirely\",",
+  "test": "tests/test_manifest_contract.py::test_every_manifest_sender_is_described_by_the_contract",
+  "breaks": "a function that hands Python a manifest is described by no contract entry, so the guard that keeps the two sides agreeing does not look at that path at all. A key the app stops sending there is silently replaced by Python's own default and generation carries on producing something subtly different, which is exactly what happened to the retry manifest when event_id was added in #1162 (#1187, L96)"
+}
