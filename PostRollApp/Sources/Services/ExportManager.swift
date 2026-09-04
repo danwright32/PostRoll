@@ -16,14 +16,19 @@ import AppKit
 @Observable
 final class ExportManager {
 
-    /// What the last automatic figures fetch failed with, or nil (#1004).
+    /// Everything the automatic figures fetch has to say (#1004, #1277).
     ///
     /// Handed in rather than read from the manager, because the export copies
     /// everything it needs before detaching and this is one more of those. Its
     /// OWN property rather than folded into the book's recovery note: two
     /// independent conditions sharing one field means one silences the other
     /// (L53).
-    var accountNumbersNote: String?
+    ///
+    /// A list because the manager has more than one thing to say and they are
+    /// independent: whether the last fetch failed, and whether the archive has
+    /// ever been counted at all. Carried as the manager's own list rather than
+    /// as a field per note, so a note added there cannot be dropped here (L41).
+    var accountNumbersNotes: [String] = []
 
 
     enum Phase: Equatable {
@@ -217,8 +222,8 @@ final class ExportManager {
         // this is copied with everything else rather than reached for from the
         // task below. Set by the app when the fetch manager exists; nil in the
         // suite, which is the same as no failure to report.
-        let accountNotes = [AccountBook.shared.recoveryNote,
-                            accountNumbersNote].compactMap { $0 }
+        let accountNotes = [AccountBook.shared.recoveryNote].compactMap { $0 }
+                         + accountNumbersNotes
 
         // Held outside the do so the failure paths can throw the staged work
         // away: a staging folder nobody commits is debris in Dan's own folder.

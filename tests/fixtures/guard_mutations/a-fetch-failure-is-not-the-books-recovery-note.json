@@ -1,8 +1,8 @@
 {
   "name": "a-fetch-failure-is-not-the-books-recovery-note",
   "file": "PostRollApp/Sources/Views/CaptionReviewView.swift",
-  "find": "                                 notes: [accounts.recoveryNote,\n                                         accountNumbers.failureNote].compactMap { $0 })",
+  "find": "                                 notes: [accounts.recoveryNote].compactMap { $0 }\n                                      + accountNumbers.notes)",
   "replace": "                                 notes: [accounts.recoveryNote].compactMap { $0 })",
-  "test": "PostRollTests/AccountNumbersManagerTests/testBothSurfacesCarryTheFetchNoteAsItsOwnElement",
-  "breaks": "a failed figures fetch says nothing on the review screen, which reads exactly like a fetch that was never triggered, and the ranking quietly goes on using whatever numbers it already had (#1004, L12)"
+  "test": "PostRollTests/AccountNumbersManagerTests/testBothSurfacesCarryTheFetchNotesAsTheirOwnElements",
+  "breaks": "a failed figures fetch and a launch that never counted the archive both say nothing on the review screen, which reads exactly like a fetch that was never triggered, and the ranking quietly goes on using whatever numbers it already had (#1004, #1277, L12)"
 }

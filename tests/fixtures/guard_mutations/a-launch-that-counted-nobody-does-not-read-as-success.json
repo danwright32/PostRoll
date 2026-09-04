@@ -1,0 +1,8 @@
+{
+  "name": "a-launch-that-counted-nobody-does-not-read-as-success",
+  "file": "PostRollApp/Sources/Services/AccountNumbersManager.swift",
+  "find": "            return .asked(asked: due.count,\n                          measured: answers.filter { $0.outcome == \"measured\" }.count)",
+  "replace": "            return .asked(asked: due.count, measured: answers.count)",
+  "test": "PostRollTests/AccountNumbersManagerTests/testALaunchThatGotNothingBackDoesNotReadAsSuccess",
+  "breaks": "a launch Meta answered for and refused every account reports as a full success, because a refusal is a reply, so the collaborator ranking staying empty explains itself as normal and the state milestone 23 actually fails in is the one nothing can see (#1277, L540, L67)"
+}
