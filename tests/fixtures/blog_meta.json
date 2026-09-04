@@ -150,7 +150,7 @@
     {
       "_what": "a spaced em dash in the name becomes a comma, a tight one becomes a space",
       "event": {
-        "name": "Sing\u2014Play \u2014 A Winter Program",
+        "name": "Sing—Play — A Winter Program",
         "org": "",
         "venue": "Merkin Hall",
         "venue_context": "",
@@ -164,7 +164,7 @@
     {
       "_what": "an en dash is stripped the same way, since the style rule covers both",
       "event": {
-        "name": "Bach \u2013 The Cantatas",
+        "name": "Bach – The Cantatas",
         "org": "",
         "venue": "Zankel Hall",
         "venue_context": "",
@@ -203,5 +203,69 @@
       "description": "Performance photographs of Perpetual Light, presented by DCINY at Carnegie Hall, April 4, 2026. Concert and theater photography in New York by Dan Wright.",
       "details": "Event: Perpetual Light\nPresented by: DCINY\nVenue: Carnegie Hall\nDate: April 4, 2026\nPhotographed: Performance\nProgram: https://dciny.org/perpetual-light\nPhotographer: Dan Wright"
     }
-  ]
+  ],
+  "_dates_comment": [
+    "#1106: format_date and BlogMeta.formatDate are twins found by name, not",
+    "by anybody declaring them. They were covered only through the details",
+    "block above, so a disagreement about a single date would have shown up as",
+    "a whole details block mismatch and been read as a details bug.",
+    "",
+    "Every valid ISO date the two must render identically. The months are here",
+    "because both sides carry their own list of them, which is two places for",
+    "a typo to live."
+  ],
+  "dates": [
+    {
+      "iso": "2026-04-04",
+      "formatted": "April 4, 2026"
+    },
+    {
+      "iso": "2026-01-01",
+      "formatted": "January 1, 2026"
+    },
+    {
+      "iso": "2026-12-31",
+      "formatted": "December 31, 2026"
+    },
+    {
+      "iso": "2026-09-09",
+      "formatted": "September 9, 2026"
+    },
+    {
+      "iso": " 2026-06-15 ",
+      "formatted": "June 15, 2026"
+    }
+  ],
+  "_bad_dates_comment": [
+    "What each side does with a date it cannot read, which is where they",
+    "deliberately DIFFER and the difference is the point (L542). Python raises,",
+    "because it generates the post and a malformed date reaching the",
+    "description would be published as the summary. Swift returns an empty",
+    "string, because it renders a screen and a trap there takes the app down.",
+    "",
+    "Recorded rather than reconciled: making them agree would either publish a",
+    "bad date or crash the app."
+  ],
+  "unreadable_dates": [
+    "",
+    "2026-04",
+    "not-a-date",
+    "2026-13-01",
+    "2026-04-32"
+  ],
+  "_shoot_types_comment": [
+    "#1106: shoot_type_label and BlogMeta.shootTypeLabel, the same map written",
+    "twice. Python reads a dict, Swift switches over an enum, and nothing",
+    "compared the two: a shoot type added to one and not the other would put a",
+    "raw value like rehearsal_and_performance on a published page, or an empty",
+    "label where a word belongs.",
+    "",
+    "Keyed by the value Python uses, which is what crosses the bridge."
+  ],
+  "shoot_types": {
+    "performance": "Performance",
+    "photo_call": "Photo call",
+    "rehearsal": "Rehearsal",
+    "rehearsal_and_performance": "Rehearsal and performance"
+  }
 }

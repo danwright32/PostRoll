@@ -28,9 +28,19 @@ final class BlogMetaContractTests: XCTestCase {
             let description: String
             let details: String
         }
+        struct DateCase: Decodable {
+            let iso: String
+            let formatted: String
+        }
         let description_min: Int
         let description_max: Int
         let vectors: [Vector]
+        /// #1106: every valid ISO date the two halves must render identically.
+        let dates: [DateCase]
+        /// The dates neither half can read, where the two deliberately differ.
+        let unreadable_dates: [String]
+        /// #1106: the shoot type map, written once instead of twice.
+        let shoot_types: [String: String]
     }
 
     /// The characters the global writing rule bans, as escapes so this file has
@@ -186,4 +196,67 @@ final class BlogMetaContractTests: XCTestCase {
                                              shootType: event.shootType.pythonValue,
                                              eventURL: event.eventURL))
     }
+
+    // MARK: - #1106: two twins that nothing was comparing
+
+    func testSwiftRendersEveryStoredDate() throws {
+        // `format_date` and `formatDate` are twins found by NAME, not by
+        // anybody having declared them. They were covered only through the
+        // details block, so a disagreement about one date surfaced as a whole
+        // block mismatch and read as a details bug.
+        let fixture = try fixture()
+        XCTAssertGreaterThanOrEqual(fixture.dates.count, 5,
+                                    "a gutted fixture would pass vacuously")
+
+        for date in fixture.dates {
+            XCTAssertEqual(BlogMeta.formatDate(date.iso), date.formatted,
+                           "\(date.iso) renders differently here than in Python")
+        }
+    }
+
+    func testSwiftRendersNothingForADateItCannotRead() throws {
+        // Where the two halves deliberately DIFFER, and the difference is the
+        // point (L542). Python raises, because a malformed date reaching the
+        // description would be PUBLISHED as the summary of the post. Swift
+        // returns an empty string, because a trap on a rendering path takes the
+        // app down.
+        //
+        // Recorded rather than reconciled: making them agree would either
+        // publish a bad date or crash the app.
+        for iso in try fixture().unreadable_dates {
+            XCTAssertEqual(BlogMeta.formatDate(iso), "",
+                           "\(iso) rendered something, so an unreadable date "
+                           + "would reach a screen as if it were a real one")
+        }
+    }
+
+    func testSwiftLabelsEveryStoredShootType() throws {
+        // The same map written twice: a dict in Python, a switch here. Nothing
+        // compared them, so a shoot type added to one and not the other puts a
+        // raw `rehearsal_and_performance` on a published page, or an empty
+        // label where a word belongs (L113).
+        let labels = try fixture().shoot_types
+        XCTAssertGreaterThanOrEqual(labels.count, 4,
+                                    "a gutted fixture would pass vacuously")
+
+        for (value, label) in labels {
+            XCTAssertEqual(BlogMeta.shootTypeLabel(value), label,
+                           "\(value) is labelled differently here than in Python")
+        }
+    }
+
+    func testTheStoredShootTypesAreEveryOneThisAppKnows() throws {
+        // Both directions. A fixture naming a subset would let a type be added
+        // to this side alone and go unchecked, which is the drift this exists
+        // to catch (L96). Read off `ShootType`, which is what the switch is
+        // exhaustive over.
+        let stored = Set(try fixture().shoot_types.keys)
+        let known = Set(ShootType.allCases.map(\.pythonValue))
+
+        XCTAssertEqual(stored, known,
+                       "the shared list and this app's own shoot types are "
+                       + "different sets, so one of them is checking a set "
+                       + "nobody uses")
+    }
+
 }

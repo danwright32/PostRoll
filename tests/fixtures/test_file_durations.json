@@ -68,6 +68,7 @@
     "test_bridge_contract_covers_the_code.py": 0.0,
     "test_bridge_payload_contract.py": 0.3600000000000001,
     "test_bridge_payload_keys.py": 0.0,
+    "test_bridge_twins.py": 0.95,
     "test_build_and_test_gates.py": 1.3799999999999997,
     "test_build_cache_location.py": 0.22,
     "test_cap_signals.py": 0.01,
@@ -538,6 +539,10 @@
     "test_bridge_payload_keys.py": {
       "run": "full-2026-09-04T03:02Z",
       "scale": 1.0
+    },
+    "test_bridge_twins.py": {
+      "run": "partial-2026-09-04T10:02Z",
+      "scale": 1.169
     },
     "test_build_and_test_gates.py": {
       "run": "full-2026-09-04T03:02Z",
