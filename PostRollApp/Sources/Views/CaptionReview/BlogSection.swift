@@ -50,6 +50,30 @@ struct BlogSection: View {
     /// issue was raised about one step further on (L98).
     var retryNote: String? = nil
     var retryStartedAt: Date? = nil
+    /// The owner of this section's three long runs, so each can be stopped
+    /// (#1050).
+    ///
+    /// Read here rather than taken as six more parameters, because
+    /// `CaptionReviewView`'s body is already at the Swift type checker's limit
+    /// and six arguments at that call site pushed it over: it failed to compile
+    /// with "unable to type-check this expression in reasonable time".
+    ///
+    /// Reading a manager from the environment is not the thing
+    /// `LongWorkOwnershipTests` forbids. That rule is about a view OWNING the
+    /// run state; this reads it from the owner, which is what the rule asks
+    /// for.
+    @Environment(CaptionWorkManager.self) private var captionWork
+
+    private func onStop(_ job: CaptionWorkManager.Job) -> () -> Void {
+        { [eventID] in
+            guard let eventID else { return }
+            captionWork.stop(eventID, job)
+        }
+    }
+
+    private func isStopping(_ job: CaptionWorkManager.Job) -> Bool {
+        eventID.map { captionWork.isStopping($0, job) } ?? false
+    }
     /// The blog as it stood before the last revision or swap, so Restore is
     /// offered after this section has been rebuilt (L97).
     var undoBlog: BlogOutput? = nil
@@ -325,7 +349,9 @@ struct BlogSection: View {
                             progress: (eventID.map {
                                 RevisionPanel.Progress(
                                     eventID: $0, startedAt: revisionStartedAt,
-                                    run: .blog, estimate: "~2 to 5 min")
+                                    run: .blog, estimate: "~2 to 5 min",
+                                    onStop: onStop(.reviseBlog),
+                                    isStopping: isStopping(.reviseBlog))
                             }),
                             onApply: { applyRevision() },
                             onCancel: {
@@ -354,7 +380,9 @@ struct BlogSection: View {
                                             startedAt: photoSwapStartedAt,
                                             eventID: eventID,
                                             run: .blogPhotos,
-                                            estimate: "~1 to 3 min")
+                                            estimate: "~1 to 3 min",
+                                            onStop: onStop(.swapBlogPhotos),
+                                            isStopping: isStopping(.swapBlogPhotos))
                                     } else {
                                         HStack(spacing: 4) {
                                             ProgressView().controlSize(.mini).tint(PaintedSurfaces.secondaryText)
@@ -384,7 +412,9 @@ struct BlogSection: View {
                                             eventID: eventID,
                                             run: .blogRetry,
                                             estimate: RepairRetryEstimate.text(
-                                                markerCount: retryableMarkers.count))
+                                                markerCount: retryableMarkers.count),
+                                            onStop: onStop(.retryBlogRepairs),
+                                            isStopping: isStopping(.retryBlogRepairs))
                                     } else {
                                         HStack(spacing: 4) {
                                             ProgressView().controlSize(.mini).tint(PaintedSurfaces.secondaryText)

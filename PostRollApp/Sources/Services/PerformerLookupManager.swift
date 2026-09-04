@@ -114,7 +114,7 @@ final class PerformerLookupManager {
 
     private func tracker(_ kind: Kind) -> JobTracker<Event.ID, Run> {
         if let existing = trackers[kind] { return existing }
-        let made = JobTracker<Event.ID, Run>(elapsed: \.elapsedSeconds)
+        let made = JobTracker<Event.ID, Run>(elapsed: \.elapsedSeconds, task: \.task)
         trackers[kind] = made
         return made
     }
@@ -162,6 +162,26 @@ final class PerformerLookupManager {
     }
 
     func clearFailure(_ kind: Kind, for id: Event.ID) { tracker(kind).clearFailed(id) }
+
+    /// Stop this run (#1050).
+    ///
+    /// Through the tracker, which is the one place stopping lives: it cancels
+    /// the task, remembers the request so a screen can say it is winding down,
+    /// and refuses a second press. Returns whether the request was taken, so a
+    /// caller can tell a stop from a press that arrived after the work was
+    /// already over (L197).
+    ///
+    /// This owner had no way to stop at all. It put up a spinner, and the only
+    /// ways out of a run started by mistake were to wait or to quit the app.
+    @discardableResult
+    func stop(_ kind: Kind, for id: Event.ID) -> Bool {
+        tracker(kind).requestStop(id)
+    }
+
+    /// A stop was asked for and the work has not stopped yet.
+    func isStopping(_ kind: Kind, for id: Event.ID) -> Bool {
+        tracker(kind).isStopping(id)
+    }
 
     /// Take one suggestion off the run once it has been applied or waved away.
     func dropSuggestion(named name: String, for id: Event.ID) {
@@ -257,7 +277,15 @@ final class PerformerLookupManager {
                 let found = try await DeadlinedWork.run(within: deadline) {
                     try await lookUp(missing, org, venue, eventName)
                 }
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else {
+                    // A stopped run ENDS rather than returning quietly (#1050).
+                    // This used to return with the job still active, so the
+                    // spinner ran for work that had stopped and nothing could
+                    // clear it (L110). Reachable only now that there is a
+                    // button that cancels.
+                    self?.tracker(.handles).remove(eventID)
+                    return
+                }
                 let useful = found.filter { $0.handle != nil }
                 self?.tracker(.handles).update(eventID) { $0.suggestions = useful }
                 self?.tracker(.handles).deactivate(eventID)
@@ -329,7 +357,15 @@ final class PerformerLookupManager {
         let task = Task { @MainActor [weak self] in
             do {
                 let fetched = try await DeadlinedWork.run(within: deadline) { try await fetch(url) }
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else {
+                    // A stopped run ENDS rather than returning quietly (#1050).
+                    // This used to return with the job still active, so the
+                    // spinner ran for work that had stopped and nothing could
+                    // clear it (L110). Reachable only now that there is a
+                    // button that cancels.
+                    self?.tracker(.fromWeb).remove(eventID)
+                    return
+                }
                 self?.replacePerformers(with: fetched, on: eventID, in: appState)
                 self?.tracker(.fromWeb).deactivate(eventID)
                 NotificationService.shared.notifyWebPerformersFetched(

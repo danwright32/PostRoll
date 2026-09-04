@@ -66,15 +66,10 @@ final class ExportManager {
         /// active set, which also decided whether Done could dismiss the run
         /// and what the sidebar said (#182).
         var finishingMedia: Bool = false
-        /// Cancel was pressed. Kept beside the phase rather than derived from
-        /// it, because the pipeline can reach `done` after the press (the
-        /// commit had already happened) and the done screen then has to say
-        /// so rather than quietly ignoring the button Dan pushed (#1047, L11).
-        var cancelRequested: Bool = false
         fileprivate var task: Task<Void, Never>?
     }
 
-    private let tracker = JobTracker<Event.ID, Run>(elapsed: \.elapsedSeconds)
+    private let tracker = JobTracker<Event.ID, Run>(elapsed: \.elapsedSeconds, task: \.task)
 
     func run(for id: Event.ID) -> Run? { tracker.job(for: id) }
     func isExporting(_ id: Event.ID) -> Bool { tracker.isActive(id) }
@@ -92,13 +87,13 @@ final class ExportManager {
 
     /// A cancel has been accepted and the work has not stopped yet (#1047).
     ///
-    /// Asked of the PHASE rather than of `cancelRequested`, because the flag
-    /// stays true through a late cancel that the commit beat, and the sidebar
-    /// must not go on saying "Cancelling…" over a finished export (L144).
-    func isCancelling(_ id: Event.ID) -> Bool {
-        if case .cancelling = tracker.job(for: id)?.phase { return true }
-        return false
-    }
+    /// The tracker's own answer: a stop was asked for AND the run is still in
+    /// flight. Asked that way rather than of the request alone, because the
+    /// request stays recorded through a late cancel that the commit beat, and
+    /// the sidebar must not go on saying "Cancelling…" over a finished export
+    /// (L144). One record answering both questions, rather than a flag beside
+    /// it that can disagree (#1050, L53).
+    func isCancelling(_ id: Event.ID) -> Bool { tracker.isStopping(id) }
 
     /// Kick off an export. No-op if one is already running for this event, so a
     /// double-click or a view remount can't launch a second concurrent export.
@@ -243,12 +238,11 @@ final class ExportManager {
             // do anything a single press did not (#1047).
             return false
         }
-        tracker.update(eventID) {
-            $0.phase = .cancelling
-            $0.cancelRequested = true
-        }
-        run.task?.cancel()
-        return true
+        tracker.update(eventID) { $0.phase = .cancelling }
+        // The tracker cancels the task and remembers the request. It is the
+        // one implementation of stopping (#1050), and `cancelRequested` used
+        // to be a second record of the same fact beside it (L53).
+        return tracker.requestStop(eventID)
     }
 
     /// User chose "Skip, text export only" — show the done screen now without
@@ -553,7 +547,7 @@ final class ExportManager {
             // error: the folder is complete and the milestone is honestly
             // stamped. What it must not do is report an ordinary success and
             // leave him assuming the cancel worked.
-            let lateCancel = tracker.job(for: eventID)?.cancelRequested == true
+            let lateCancel = tracker.wasStopRequested(eventID)
                 ? "Cancel arrived after the export had already been written, so "
                   + "it went ahead and the folder is complete. Delete it if you "
                   + "did not want it."

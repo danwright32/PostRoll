@@ -43,15 +43,38 @@ final class OCRReflowManager {
         /// Why it ended badly, kept for the same reason. A failure that lived
         /// in the row died with it (L148).
         var failure: String?
+        /// The handle on the work, so it can be stopped (#1050).
+        ///
+        /// It was started with a bare `Task { }` and the handle thrown away, so
+        /// nothing could ever have stopped this: the screen put up a spinner
+        /// and offered no way back. `JobTracker` requires this now, so a new
+        /// owner cannot be written that way (L96).
+        fileprivate var task: Task<Void, Never>?
     }
 
-    private let tracker = JobTracker<Event.ID, Run>(elapsed: \.elapsedSeconds)
+    private let tracker = JobTracker<Event.ID, Run>(elapsed: \.elapsedSeconds, task: \.task)
 
     // MARK: - Reads
 
     func run(for id: Event.ID) -> Run? { tracker.job(for: id) }
     func isRunning(_ id: Event.ID) -> Bool { tracker.isActive(id) }
     func startedAt(_ id: Event.ID) -> Date? { tracker.job(for: id)?.startedAt }
+
+    /// Stop this run (#1050).
+    ///
+    /// Through the tracker, which is the one place stopping lives: it cancels
+    /// the task, remembers the request so a screen can say it is winding down,
+    /// and refuses a second press. Returns whether the request was taken, so a
+    /// caller can tell a stop from a press that arrived after the work was
+    /// already over (L197).
+    ///
+    /// This owner had no way to stop at all. It put up a spinner, and the only
+    /// ways out of a run started by mistake were to wait or to quit the app.
+    @discardableResult
+    func stop(_ id: Event.ID) -> Bool { tracker.requestStop(id) }
+
+    /// A stop was asked for and the work has not stopped yet.
+    func isStopping(_ id: Event.ID) -> Bool { tracker.isStopping(id) }
 
     /// Whether the reflow going on this event is the one this row asked for.
     func isRunning(_ id: Event.ID, flag: OCRFlag.ID) -> Bool {
@@ -154,7 +177,7 @@ final class OCRReflowManager {
         let ask = review
         let apply = applyPatch
         let deadline = activeDeadline
-        Task { @MainActor [weak self] in
+        let held = Task { @MainActor [weak self] in
             do {
                 let response = try await DeadlinedWork.run(within: deadline) {
                     try await ask(concern, ocr, images, userMessage)
@@ -165,7 +188,15 @@ final class OCRReflowManager {
                         try await apply(patch, concern, ocr, images)
                     }
                 }
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else {
+                    // A stopped run ENDS rather than returning quietly (#1050).
+                    // This used to return with the job still active, so the
+                    // spinner ran for work that had stopped and nothing could
+                    // clear it (L110). Reachable only now that there is a
+                    // button that cancels.
+                    self?.tracker.remove(eventID)
+                    return
+                }
                 self?.write(corrected, resolving: response.resolved,
                             flag: flagID, to: eventID, in: appState)
                 // The job is KEPT rather than removed: the reply is the whole
@@ -188,6 +219,10 @@ final class OCRReflowManager {
                     reason: Self.failureMessage(error))
             }
         }
+        // Held so the work can be stopped (#1050). It was a bare
+        // `Task { }` and the handle went straight in the bin, so this
+        // put up a spinner that nothing could ever have ended.
+        tracker.update(eventID) { $0.task = held }
     }
 
     // MARK: - Writing back

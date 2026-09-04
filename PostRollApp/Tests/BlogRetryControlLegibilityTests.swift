@@ -46,6 +46,14 @@ final class BlogRetryControlLegibilityTests: XCTestCase {
             onRevise: { _, _ in },
             onRetryRepairs: onRetry,
             retryNote: retryNote)
+            // The section reads its work owner from the environment so it can
+            // offer a Stop (#1050). Through withAppOwners rather than by
+            // injecting the one manager: a harness naming its own owners is a
+            // second copy of that list, and the two come apart silently
+            // because SwiftUI TRAPS on a missing environment value, so a
+            // harness that has fallen behind crashes a screen rather than
+            // failing a check (AppOwnersTests, #718).
+            .withAppOwners(AppOwners())
     }
 
     /// A canvas TALLER than the panel needs, anchored at the top.

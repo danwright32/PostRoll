@@ -1077,6 +1077,12 @@ struct RevisionPanel: View {
         let startedAt: Date?
         let run: LongRunIndicator.Run
         var estimate: String? = nil
+        /// How to stop this run, and whether it is already winding down
+        /// (#1050). Carried with the rest of what the indicator needs rather
+        /// than as two more loose parameters, so a caller that supplies the
+        /// progress cannot forget the way out of it.
+        var onStop: (() -> Void)? = nil
+        var isStopping: Bool = false
     }
     var progress: Progress? = nil
     let onApply: () -> Void
@@ -1141,7 +1147,9 @@ struct RevisionPanel: View {
                                      startedAt: progress.startedAt,
                                      eventID: progress.eventID,
                                      run: progress.run,
-                                     estimate: progress.estimate)
+                                     estimate: progress.estimate,
+                                     onStop: progress.onStop,
+                                     isStopping: progress.isStopping)
                 } else if isRevising {
                     ProgressView()
                         .controlSize(.small)

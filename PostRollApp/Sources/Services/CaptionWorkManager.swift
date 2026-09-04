@@ -53,6 +53,13 @@ final class CaptionWorkManager {
     struct Run {
         var startedAt: Date
         var elapsedSeconds: Int
+        /// The handle on the work, so it can be stopped (#1050).
+        ///
+        /// It was started with a bare `Task { }` and the handle thrown away, so
+        /// nothing could ever have stopped this: the screen put up a spinner
+        /// and offered no way back. `JobTracker` requires this now, so a new
+        /// owner cannot be written that way (L96).
+        fileprivate var task: Task<Void, Never>?
     }
 
     /// What a finished run left to say, kept after the run so that leaving the
@@ -91,7 +98,7 @@ final class CaptionWorkManager {
         var retryNote: String?
     }
 
-    private let tracker = JobTracker<Key, Run>(elapsed: \.elapsedSeconds)
+    private let tracker = JobTracker<Key, Run>(elapsed: \.elapsedSeconds, task: \.task)
     private var outcomes: [Key: Outcome] = [:]
 
     // MARK: - Reads
@@ -111,6 +118,26 @@ final class CaptionWorkManager {
     /// Forget a finished run's outcome, so a retry starts clean.
     func clearOutcome(for id: Event.ID, _ job: Job) {
         outcomes[Key(eventID: id, job: job)] = nil
+    }
+
+    /// Stop this run (#1050).
+    ///
+    /// Through the tracker, which is the one place stopping lives: it cancels
+    /// the task, remembers the request so a screen can say it is winding down,
+    /// and refuses a second press. Returns whether the request was taken, so a
+    /// caller can tell a stop from a press that arrived after the work was
+    /// already over (L197).
+    ///
+    /// This owner had no way to stop at all. It put up a spinner, and the only
+    /// ways out of a run started by mistake were to wait or to quit the app.
+    @discardableResult
+    func stop(_ id: Event.ID, _ job: Job) -> Bool {
+        tracker.requestStop(Key(eventID: id, job: job))
+    }
+
+    /// A stop was asked for and the work has not stopped yet.
+    func isStopping(_ id: Event.ID, _ job: Job) -> Bool {
+        tracker.isStopping(Key(eventID: id, job: job))
     }
 
     /// Whether anything here is going, for the decisions that are about the
@@ -212,12 +239,20 @@ final class CaptionWorkManager {
 
         let generate = generateWeek
         let deadline = activeDeadline
-        Task { @MainActor [weak self] in
+        let held = Task { @MainActor [weak self] in
             do {
                 let week = try await DeadlinedWork.run(within: deadline) {
                     try await generate(live)
                 }
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else {
+                    // A stopped run ENDS rather than returning quietly (#1050).
+                    // This used to return with the job still active, so the
+                    // spinner ran for work that had stopped and nothing could
+                    // clear it (L110). Reachable only now that there is a
+                    // button that cancels.
+                    self?.tracker.remove(key)
+                    return
+                }
                 self?.applyWholeWeek(week, to: eventID, in: appState,
                                      globalHashtags: globalHashtags)
                 self?.finish(key, with: Outcome())
@@ -239,11 +274,20 @@ final class CaptionWorkManager {
                 self?.keepPartial(partial.week, to: eventID, in: appState)
                 self?.finish(key, with: Outcome(
                     failure: partial.localizedDescription))
+            } catch is CancellationError {
+                // Dan pressed stop (#1050). Not a failure: reporting one would
+                // put a red banner over something he asked for, and the
+                // notification would say the work died (L11).
+                self?.tracker.remove(key)
             } catch {
                 self?.finish(key, with: Outcome(
                     failure: Self.failureMessage(error)))
             }
         }
+        // Held so the work can be stopped (#1050). It was a bare
+        // `Task { }` and the handle went straight in the bin, so this
+        // put up a spinner that nothing could ever have ended.
+        tracker.update(key) { $0.task = held }
     }
 
     // MARK: - Writing back
@@ -417,7 +461,7 @@ final class CaptionWorkManager {
 
         let learn = learnFromEdits
         let deadline = activeDeadline
-        Task { @MainActor [weak self] in
+        let held = Task { @MainActor [weak self] in
             do {
                 let suggestion = try await DeadlinedWork.run(within: deadline) {
                     try await learn(week)
@@ -425,12 +469,21 @@ final class CaptionWorkManager {
                 let text = suggestion?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 self?.finish(key, with: Outcome(
                     suggestion: text.isEmpty ? nil : suggestion))
+            } catch is CancellationError {
+                // Dan pressed stop (#1050). Not a failure: reporting one would
+                // put a red banner over something he asked for, and the
+                // notification would say the work died (L11).
+                self?.tracker.remove(key)
             } catch {
                 self?.finish(key, with: Outcome(
                     failure: LearnFromEditsOutcome.failureNotice(
                         Self.failureMessage(error))))
             }
         }
+        // Held so the work can be stopped (#1050). It was a bare
+        // `Task { }` and the handle went straight in the bin, so this
+        // put up a spinner that nothing could ever have ended.
+        tracker.update(key) { $0.task = held }
     }
 
     // MARK: - The one runner behind the revisions
@@ -453,12 +506,20 @@ final class CaptionWorkManager {
 
         let deadline = activeDeadline
         let note = appendBrandVoiceNote
-        Task { @MainActor [weak self] in
+        let held = Task { @MainActor [weak self] in
             do {
                 let produced = try await DeadlinedWork.run(within: deadline) {
                     try await work()
                 }
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else {
+                    // A stopped run ENDS rather than returning quietly (#1050).
+                    // This used to return with the job still active, so the
+                    // spinner ran for work that had stopped and nothing could
+                    // clear it (L110). Reachable only now that there is a
+                    // button that cancels.
+                    self?.tracker.remove(key)
+                    return
+                }
                 var outcome = write(produced, appState)
                 // The note is written only AFTER the revision landed. A note
                 // about a revision that never happened is a note about nothing,
@@ -476,6 +537,10 @@ final class CaptionWorkManager {
                 self?.finish(key, with: Outcome(failure: Self.failureMessage(error)))
             }
         }
+        // Held so the work can be stopped (#1050). It was a bare
+        // `Task { }` and the handle went straight in the bin, so this
+        // put up a spinner that nothing could ever have ended.
+        tracker.update(key) { $0.task = held }
     }
 
     /// Change part of the stored week, leaving the rest of it alone.

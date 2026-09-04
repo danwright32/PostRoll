@@ -44,6 +44,17 @@ struct AssetGenerationView: View {
     @State private var isPreparingProgramPDF = false
     /// When the current program PDF build started (#460).
     @State private var programPDFStartedAt: Date?
+    /// The bake in flight, so it can be stopped (#1050). It was a detached
+    /// `Task` whose handle went nowhere, so a multi page Vision pass put up a
+    /// spinner with no way back.
+    ///
+    /// Held here rather than in a manager because this whole run is view owned,
+    /// which is its own defect and its own issue: `LongWorkOwnershipTests`
+    /// misses it because that rule fires on a view holding run state AND
+    /// shelling out to Python, and this one bakes locally.
+    @State private var programPDFTask: Task<Void, Never>?
+    /// Whether a stop has been asked for and the bake has not stopped yet.
+    @State private var isStoppingProgramPDF = false
 
 
     /// The view's display is derived (not stored): an active/failed run in the
@@ -395,6 +406,12 @@ struct AssetGenerationView: View {
                     programPDFDisabled: isPreparingProgramPDF
                         || bakery.isBaking(event.id),
                     programPDFStartedAt: programPDFStartedAt,
+                    onStopProgramPDF: {
+                        guard programPDFTask != nil, !isStoppingProgramPDF else { return }
+                        isStoppingProgramPDF = true
+                        programPDFTask?.cancel()
+                    },
+                    isStoppingProgramPDF: isStoppingProgramPDF,
                     programBakeError: bakery.failure(for: event.id),
                     hasBlog: !event.blogPhotoPaths.isEmpty,
                     revealed: showCheckmark,
@@ -494,9 +511,15 @@ struct AssetGenerationView: View {
         let cacheURL = AppPaths.programPDFFile(eventID: eventID)
         isPreparingProgramPDF = true
         programPDFStartedAt = Date()
-        Task.detached(priority: .userInitiated) {
+        // A fresh bake was not stopped, whatever happened to the last one.
+        // Left behind, the record would make this one report itself as winding
+        // down the moment it started (L186).
+        isStoppingProgramPDF = false
+        programPDFTask = Task.detached(priority: .userInitiated) {
             do {
+                try Task.checkCancellation()
                 let data = try ProgramPDFBuilder.makePDF(from: pages)
+                try Task.checkCancellation()
                 try data.write(to: dest)
                 // Cache it at the canonical path so the next download (and any
                 // re-export) is instant and skips re-OCRing the page scans.
@@ -515,10 +538,21 @@ struct AssetGenerationView: View {
                     }
                     NSWorkspace.shared.open(dest)
                 }
+            } catch is CancellationError {
+                // Dan pressed stop (#1050). Not a failure, so no error banner:
+                // reporting one would be a claim about something that did not
+                // happen (L11).
+                await MainActor.run {
+                    isPreparingProgramPDF = false
+                    programPDFStartedAt = nil
+                    isStoppingProgramPDF = false
+                    programPDFTask = nil
+                }
             } catch {
                 await MainActor.run {
                     isPreparingProgramPDF = false
                     programPDFStartedAt = nil
+                    programPDFTask = nil
                     programPDFError = error.localizedDescription
                 }
             }

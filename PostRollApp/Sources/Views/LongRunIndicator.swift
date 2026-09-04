@@ -62,6 +62,25 @@ struct LongRunIndicator: View {
     /// takes a fraction of that, and holding it to the same threshold would
     /// mean a hung one still looked healthy ten minutes in (#460).
     var silenceThreshold: TimeInterval = LongRunState.defaultSilenceThreshold
+    /// What to do when Dan asks for this run to stop (#1050).
+    ///
+    /// nil renders no control, which is the honest state for work that cannot
+    /// be stopped rather than a button that does nothing (L109). Every action
+    /// this indicator is shown for CAN be stopped now, so nil is for a caller
+    /// that has not been wired yet, and
+    /// `EveryLongActionCanBeStoppedTests` is what keeps that list from growing.
+    ///
+    /// Here rather than at each call site because that is what #1050 asked
+    /// for: one implementation in the place that already draws all of them,
+    /// not thirteen buttons that drift apart in wording and placement (L370).
+    var onStop: (() -> Void)? = nil
+    /// Whether a stop has been asked for and the work has not stopped yet.
+    ///
+    /// The middle of the three states this indicator exists to tell apart.
+    /// Cancelling asks: a subprocess gets SIGTERM and a grace period before
+    /// SIGKILL, so a control that vanished on the press would claim the work
+    /// had ended before it had.
+    var isStopping: Bool = false
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -82,17 +101,18 @@ struct LongRunIndicator: View {
             case .working(let seconds, let step):
                 HStack(spacing: Spacing.sm) {
                     ProgressView().controlSize(.small).tint(PaintedSurfaces.iconAccent)
-                    Text(step?.display ?? label)
+                    Text(isStopping ? "Stopping…" : (step?.display ?? label))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(PaintedSurfaces.bodyText)
                     Text(elapsedText(seconds))
                         .font(.light(11))
                         .foregroundStyle(PaintedSurfaces.secondaryText)
-                    if let estimate {
+                    if let estimate, !isStopping {
                         Text(estimate)
                             .font(.light(11))
                             .foregroundStyle(PaintedSurfaces.secondaryText)
                     }
+                    stopControl
                 }
 
             case .stalled(let seconds, let step):
@@ -110,6 +130,11 @@ struct LongRunIndicator: View {
                              ?? "It has not reported a step yet.")
                             .font(.light(11))
                             .foregroundStyle(PaintedSurfaces.secondaryText)
+                        // The stop belongs here most of all. A run that has
+                        // gone quiet is exactly when somebody wants out, and
+                        // until #1050 this state named the problem and offered
+                        // nothing to do about it (L126, L148).
+                        stopControl
                     }
                 }
 
@@ -123,6 +148,21 @@ struct LongRunIndicator: View {
                         .foregroundStyle(PaintedSurfaces.pageAccentText)
                 }
             }
+        }
+    }
+
+    /// The stop, or nothing at all when this run cannot be stopped.
+    ///
+    /// While a stop is winding down the control goes and the word stays, so the
+    /// three states read differently at a glance: a spinner with a Stop button,
+    /// a spinner saying "Stopping…", and gone.
+    @ViewBuilder
+    private var stopControl: some View {
+        if let onStop, !isStopping {
+            Button("Stop", action: onStop)
+                .buttonStyle(.link)
+                .font(.system(size: 11))
+                .help("Stop this and go back. Nothing part-finished is kept.")
         }
     }
 

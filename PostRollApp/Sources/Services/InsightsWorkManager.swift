@@ -34,6 +34,13 @@ final class InsightsWorkManager {
     struct Run {
         var startedAt: Date
         var elapsedSeconds: Int
+        /// The handle on the work, so it can be stopped (#1050).
+        ///
+        /// It was started with a bare `Task { }` and the handle thrown away, so
+        /// nothing could ever have stopped this: the screen put up a spinner
+        /// and offered no way back. `JobTracker` requires this now, so a new
+        /// owner cannot be written that way (L96).
+        fileprivate var task: Task<Void, Never>?
     }
 
     /// What a finished run left to say, kept after the run so that leaving
@@ -50,7 +57,7 @@ final class InsightsWorkManager {
         var note: String?
     }
 
-    private let tracker = JobTracker<Job, Run>(elapsed: \.elapsedSeconds)
+    private let tracker = JobTracker<Job, Run>(elapsed: \.elapsedSeconds, task: \.task)
 
     /// The terminal state of each job, in ONE place.
     ///
@@ -63,6 +70,22 @@ final class InsightsWorkManager {
     // MARK: - Reads
 
     func isRunning(_ job: Job) -> Bool { tracker.isActive(job) }
+
+    /// Stop this run (#1050).
+    ///
+    /// Through the tracker, which is the one place stopping lives: it cancels
+    /// the task, remembers the request so a screen can say it is winding down,
+    /// and refuses a second press. Returns whether the request was taken, so a
+    /// caller can tell a stop from a press that arrived after the work was
+    /// already over (L197).
+    ///
+    /// This owner had no way to stop at all. It put up a spinner, and the only
+    /// ways out of a run started by mistake were to wait or to quit the app.
+    @discardableResult
+    func stop(_ job: Job) -> Bool { tracker.requestStop(job) }
+
+    /// A stop was asked for and the work has not stopped yet.
+    func isStopping(_ job: Job) -> Bool { tracker.isStopping(job) }
     func startedAt(_ job: Job) -> Date? { tracker.job(for: job)?.startedAt }
     func outcome(for job: Job) -> Outcome? { outcomes[job] }
 
@@ -131,17 +154,26 @@ final class InsightsWorkManager {
 
         let read = runImport
         let deadline = activeDeadline
-        Task { @MainActor [weak self] in
+        let held = Task { @MainActor [weak self] in
             do {
                 let result = try await DeadlinedWork.run(within: deadline) {
                     try await read(urls)
                 }
                 self?.finish(.importCSV, with: Self.apply(result, to: store))
+            } catch is CancellationError {
+                // Dan pressed stop (#1050). Not a failure: reporting one would
+                // put a red banner over something he asked for, and the
+                // notification would say the work died (L11).
+                self?.tracker.remove(.importCSV)
             } catch {
                 self?.finish(.importCSV, with: Outcome(
                     success: nil, note: Self.message(for: error, doing: "import")))
             }
         }
+        // Held so the work can be stopped (#1050). It was a bare
+        // `Task { }` and the handle went straight in the bin, so this
+        // put up a spinner that nothing could ever have ended.
+        tracker.update(.importCSV) { $0.task = held }
     }
 
     /// Analyse everything in `store` and write the report back to it.
@@ -155,7 +187,7 @@ final class InsightsWorkManager {
         let bands = store.orgFollowerBands
         let analyse = runAnalysis
         let deadline = activeDeadline
-        Task { @MainActor [weak self] in
+        let held = Task { @MainActor [weak self] in
             do {
                 let report = try await DeadlinedWork.run(within: deadline) {
                     try await analyse(posts, bands, globalHashtags)
@@ -167,11 +199,20 @@ final class InsightsWorkManager {
                     save: store.addReport(report))
                 self?.finish(.generateReport,
                              with: Outcome(success: nil, note: unsaved))
+            } catch is CancellationError {
+                // Dan pressed stop (#1050). Not a failure: reporting one would
+                // put a red banner over something he asked for, and the
+                // notification would say the work died (L11).
+                self?.tracker.remove(.generateReport)
             } catch {
                 self?.finish(.generateReport, with: Outcome(
                     success: nil, note: Self.message(for: error, doing: "analysis")))
             }
         }
+        // Held so the work can be stopped (#1050). It was a bare
+        // `Task { }` and the handle went straight in the bin, so this
+        // put up a spinner that nothing could ever have ended.
+        tracker.update(.generateReport) { $0.task = held }
     }
 
     // MARK: - Transitions

@@ -26,7 +26,7 @@ final class OCRManager {
         fileprivate var task: Task<Void, Never>?
     }
 
-    private let tracker = JobTracker<Event.ID, Run>(elapsed: \.elapsedSeconds)
+    private let tracker = JobTracker<Event.ID, Run>(elapsed: \.elapsedSeconds, task: \.task)
 
     /// Why OCR would not run, per event, for the upload screen to show once it
     /// has been sent back there. Held here rather than on the event because it
@@ -121,10 +121,27 @@ final class OCRManager {
 
     /// User cancelled. Removes the run; the caller handles navigation. Sending
     /// SIGTERM to Python happens via Swift task cancellation in PythonBridge.
-    func cancel(eventID: Event.ID) {
-        tracker.job(for: eventID)?.task?.cancel()
-        tracker.remove(eventID)
+    /// Stop this run (#1050).
+    ///
+    /// Through the tracker, which is where stopping lives now: it cancels the
+    /// task, remembers the request so a screen can say "Stopping..." while the
+    /// work winds down, and refuses a second press. Three owners had each
+    /// written their own version of this and each got a different part of it
+    /// wrong.
+    ///
+    /// The run is NOT removed here. It has not stopped yet, and clearing the
+    /// screen now would claim the work had ended while the subprocess was
+    /// still being torn down. The pipeline's own cancellation path ends it.
+    ///
+    /// Returns whether the request was taken, so a caller can tell a stop from
+    /// a press that arrived after the work was already over (L197).
+    @discardableResult
+    func cancel(eventID: Event.ID) -> Bool {
+        tracker.requestStop(eventID)
     }
+
+    /// A stop was asked for and the work has not stopped yet.
+    func isStopping(_ id: Event.ID) -> Bool { tracker.isStopping(id) }
 
     /// Drop a failed outcome after the user acknowledges it (e.g. "Try Again").
     func clearOutcome(eventID: Event.ID) {

@@ -35,7 +35,7 @@ final class GenerationManager {
     /// Active or just-failed generation per event. A successful run is removed
     /// once written back; the event's saved `weekResult` is then the source of
     /// truth for the "done" state.
-    private let tracker = JobTracker<Event.ID, Run>(elapsed: \.elapsedSeconds)
+    private let tracker = JobTracker<Event.ID, Run>(elapsed: \.elapsedSeconds, task: \.task)
 
     func run(for id: Event.ID) -> Run? { tracker.job(for: id) }
 
@@ -64,7 +64,10 @@ final class GenerationManager {
         // the live event so edits made during the run aren't clobbered.
         guard let ev = appState.events.first(where: { $0.id == eventID }) else { return }
 
-        tracker.job(for: eventID)?.task?.cancel()
+        // A new run replaces whatever was there. Said through the tracker's
+        // own name for it, because this is not somebody pressing stop and no
+        // screen should report it as one (#1050).
+        tracker.supersede(eventID)
         tracker.begin(Run(status: .running, elapsedSeconds: 0, retryDays: retryDays, task: nil), for: eventID)
 
         let onlyDays = retryDays
@@ -172,10 +175,27 @@ final class GenerationManager {
     }
 
     /// User-cancelled (Cancel button) or programmatic stop. Removes the run.
-    func cancel(eventID: Event.ID) {
-        tracker.job(for: eventID)?.task?.cancel()
-        tracker.remove(eventID)
+    /// Stop this run (#1050).
+    ///
+    /// Through the tracker, which is where stopping lives now: it cancels the
+    /// task, remembers the request so a screen can say "Stopping..." while the
+    /// work winds down, and refuses a second press. Three owners had each
+    /// written their own version of this and each got a different part of it
+    /// wrong.
+    ///
+    /// The run is NOT removed here. It has not stopped yet, and clearing the
+    /// screen now would claim the work had ended while the subprocess was
+    /// still being torn down. The pipeline's own cancellation path ends it.
+    ///
+    /// Returns whether the request was taken, so a caller can tell a stop from
+    /// a press that arrived after the work was already over (L197).
+    @discardableResult
+    func cancel(eventID: Event.ID) -> Bool {
+        tracker.requestStop(eventID)
     }
+
+    /// A stop was asked for and the work has not stopped yet.
+    func isStopping(_ id: Event.ID) -> Bool { tracker.isStopping(id) }
 
     /// Drop a terminal (failed) outcome once the user has acknowledged it, so
     /// the view falls back to its configuring/done display.
