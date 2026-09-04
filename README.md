@@ -441,6 +441,44 @@ commit was green but the merge was refused, which is what a head moving in
 between looks like, and `6` means the commit was green against a base that has
 since moved. Only `0` may be merged on.
 
+## Branches after a merge
+
+GitHub deletes the head branch itself now, so an ordinary merge leaves nothing
+behind. That setting (`delete_branch_on_merge`) was off until 2026-09-04, and
+243 branches had accumulated on origin by then.
+
+`git branch --merged` finds none of them, and that is the part worth knowing
+rather than the clutter. This repository squash merges, so the commit on main
+is a NEW commit that does not descend from the branch it came from, and every
+answer derived from the commit graph is therefore no. The safe command reports
+nothing, so the reachable habit becomes `git branch -D`, which is the one
+command that cannot tell a merged branch from unfinished work.
+
+Ask GitHub instead:
+
+```
+python tools/prune_merged_branches.py
+```
+
+It reports, and deletes only with `--delete`. A branch has to satisfy two
+things, and neither alone is enough: its pull request is MERGED, and its tip is
+either the head that merged or that pull request's own squash commit, so
+nothing it carries is work the merge did not take. A branch that gained commits
+AFTER its merge is an ordinary way to start a follow up, it is indistinguishable
+from the rest by merged state alone, and it is left where it is.
+
+Recoverable, and measured rather than assumed: GitHub keeps `refs/pull/N/head`
+after the branch is gone. Checked on 2026-09-04 against #594, whose branch had
+already been deleted, and its head commit still resolved. So a branch pruned by
+mistake comes back with
+
+```
+git fetch origin refs/pull/<pr-number>/head
+```
+
+Only remote refs on origin. A local branch, and any worktree standing on one,
+is untouched.
+
 ## Layout
 
 ```
