@@ -40,6 +40,7 @@ from tools.check_job_durations import (
 )
 from tools.guard_sweep_history import PROOF_STEP
 from tools.check_tree_already_checked import WORK_STEP
+from source_text import without_prose
 
 
 def _series(older: list[float], recent: list[float]) -> list[float]:
@@ -189,7 +190,10 @@ def test_something_actually_runs_the_duration_check():
     merge. A step on a job that already reports buys the same reading for none
     of that.
     """
-    workflow = GUARDS.read_text(encoding="utf-8")
+    # As code, not as prose (#1074): this workflow explains the series in
+    # comments that name the tool and the step, so a raw read is answered
+    # by the explanation of something that has been deleted (L103, L135).
+    workflow = without_prose(GUARDS)
 
     assert "check_job_durations.py" in workflow, (
         "nothing runs the duration series, so it can only ever be read by "
@@ -202,7 +206,10 @@ def test_the_duration_check_reads_the_workflow_on_the_critical_path():
     A series that happens to watch the cheap workflows while the expensive one
     drifts is the instrument reporting green about the wrong thing (L320).
     """
-    workflow = GUARDS.read_text(encoding="utf-8")
+    # As code, not as prose (#1074): this workflow explains the series in
+    # comments that name the tool and the step, so a raw read is answered
+    # by the explanation of something that has been deleted (L103, L135).
+    workflow = without_prose(GUARDS)
     named = workflow.split("- name: Say whether any CI job's duration has moved", 1)
     assert len(named) == 2, "the step this guard is written about was renamed"
 

@@ -27,6 +27,7 @@ import json
 import pytest
 
 from postroll.ai import cap_signals as cs
+from source_text import python_without_comments
 
 
 # ── what we can recognise ─────────────────────────────────────────────────────
@@ -348,7 +349,10 @@ def test_the_run_reports_the_file_on_stderr_at_the_end():
     import inspect
     from postroll.ai import generate_week as gw
 
-    source = inspect.getsource(gw)
+    # Comments and docstrings blanked (#1074). This file explains the
+    # report at length in prose that names the call, so a raw read is
+    # answered by the explanation as readily as by the call (L103).
+    source = python_without_comments(inspect.getsource(gw))
     assert "report_unrecognised()" in source, (
         "nothing in generate_week calls the report, so the file stays as "
         "invisible as it was"

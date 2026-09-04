@@ -1,0 +1,8 @@
+{
+  "name": "the-suite-still-runs-on-a-mac",
+  "file": ".github/workflows/tests.yml",
+  "find": "  macos:\n    runs-on: macos-15",
+  "replace": "  macos:\n    runs-on: ubuntu-latest",
+  "test": "tests/test_ci_gates.py::test_the_suite_runs_on_a_mac_as_well_as_linux",
+  "breaks": "the Python suite runs on Linux only again, while the app that calls the pipeline runs on Dan's Mac. Path handling, the ffmpeg build and its codecs, font fallbacks and filesystem case all differ, and every one of those stayed invisible until it was hit locally (#510). The previous version of this guard asserted that the word macos appeared anywhere in the file, which ten occurrences answered, at least five of them comments (#1074, L103, L135)"
+}

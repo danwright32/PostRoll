@@ -135,6 +135,7 @@
     "test_guard_sweep_fits_its_deadline.py": 0.24,
     "test_guard_sweep_freshness.py": 0.0,
     "test_guard_work_line.py": 0.03,
+    "test_guards_read_code_not_prose.py": 0.73,
     "test_gui_launch_budget.py": 0.0,
     "test_gui_tests_cannot_hang_silently.py": 0.0,
     "test_hand_check_document.py": 0.0,
@@ -799,6 +800,10 @@
     "test_guard_work_line.py": {
       "run": "full-2026-09-04T03:02Z",
       "scale": 1.0
+    },
+    "test_guards_read_code_not_prose.py": {
+      "run": "partial-2026-09-04T04:39Z",
+      "scale": 1.375
     },
     "test_gui_launch_budget.py": {
       "run": "full-2026-09-04T03:02Z",
