@@ -1555,6 +1555,37 @@ def shard_of(entries: list[Entry], index: int, total: int,
     return [e for e in entries if e.name in mine]
 
 
+
+def order_for_the_deadline(entries, blocking, *, key):
+    """The entries this diff EDITED first, then the rest (#1280).
+
+    Which entries a deadline reaches was decided by the alphabet: entries run in
+    registry order and the deadline cuts wherever it lands, so a guard the diff
+    EDITED could go unproven, and block the merge, purely because its name
+    sorted late among entries the diff had merely touched. That failed #1274
+    with two edited guards unproven and forced the change to ship as two pull
+    requests, which costs a whole second run of every other job on it.
+
+    With the edited ones first, a deadline can only ever leave NON-blocking
+    entries unreached, and those warn rather than failing because the daily
+    sweep re-proves them within a day. No coverage changes and nothing is
+    skipped; only the order does.
+
+    `blocking` is None on the full sweep, where every entry blocks and there is
+    no such thing as an edited guard. The order is left exactly alone there,
+    which matters beyond tidiness: a shard runs its entries in registry order
+    and the first Swift one pays the cold build, whose reading the cost record
+    carries separately so it is not read as that entry's own cost.
+
+    Stable within each group, so a run's order stays predictable.
+    """
+    if blocking is None:
+        return list(entries)
+    held = [e for e in entries if key(e) in blocking]
+    rest = [e for e in entries if key(e) not in blocking]
+    return held + rest
+
+
 def check_guards(repo_root: Path, registry_path: Path, runner,
                  only: str | None = None, changed_only: bool = False,
                  shard: tuple[int, int] | None = None,
@@ -1665,6 +1696,11 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
         log(f"{DERIVED_DATA_DEFINITION} names no build cache here, so each "
             "Swift entry below pays a full app build of its own instead of "
             "reusing one")
+
+    # Edited guards first, so a deadline overrun can only ever leave entries
+    # that WARN rather than block (#1280). Untouched on the full sweep, where
+    # `blocking_names` is None.
+    entries = order_for_the_deadline(entries, blocking_names, key=lambda e: e.name)
 
     results = []
     unproven: list[Entry] = []

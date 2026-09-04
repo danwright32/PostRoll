@@ -114,10 +114,16 @@ jobs:
   changed:
     if: github.event_name == 'pull_request'
     runs-on: macos-26
-    # Above the 900s deadline plus this job's setup (Xcode, xcodegen, pip,
-    # ffmpeg: about five minutes), so the DEADLINE is what fires and the cap is
-    # only there for a hang. Whichever fires first decides what is reported, and
-    # only the deadline can say which entries went unproven (L110, L313).
+    # Above the deadline below plus this job's setup, so the DEADLINE is what
+    # fires and the cap is only there for a hang. Whichever fires first decides
+    # what is reported, and only the deadline can say which entries went
+    # unproven (L110, L313).
+    #
+    # The margin is held by tests/test_the_pr_guard_job_has_a_deadline.py, which
+    # measures the setup rather than quoting it. This comment used to say "about
+    # five minutes"; measured on 2026-09-04 it is 24 seconds, because #1249 put
+    # the Mac build behind a shared action with caches. That stale figure is
+    # what made raising the deadline look impossible (#1280, L316).
     timeout-minutes: 30
     steps:
       # Full history: --changed diffs against the merge base with origin/main,
@@ -161,25 +167,32 @@ jobs:
       # reached, and a job killed by the cap reports CANCELLED, which is what a
       # superseded run reports too (L11).
       #
-      # 900s, chosen from the distribution rather than picked round (L172).
-      # Every duration below is this job's OWN, on the macos-26 runner it asks
-      # for, not a reading from the 12 core Mac this repo is written on (#1245).
-      # Measured over 28 runs: 165s median, 393s at p90, 1,511s at worst. So it
-      # is 2.3x p90 and fires only on the wide diffs that were actually the
-      # problem: over 2026-08-30 and 31 this job was the SOLE thing holding five
-      # separate merges, for 15 to 19 minutes each, with every other check green,
-      # and #1072 waited 1,140s on it alone.
+      # Chosen from where the distribution actually is, not picked round (L172).
+      # Every duration in this decision is this job's OWN, on the macos-26
+      # runner it asks for, never a reading from the 12 core Mac this repo is
+      # written on (#1245). The readings, the choice and what has expired about
+      # it live in tests/fixtures/changed_job_timing.json, which is where to
+      # read them:
+      # a number copied into a comment is one nothing updates, and this one has
+      # been restated here and gone stale twice (L210, L316). Re-measure with
+      # `venv/bin/python tools/measure_changed_job.py`.
       #
-      # What it does when it fires is the decision this issue carried. An
-      # unreached entry FAILS the run only when this diff EDITED that guard,
-      # meaning its test file or its own registry record changed: a guard edited
-      # into uselessness in the same change that edits it is the case this job
-      # exists to catch. An entry selected only because the guarded FILE moved is
-      # named and warned about, because failing there turns a wide diff into a
-      # blocked merge, and #989's daily sweep re-proves every entry within a day
-      # either way.
+      # What it does when it fires. An unreached entry FAILS the run only when
+      # this diff EDITED that guard, meaning its test file or its own registry
+      # record changed: a guard edited into uselessness in the same change that
+      # edits it is the case this job exists to catch. An entry selected only
+      # because the guarded FILE moved is named and warned about, because
+      # failing there turns a wide diff into a blocked merge, and #989's sweep
+      # re-proves every entry either way.
+      #
+      # Since #1280 the edited ones are proved FIRST. Which entries the deadline
+      # reached used to be decided by the alphabet, so an edited guard could go
+      # unproven, and block the merge, purely because its name sorted late among
+      # entries the diff had merely touched. That failed #1274 and forced it to
+      # ship as two pull requests, which costs a whole second run of every other
+      # job on it.
       - name: Re-prove the guards this diff touches
-        run: python tools/check_guards.py --changed --deadline-seconds 900
+        run: python tools/check_guards.py --changed --deadline-seconds 850
 
   # The whole registry, on every merge to main.
   #

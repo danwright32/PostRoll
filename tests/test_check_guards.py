@@ -1395,6 +1395,83 @@ def test_an_unreached_entry_this_diff_edited_blocks(repo: Path, tmp_path: Path):
     assert "g-0" in text, text
 
 
+def test_the_guards_this_diff_edited_are_proved_first(repo: Path, tmp_path: Path):
+    """#1280: which entries a deadline reaches was decided by the alphabet.
+
+    Entries run in registry order, which is alphabetical, and the deadline cuts
+    wherever it lands. So a guard the diff EDITED went unproven, and blocked the
+    merge, purely because its name sorted late among entries the diff had merely
+    touched. That is what failed #1274 with two edited guards unproven and forced
+    the change to ship as two pull requests, which costs a whole second run of
+    every other job.
+
+    Proving the edited ones first makes that impossible: a deadline can then only
+    ever leave NON-blocking entries unreached, which warns rather than failing,
+    and the daily sweep re-proves those within a day. No coverage changes; only
+    the order does.
+    """
+    from tools.check_guards import check_guards
+
+    # `z-edited` sorts LAST of the seven, and the clock is injected so the
+    # deadline falls after exactly one entry has been proved. A zero deadline
+    # would stop before any of them and could not tell an order apart (L159).
+    registry = write_registry(
+        tmp_path / "registry",
+        [registry_dict(name=f"a-{i}", test=f"tests/test_x.py::test_{i}")
+         for i in range(6)]
+        + [registry_dict(name="z-edited", test="tests/test_x.py::test_edited")])
+    clock = [0.0]
+
+    def runner(cmd: list[str], cwd: Path) -> tuple[int, str]:
+        clock[0] += 1.0
+        return 1, "1 failed"
+
+    lines: list[str] = []
+    code = check_guards(repo, registry, runner, deadline_seconds=1.0,
+                        blocking={"z-edited"}, log=lines.append,
+                        now=lambda: clock[0])
+
+    text = "\n".join(lines)
+    assert "[1 of 7" in text and "z-edited" in text.split("\n")[0], (
+        "the guard this diff edited was not the first entry proved, so which "
+        f"entries the deadline reaches is still decided by the alphabet: {text}")
+    assert code == 0, (
+        "the guard this diff edited was left unproven by the deadline, so the "
+        f"merge is blocked by where its name sorts: {text}")
+    assert "never reached" in text, (
+        "the deadline did not fire at all in this fixture, so it proves "
+        "nothing about which entries it reaches (L159)")
+
+
+def test_proving_the_edited_ones_first_does_not_reorder_the_full_sweep(
+        repo: Path, tmp_path: Path):
+    """The sweep has no notion of an edited guard: every entry blocks there,
+    because it is the only thing re-proving the whole registry.
+
+    Reordering it would matter anyway. A shard runs its entries in registry
+    order, the first Swift one pays the cold build, and the cost record carries
+    that reading separately so it is not read as that entry's own cost. So the
+    order is left exactly as it was wherever `blocking` is None.
+    """
+    from tools.check_guards import order_for_the_deadline
+
+    entries = [registry_dict(name=n, test="tests/test_x.py::t")["name"]
+               for n in ("a", "b", "c")]
+
+    assert order_for_the_deadline(entries, None, key=lambda n: n) == entries
+
+
+def test_the_order_within_each_group_is_left_alone():
+    """Stable within the two groups, so a run's order is still predictable and
+    a shard's first Swift entry does not move about between runs."""
+    from tools.check_guards import order_for_the_deadline
+
+    names = ["a", "b", "c", "d"]
+
+    assert order_for_the_deadline(names, {"b", "d"}, key=lambda n: n) == [
+        "b", "d", "a", "c"]
+
+
 def test_an_unreached_entry_this_diff_only_touched_warns(repo: Path,
                                                          tmp_path: Path):
     """A wide diff must not become a blocked merge.
