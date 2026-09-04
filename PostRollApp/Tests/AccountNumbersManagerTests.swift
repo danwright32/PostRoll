@@ -262,6 +262,133 @@ final class AccountNumbersManagerTests: XCTestCase {
                        + "will ever ask about it again")
     }
 
+    // MARK: - Saying whether the launch pass actually ran (#1277)
+
+    /// The pass said nothing at all either way before this.
+    ///
+    /// A launch whose token was rejected and a launch with nothing left to ask
+    /// about both left the ranking empty and neither said why, so the only way
+    /// to tell them apart was to open `accounts.json` by hand (L98, L11). Every
+    /// one of these asserts a DISTINCTION rather than a sentence, so the wording
+    /// can be improved without a guard defending the old copy (L103).
+
+    private func recurring(_ handle: String) -> [Event] {
+        [event("a", tagging: [handle]), event("b", tagging: [handle])]
+    }
+
+    func testALaunchWithNothingLeftToAskAboutSaysItLooked() async {
+        let owned = owners { _ in [] }
+        let answered = AccountStats(followers: 1_000, likes: 50, comments: 5,
+                                    recordedOn: now, outcome: .measured)
+
+        owned.backfillTheArchive(events: recurring("carnegiehall"),
+                                 stats: { _ in answered }, asOf: now)
+        await settle()
+
+        XCTAssertNotNil(owned.accountNumbers.backfillNote,
+                        "a launch with nothing to ask about said nothing at all, which "
+                        + "reads exactly like a launch that could not ask")
+    }
+
+    func testALaunchNamesHowManyItAskedAboutAndHowManyCameBack() async {
+        // Three recurring accounts, one of which Meta would not answer for.
+        // Both numbers, because "asked about three" alone reads as success and
+        // a run where nothing came back is the failure this exists to catch.
+        let owned = owners { handles in
+            handles.map { Self.figures($0, outcome: $0 == "cityopera" ? "network_failed"
+                                                                     : "measured") }
+        }
+        let events = ["carnegiehall", "dciny", "cityopera"].flatMap { recurring($0) }
+
+        owned.backfillTheArchive(events: events, stats: { _ in nil }, asOf: now)
+        await settle()
+
+        let note = try! XCTUnwrap(owned.accountNumbers.backfillNote)
+        XCTAssertTrue(note.contains("3"), "the note does not say how many accounts the "
+                      + "pass asked about: \(note)")
+        XCTAssertTrue(note.contains("2"), "the note does not say how many came back, so "
+                      + "a run that answered for none of them reads the same: \(note)")
+    }
+
+    func testALaunchThatGotNothingBackDoesNotReadAsSuccess() async {
+        // The saturation case. Every account refused is the state milestone 23
+        // actually fails in, and a proportion is not what tells it apart from a
+        // healthy run: the count of figures is (L139).
+        let owned = owners { handles in
+            handles.map { Self.figures($0, outcome: "token_rejected") }
+        }
+
+        owned.backfillTheArchive(events: recurring("carnegiehall"),
+                                 stats: { _ in nil }, asOf: now)
+        await settle()
+
+        let refused = try! XCTUnwrap(owned.accountNumbers.backfillNote)
+        let healthy = AccountNumbersManager.launchNote(for: .asked(asked: 1, measured: 1))
+        XCTAssertNotEqual(refused, healthy,
+                          "a launch Meta answered for nobody says the same thing as one "
+                          + "that worked, so the ranking staying empty explains itself "
+                          + "as normal")
+    }
+
+    func testALaunchThatCouldNotRunSaysSoAndSaysWhy() async {
+        // Two notes, not one. This one answers "has the archive ever been
+        // counted", which outlives the attempt; the failure note answers "what
+        // went wrong just now". Different questions, different remedies, so a
+        // shared field would have one silence the other (L53).
+        struct Refused: Error {}
+        let owned = owners { _ in throw Refused() }
+
+        owned.backfillTheArchive(events: recurring("carnegiehall"),
+                                 stats: { _ in nil }, asOf: now)
+        await settle()
+
+        XCTAssertNotNil(owned.accountNumbers.backfillNote,
+                        "a launch that could not ask at all said nothing about the "
+                        + "archive, so the empty ranking has no cause anywhere")
+        XCTAssertNotNil(owned.accountNumbers.failureNote,
+                        "and the reason the backfill note points at is not there, so "
+                        + "the note names an explanation nobody can read (L111)")
+    }
+
+    func testTheFourLaunchStatesDoNotShareWording() {
+        // Distinct causes get distinct messages (L11). Only two of these ask
+        // anything of Dan, and a shared sentence is what makes the other two
+        // indistinguishable from them.
+        let said = [
+            AccountNumbersManager.launchNote(for: .nothingDue),
+            AccountNumbersManager.launchNote(for: .alreadyRunning),
+            AccountNumbersManager.launchNote(for: .couldNotRun),
+            AccountNumbersManager.launchNote(for: .asked(asked: 4, measured: 4)),
+            AccountNumbersManager.launchNote(for: .asked(asked: 4, measured: 1)),
+            AccountNumbersManager.launchNote(for: .asked(asked: 4, measured: 0)),
+        ]
+
+        XCTAssertEqual(Set(said).count, said.count,
+                       "two launch states say the same thing, so one of them cannot be "
+                       + "told from the other on any screen: \(said)")
+    }
+
+    func testTheLaunchNoteReachesTheSurfacesBesideTheFailureNote() async {
+        // The note existing is not the note reaching anybody (L3, L46). Both
+        // notes travel as elements of one list rather than as two parallel
+        // fields, so a surface cannot pick up one and miss the other.
+        struct Refused: Error {}
+        let owned = owners { _ in throw Refused() }
+        owned.connectTheHandleTrigger()
+
+        owned.backfillTheArchive(events: recurring("carnegiehall"),
+                                 stats: { _ in nil }, asOf: now)
+        await settle()
+
+        XCTAssertEqual(owned.export.accountNumbersNotes.count, 2,
+                       "the export copies its inputs before detaching, and it did not "
+                       + "get both notes: \(owned.export.accountNumbersNotes)")
+        XCTAssertEqual(Set(owned.export.accountNumbersNotes),
+                       Set(owned.accountNumbers.notes),
+                       "the export is carrying something other than what the manager "
+                       + "actually said")
+    }
+
     // MARK: - Helpers
 
     /// Remembers which handles reached the fetch, from whichever thread asked.
@@ -449,15 +576,19 @@ final class AccountNumbersManagerTests: XCTestCase {
         XCTAssertFalse(AccountFetchDue.isDue(book.stats(for: "personal"), asOf: now))
     }
 
-    func testBothSurfacesCarryTheFetchNoteAsItsOwnElement() {
+    func testBothSurfacesCarryTheFetchNotesAsTheirOwnElements() {
         // The note existing is not the note reaching anybody (L3, L46). Both
-        // surfaces build a notes ARRAY, and #1004 is explicit that this goes in
-        // as a second element rather than being folded into the book's own
-        // note, because two conditions sharing one field means one silences the
+        // surfaces build a notes ARRAY, and #1004 is explicit that these go in
+        // as their own elements rather than being folded into the book's own
+        // note, because conditions sharing one field means one silences the
         // other (L53).
+        //
+        // The anchor is the manager's whole LIST rather than one note by name,
+        // so a surface that named only `failureNote` and so dropped the launch
+        // note #1277 added fails this rather than passing on the half it kept.
         for (file, needle) in [
-            ("Views/CaptionReviewView.swift", "accountNumbers.failureNote"),
-            ("Services/ExportManager.swift", "accountNumbersNote"),
+            ("Views/CaptionReviewView.swift", "accountNumbers.notes"),
+            ("Services/ExportManager.swift", "accountNumbersNotes"),
         ] {
             let url = URL(fileURLWithPath: #filePath)
                 .deletingLastPathComponent()
@@ -467,9 +598,9 @@ final class AccountNumbersManagerTests: XCTestCase {
                 try! String(contentsOf: url, encoding: .utf8))
 
             XCTAssertTrue(code.contains(needle),
-                          "\(file) does not carry the fetch failure note, so a fetch "
-                          + "that failed says nothing there and reads exactly like one "
-                          + "that never ran")
+                          "\(file) does not carry the fetch's notes, so a fetch that "
+                          + "failed and a launch that never counted the archive both "
+                          + "say nothing there and read exactly like a healthy run")
             XCTAssertTrue(code.contains("recoveryNote"),
                           "\(file) no longer carries the book's own note either, so "
                           + "this check would pass on a surface that says nothing at all")

@@ -1426,15 +1426,18 @@ struct CaptionReviewView: View {
                                  preset: live.effectivePostingPreset,
                                  stats: { accounts.stats(for: $0) },
                                  asOf: suggestionsAsOf,
-                                 // Two independent conditions, two elements
-                                 // (#1004). "The account file could not be
-                                 // read" and "the last figures fetch failed"
-                                 // are different problems with different
-                                 // remedies, and folding the second into
-                                 // `recoveryNote` would have one silence the
-                                 // other (L53).
-                                 notes: [accounts.recoveryNote,
-                                         accountNumbers.failureNote].compactMap { $0 })
+                                 // Independent conditions, one element each
+                                 // (#1004, #1277). "The account file could not
+                                 // be read", "the last figures fetch failed"
+                                 // and "the archive has never been counted" are
+                                 // different problems with different remedies,
+                                 // and folding any of them together would have
+                                 // one silence the other (L53). The fetch's own
+                                 // are taken as its list rather than named here
+                                 // one by one, so a note added there arrives
+                                 // without this line being edited (L41).
+                                 notes: [accounts.recoveryNote].compactMap { $0 }
+                                      + accountNumbers.notes)
     }
 
     private func applyCollageLayout(day: DayName, seed: Int) {

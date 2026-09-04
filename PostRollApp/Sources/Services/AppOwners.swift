@@ -55,10 +55,10 @@ extension AppOwners {
             accountNumbers.handlesSettled(handles)
         }
         // And the export, which copies what it needs before detaching, gets
-        // the note the fetch leaves behind. Re-read on every trigger rather
-        // than once, because the note changes with each run.
-        accountNumbers.onNoteChanged = { [export] note in
-            export.accountNumbersNote = note
+        // everything the fetch has to say. Re-read on every trigger rather
+        // than once, because the list changes with each run.
+        accountNumbers.onNoteChanged = { [export] notes in
+            export.accountNumbersNotes = notes
         }
     }
 
@@ -74,6 +74,12 @@ extension AppOwners {
     /// written by a launch that fetched nothing (L368). A failed run leaves the
     /// handles exactly as due as they were.
     ///
+    /// It also SAYS what it did, on every launch including the quiet ones
+    /// (#1277). Being idempotent by construction is what makes the pass safe;
+    /// it is also what leaves nothing on disk to read afterwards, so without a
+    /// note the only evidence a launch ever asked is the figures it brought
+    /// back, and a launch that brought none reads as one with nothing to do.
+    ///
     /// The stats reader is a parameter so a test can drive this without the
     /// shared book, and defaults to the book the app actually keeps.
     func backfillTheArchive(events: [Event],
@@ -82,8 +88,11 @@ extension AppOwners {
                             },
                             asOf now: Date = Date()) {
         let handles = AccountFetchDue.archiveBackfill(events: events, stats: stats)
-        guard !handles.isEmpty else { return }
-        accountNumbers.handlesSettled(handles, asOf: now)
+        // Through `backfill` rather than `handlesSettled`, and unconditionally:
+        // the empty case is a REPORT, not a return. A launch with nothing left
+        // to ask about and a launch whose token was rejected both leave the
+        // ranking empty, and until #1277 neither said so (L98).
+        accountNumbers.backfill(handles, asOf: now)
     }
 
     /// Everything running right now, phrased for a sentence (#862).
