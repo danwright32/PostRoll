@@ -160,6 +160,27 @@ Covers: `PostRollApp/Sources/Views/WorkingDockTile.swift`,
 Neither half of this is reachable to anything automated: one is drawn on the
 Dock icon and the other is a banner from Notification Center.
 
+**Some of it is, now (#950).** Re-measured 2026-09-04 rather than taken from the
+recorded reason, which had already been wrong once. What a person still has to
+do here is narrower than it was:
+
+* The band being DRAWN, the icon being behind it, the field not being the band's
+  own colour, the clock's digits being on the band, and the clock CHANGING with
+  the time it is given are all measured in `WorkingDockTileTests`. The last two
+  are new: "watch it for five seconds" was asking a person to check that a
+  number moves, and a tile rendered at 0:05 and at 1:05 answers that without
+  anybody watching.
+* That the band stays out of the top right corner, where macOS draws the Dock
+  badge, is measured too. That is the half of the badge question that is ours.
+
+What is still genuinely out of reach, and why:
+
+* That macOS actually composites our tile onto the Dock. We can draw it; only
+  the system can show it.
+* That the BADGE is legible beside the band. macOS draws the badge, not this
+  process, so nothing here can measure it.
+* The Notification Center banner. It is another process's surface.
+
 This step needs an event a generation can actually be started from, which none
 of the states above provide: they all build an empty store, and Generate All
 stays disabled until a day has a photo on it. So this one seeds an event of its
