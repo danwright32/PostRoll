@@ -49,7 +49,17 @@
 set -euo pipefail
 
 APP="/Applications/PostRoll.app"
-BINARY="${APP}/Contents/MacOS/PostRoll"
+# POSTROLL_HAND_CHECK_BINARY replaces the app this launches, so a test can drive
+# the launch path against a stand-in.
+#
+# It exists because the launch path had NO test at all: `launch_in` refuses any
+# data directory not ending in PostRollHandCheck/data, which is the right
+# safety assertion and also meant every existing test used --no-launch and none
+# of them ever reached the launch. The first test that tried to, on 2026-09-04,
+# launched Dan's REAL installed PostRoll pointed at an agent worktree and put a
+# modal on his screen, because a double selected by a name nothing reads is no
+# double at all (L143, L2).
+BINARY="${POSTROLL_HAND_CHECK_BINARY:-${APP}/Contents/MacOS/PostRoll}"
 WORLD="${POSTROLL_HAND_CHECK_WORLD:-${HOME}/Library/Caches/PostRollHandCheck}"
 DATA="${WORLD}/data"
 NOT_A_CHECKOUT="${WORLD}/not-a-checkout"
@@ -402,7 +412,21 @@ launch_in() {
     no-code-folder|both-broken|seeded-no-code-folder) project="${NOT_A_CHECKOUT}" ;;
   esac
 
-  POSTROLL_DATA_DIR="${DATA}" POSTROLL_PROJECT_DIR="${project}" "${BINARY}" &
+  # The app's own output goes to a log inside the world rather than to whatever
+  # stdout this script was given (#1334).
+  #
+  # Without this the launched app INHERITS the caller's stdout and holds it open
+  # for as long as it runs, so anything that pipes or captures this script reads
+  # nothing at all until PostRoll is quit: the four lines below, which say which
+  # process to watch and where everything is, are exactly what gets lost. On
+  # 2026-09-04 that made a working launch look hung for ten minutes (L235).
+  #
+  # The log is worth having for its own sake too: the app's diagnostics are
+  # otherwise thrown away, and they are the only record of what it did while
+  # nobody had a window open.
+  local applog="${WORLD}/postroll.log"
+  POSTROLL_DATA_DIR="${DATA}" POSTROLL_PROJECT_DIR="${project}" \
+    "${BINARY}" >>"${applog}" 2>&1 &
   disown || true
 
   for _ in $(seq 1 60); do
@@ -418,6 +442,7 @@ launch_in() {
   echo "PostRoll is running as pid ${pids}"
   echo "  data:        ${DATA}"
   echo "  code folder: ${project}"
+  echo "  app log:     ${applog}"
 }
 
 command="${1:-}"

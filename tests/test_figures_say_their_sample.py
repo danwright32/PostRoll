@@ -133,14 +133,50 @@ def test_the_scan_actually_reads_the_files_it_claims_to(tmp_path):
     assert len(after) == 2
 
 
-def test_every_named_fixture_is_actually_there():
-    """A name that no longer exists is silently exempt from its own guard (L96)."""
-    missing = [name for name in guard.MEASUREMENT_FIXTURES
-               if not (REPO_ROOT / "tests" / "fixtures" / name).is_file()]
+def test_a_fixture_that_records_a_measurement_is_found_without_being_listed(tmp_path):
+    """The whole of #1337: the set used to be six filenames typed by hand, so a
+    new fixture recording timings was exempt until somebody remembered it."""
+    _fixture(tmp_path, "something_nobody_listed.json",
+             {"measured_on": "2026-09-04", "wall_seconds": 12.5})
 
-    assert missing == [], (
-        f"{missing} are listed as measurement fixtures but are not there, so "
-        "each is exempt from this check while still reading as covered")
+    found = guard.unsourced(root=tmp_path)
+
+    assert [f.file for f in found] == ["something_nobody_listed.json"]
+
+
+def test_a_specification_is_not_treated_as_a_measurement(tmp_path):
+    """`collage_gutter.json` says what the gutter MUST be, in pixels. Asking it
+    how many runs produced that is a category error.
+
+    Shaped after the real file rather than invented: it states pixel counts and
+    carries no provenance, which is what keeps every specification fixture in
+    this repository out of scope. Measured on 2026-09-04, no specification
+    fixture here uses a duration shaped key at all, so scope can safely include
+    anything that states a duration. One that did would be asked the question,
+    and that is the deliberate side to be wrong on.
+    """
+    _fixture(tmp_path, "collage_gutter.json", {"gutter_px": 24, "columns": 3})
+
+    assert guard.scanned_files(root=tmp_path) == []
+    assert guard.unsourced(root=tmp_path) == []
+
+
+def test_the_repository_scans_more_than_the_six_that_were_listed_by_hand():
+    """A control on the widening itself. Without it, deriving the set could have
+    quietly produced the same six and read as a change (L3)."""
+    scanned = {path.name for path in guard.scanned_files()}
+    was_listed_by_hand = {
+        "alt_text_call_timing.json", "changed_job_timing.json",
+        "guard_entry_costs.json", "guard_sweep_timing.json",
+        "swift_suite_cost.json", "test_file_durations.json",
+    }
+
+    assert was_listed_by_hand <= scanned, (
+        f"the derived set lost fixtures the hand list had: "
+        f"{sorted(was_listed_by_hand - scanned)}")
+    assert scanned - was_listed_by_hand, (
+        "deriving the set from content found nothing the hand written list did "
+        "not already name, so nothing was actually widened")
 
 
 def test_this_repository_records_no_figure_without_its_sample():
