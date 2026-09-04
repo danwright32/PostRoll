@@ -127,7 +127,10 @@ final class ExportManager {
             return
         }
 
-        AppPreferences.store.set(destinationRoot.path, forKey: "lastExportFolder")
+        // The folder is NOT remembered app wide (#1048). It is recorded on the
+        // event itself, below, by the run that finishes, and `ExportFolderStatus
+        // .rememberedFolder` is what reads it back. One shared key put the
+        // previous show's folder on a new show's screen as its fastest button.
 
         tracker.begin(Run(phase: .exportingText, isFullExport: onlyDay == nil), for: eventID)
 

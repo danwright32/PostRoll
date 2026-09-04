@@ -27,7 +27,13 @@ struct ExportView: View {
     /// Its own flag rather than sharing `showingFolderPicker`, which starts an
     /// export on whatever is chosen.
     @State private var showingRelocatePicker = false
-    @State private var lastExportFolder: URL? = nil
+    /// The folder THIS event may be re-exported to without asking, or nil.
+    ///
+    /// Scoped to the event rather than remembered app wide (#1048). Read from
+    /// the event's own record on appear and after every export, so a new show
+    /// starts with nothing offered and the picker is the only way forward,
+    /// which is what stops one show being exported over another's folder.
+    @State private var reusableFolder: URL? = nil
     @State private var pendingSingleDay: DayName? = nil
     /// A layout the user picked that needs confirmation before it rebuilds posts (#71).
 
@@ -111,12 +117,7 @@ struct ExportView: View {
         }
         .background(PaintedSurfaces.page)
         .onAppear {
-            if let path = AppPreferences.store.string(forKey: "lastExportFolder") {
-                let candidate = URL(fileURLWithPath: path)
-                if FileManager.default.fileExists(atPath: candidate.path) {
-                    lastExportFolder = candidate
-                }
-            }
+            reusableFolder = ExportFolderStatus.rememberedFolder(for: event)
             exportFolderStatus = ExportFolderStatus.of(event)
             refreshRecurringAccounts()
         }
@@ -124,12 +125,17 @@ struct ExportView: View {
         // changes, so the banner is never a claim about a previous run.
         .onChange(of: run?.phase) { _, _ in
             exportFolderStatus = ExportFolderStatus.of(event)
+            // The finishing run is what records the folder on the event, so the
+            // button offering it has to be re-derived here rather than left
+            // holding what was true when the screen was built (L14).
+            reusableFolder = ExportFolderStatus.rememberedFolder(for: event)
             // An export is what adds accounts to the book, so the answer can
             // have changed by the time one finishes.
             refreshRecurringAccounts()
         }
         .onChange(of: event.exportPath) { _, _ in
             exportFolderStatus = ExportFolderStatus.of(event)
+            reusableFolder = ExportFolderStatus.rememberedFolder(for: event)
         }
         .sheet(item: $editingRecurringAccount) { target in
             AccountNumbersSheet(
@@ -169,6 +175,7 @@ struct ExportView: View {
             // event.exportPath)` cannot see this: `event` is the snapshot this
             // screen was built with, not the record just written.
             exportFolderStatus = ExportFolderStatus.of(moved)
+            reusableFolder = ExportFolderStatus.rememberedFolder(for: moved)
         }
         .fileImporter(
             isPresented: $showingFolderPicker,
@@ -178,7 +185,10 @@ struct ExportView: View {
             if case .success(let urls) = result, let dest = urls.first {
                 let scopedDay = pendingSingleDay
                 pendingSingleDay = nil
-                lastExportFolder = dest
+                // Deliberately NOT set here. A chosen folder becomes this
+                // event's folder by the export RECORDING it, so a run that
+                // never finished cannot leave a one-click button pointing at
+                // somewhere this show was never actually written (L12).
                 exportManager.start(eventID: event.id, to: dest, onlyDay: scopedDay,
                                     appState: appState, regeneratingDays: regeneratingDays)
             } else {
@@ -282,7 +292,7 @@ struct ExportView: View {
                 .padding(.horizontal, Spacing.xl)
 
             ExportSummaryCard(event: event, result: result) { day in
-                if let dest = lastExportFolder {
+                if let dest = reusableFolder {
                     exportManager.start(eventID: event.id, to: dest, onlyDay: day,
                                         appState: appState, regeneratingDays: regeneratingDays)
                 } else {
@@ -296,7 +306,7 @@ struct ExportView: View {
             .disabled(exportBlockedReason != nil)
 
             VStack(alignment: .trailing, spacing: Spacing.sm) {
-                if let last = lastExportFolder {
+                if let last = reusableFolder {
                     HStack {
                         Spacer()
                         Button("Export to \"\(last.lastPathComponent)\"") {
