@@ -136,10 +136,31 @@ jobs:
           branch="suite-count/$(date -u +%Y-%m-%d)"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # This branch is named for the DAY, so the second run of any day
+          # meets the first run's own output (#1321, L393). Both halves of that
+          # collision are handled here rather than left to fail:
+          #
+          # The remote branch is fetched first, because `--force-with-lease`
+          # refuses when it has no remote tracking ref to compare against, and a
+          # fresh checkout has none. Without it the lease is not a safety check,
+          # it is a guaranteed refusal, which is what turned one open proposal
+          # into 37 failed runs and 37 emails on 2026-09-04.
+          #
+          # And `gh pr create` is skipped when today's proposal is already open.
+          # Pushing the branch has ALREADY updated it, so there is nothing left
+          # to create; creating again is what fails. A run that finds its own
+          # proposal open is a success that says so, not an error (L11).
+          # `|| true`: the branch legitimately does not exist on the first
+          # run of the day, and that is not a failure.
+          git fetch origin "+refs/heads/${branch}:refs/remotes/origin/${branch}" || true
           git checkout -b "${branch}"
           git add tests/fixtures/swift_suite_count.json
           git commit -m "Record how many tests the Swift suite holds (#1261)"
           git push --force-with-lease origin "${branch}"
+          if gh pr view "${branch}" --json number >/dev/null 2>&1; then
+            echo "today's proposal is already open; the branch has been updated in place"
+            exit 0
+          fi
           gh pr create \
             --base main \
             --head "${branch}" \
