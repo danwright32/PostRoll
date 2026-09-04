@@ -112,6 +112,10 @@ struct ExportView: View {
                     doneContent(folder: folder, mediaError: mediaError, mediaWarning: mediaWarning)
                 case .failed(let msg):
                     errorContent(msg)
+                case .cancelling:
+                    cancellingContent
+                case .cancelled:
+                    cancelledContent
                 }
             }
         }
@@ -419,11 +423,28 @@ struct ExportView: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 320)
 
-            // Let user skip media generation if they just want the text
-            Button("Skip, text export only") {
-                exportManager.skipMedia(eventID: event.id)
+            // Two buttons meaning opposite things, so they are worded to be
+            // unmistakable rather than merely different (#1047). Skip finishes
+            // the export with less in it; cancel means this export does not
+            // happen. Until the second existed, the first was the only control
+            // on this screen and read to Dan as a way out of a run he did not
+            // want, which it is not.
+            HStack(spacing: Spacing.md) {
+                Button("Skip, text export only") {
+                    exportManager.skipMedia(eventID: event.id)
+                }
+                .buttonStyle(BrandOutlineButtonStyle())
+                Button("Cancel export") {
+                    exportManager.cancel(eventID: event.id)
+                }
+                .buttonStyle(BrandOutlineButtonStyle())
             }
-            .buttonStyle(BrandOutlineButtonStyle())
+            Text("Cancel throws the whole run away. Nothing is written and your "
+                 + "previous export stays where it is.")
+                .font(.light(11))
+                .foregroundStyle(PaintedSurfaces.secondaryText)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 320)
             Spacer()
         }
         .frame(maxWidth: .infinity)
@@ -454,6 +475,50 @@ struct ExportView: View {
                 appState.selectedEventID = nil
             }
         )
+    }
+
+    /// Cancel has been accepted and the work is winding down (#1047).
+    ///
+    /// Its own screen because the subprocess takes a moment to die, and the
+    /// three states have to be tellable apart at a glance: running, winding
+    /// down, and stopped. A screen that jumped straight from the spinner to
+    /// "cancelled" would claim ffmpeg had exited before it had.
+    private var cancellingContent: some View {
+        VStack(spacing: Spacing.lg) {
+            Spacer().frame(height: Spacing.xl)
+            ProgressView()
+                .controlSize(.large)
+                .tint(PaintedSurfaces.iconAccent)
+            Text("Cancelling…")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(PaintedSurfaces.bodyText)
+            Text("Stopping the generation. Nothing has been written to your "
+                 + "export folder, and the previous export is still there.")
+                .font(.light(11))
+                .foregroundStyle(PaintedSurfaces.secondaryText)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 320)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, Spacing.xl)
+    }
+
+    /// The run was abandoned. Not an error screen: nothing went wrong.
+    private var cancelledContent: some View {
+        VStack(alignment: .leading, spacing: Spacing.md) {
+            BrandBanner(icon: "xmark.circle",
+                        message: "Export cancelled. Nothing was written, and "
+                               + "your previous export is still where it was.",
+                        style: .info)
+                .padding(.horizontal, Spacing.xl)
+            HStack {
+                Spacer()
+                Button("Back to export") { exportManager.clear(eventID: event.id) }
+                    .buttonStyle(BrandButtonStyle())
+            }
+            .padding(Spacing.xl)
+        }
     }
 
     private func errorContent(_ message: String) -> some View {

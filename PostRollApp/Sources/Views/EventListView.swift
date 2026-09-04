@@ -364,6 +364,7 @@ struct EventRow: View {
                               isReading: ocrManager.isRunning(event.id),
                               readingFailed: ocrManager.hasFailed(event.id),
                               isExporting: exportManager.isExporting(event.id),
+                              isCancellingExport: exportManager.isCancelling(event.id),
                               isFinishingMedia: exportManager.isFinishingMedia(event.id),
                               awaitingGeneration: event.isAwaitingGeneration,
                               awaitingExport: event.isAwaitingExport),
@@ -421,6 +422,7 @@ struct StagePill: View {
         case .generating:         return "Generating content in the background. You can keep working on other events."
         case .generationFailed:   return "Generation hit an error. Open this event to see what happened and retry."
         case .exporting:          return "Exporting in the background. You can keep working on other events."
+        case .cancellingExport:   return "Stopping the export. Nothing has been written, and the previous export is still there."
         case .finishingMedia:     return "The folder is ready and the captions are in it. Reels and images are still being written."
         case .awaitingGeneration: return "Step 4: Photos assigned. Click Generate All to create assets."
         case .awaitingExport:     return "Step 6: Captions approved. Choose a folder and export."

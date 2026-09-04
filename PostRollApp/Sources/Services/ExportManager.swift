@@ -40,6 +40,18 @@ final class ExportManager {
         /// because they need opposite responses (#265).
         case done(URL, mediaError: String?, mediaWarning: String?)
         case failed(String)
+        /// Cancel has been accepted and the work is winding down (#1047).
+        ///
+        /// Its own phase rather than a flag beside `generatingMedia`, and it
+        /// is deliberately not the same as stopped: the subprocess takes a
+        /// moment to die, and a screen that jumps straight from running to
+        /// gone claims something that has not happened yet. Three states have
+        /// to be tellable apart while a cancel is in flight, which is the same
+        /// rule every other long action here follows.
+        case cancelling
+        /// The run was abandoned. Nothing was committed and nothing is
+        /// stamped: this is not a failure and not an export.
+        case cancelled
     }
 
     struct Run {
@@ -54,6 +66,11 @@ final class ExportManager {
         /// active set, which also decided whether Done could dismiss the run
         /// and what the sidebar said (#182).
         var finishingMedia: Bool = false
+        /// Cancel was pressed. Kept beside the phase rather than derived from
+        /// it, because the pipeline can reach `done` after the press (the
+        /// commit had already happened) and the done screen then has to say
+        /// so rather than quietly ignoring the button Dan pushed (#1047, L11).
+        var cancelRequested: Bool = false
         fileprivate var task: Task<Void, Never>?
     }
 
@@ -71,6 +88,16 @@ final class ExportManager {
     /// happening without blocking Done (#182).
     func isFinishingMedia(_ id: Event.ID) -> Bool {
         tracker.job(for: id)?.finishingMedia == true
+    }
+
+    /// A cancel has been accepted and the work has not stopped yet (#1047).
+    ///
+    /// Asked of the PHASE rather than of `cancelRequested`, because the flag
+    /// stays true through a late cancel that the commit beat, and the sidebar
+    /// must not go on saying "Cancelling…" over a finished export (L144).
+    func isCancelling(_ id: Event.ID) -> Bool {
+        if case .cancelling = tracker.job(for: id)?.phase { return true }
+        return false
     }
 
     /// Kick off an export. No-op if one is already running for this event, so a
@@ -160,6 +187,17 @@ final class ExportManager {
     func deactivateForTesting(_ id: Event.ID) {
         tracker.deactivate(id)
     }
+
+    /// Test seam: hang a real task off the run, as `start` does.
+    ///
+    /// Without it, `cancel` can be shown to change the PHASE and nothing shows
+    /// that it reaches the work. The phase is the cheap half; the reason a
+    /// cancel exists at all is that the subprocess dies, and a screen saying
+    /// "Cancelling…" over an ffmpeg still burning the machine would be worse
+    /// than the button not being there (#1047, L3).
+    func setTaskForTesting(_ task: Task<Void, Never>, for id: Event.ID) {
+        tracker.update(id) { $0.task = task }
+    }
     #endif
 
     /// Dismiss a finished (done/failed) export so the screen returns to ready.
@@ -167,6 +205,50 @@ final class ExportManager {
     func clear(eventID: Event.ID) {
         guard !isExporting(eventID) else { return }
         tracker.remove(eventID)
+    }
+
+    /// Abandon the run (#1047).
+    ///
+    /// NOT "Skip, text export only", which is the opposite instruction: skip
+    /// means finish the export with less in it, and it deliberately leaves the
+    /// media step running so the milestone still gets stamped. Cancel means
+    /// Dan did not want this export at all, most often because it is the wrong
+    /// show, the wrong photos or the wrong preset, and until this existed the
+    /// only ways out of a three minute run were to wait for work that was
+    /// going to be thrown away or to quit the app.
+    ///
+    /// Returns whether the request was taken, so a caller can tell a cancel
+    /// from a press that arrived after the run was already over rather than
+    /// having to re-read the phase and guess (L197).
+    ///
+    /// The task is cancelled, which is what actually stops the work:
+    /// `ProcessRunner` SIGTERMs the whole subprocess tree and SIGKILLs
+    /// whatever survives the grace period, so ffmpeg and Python die with the
+    /// run rather than being orphaned onto a machine the next run has to
+    /// compete with. Nothing is committed, because every step writes into the
+    /// staging folder and only a finished run swaps it in (#442), so the
+    /// previous export is still where it was.
+    ///
+    /// The run stays ACTIVE while it winds down. Deactivating here would let a
+    /// second export start against a folder the dying one is still writing.
+    @discardableResult
+    func cancel(eventID: Event.ID) -> Bool {
+        guard let run = tracker.job(for: eventID), isExporting(eventID) else { return false }
+        switch run.phase {
+        case .exportingText, .generatingMedia:
+            break
+        case .cancelling, .cancelled, .done, .failed:
+            // A second press, or one that landed on a run already over. Both
+            // are no-ops, and saying so is the point: pressing twice must not
+            // do anything a single press did not (#1047).
+            return false
+        }
+        tracker.update(eventID) {
+            $0.phase = .cancelling
+            $0.cancelRequested = true
+        }
+        run.task?.cancel()
+        return true
     }
 
     /// User chose "Skip, text export only" — show the done screen now without
@@ -286,6 +368,12 @@ final class ExportManager {
             var collageBakeFailures: [(day: String, reason: CollageBakeOutcome.Reason)] = []
 
             for day in daysToProcess {
+                // A cancel between days takes effect here (#1047). Without it
+                // the only checkpoint is inside a Python run, so a cancel
+                // pressed during the copy-only fast path would be honoured
+                // only once the whole week had been copied, which is the
+                // commonest export there is.
+                try Task.checkCancellation()
                 let hasContent = (capturedEvent.weekResult?[day] != nil)
                     || (day == .friday && capturedEvent.days[day.rawValue] != nil)
                 guard hasContent else { continue }
@@ -429,6 +517,16 @@ final class ExportManager {
             // complete, which is the whole point: a text write that throws, a
             // Python step that dies or a disk that fills leaves Dan with the
             // last export he could actually upload.
+            // The last moment a cancel can still mean "this export does not
+            // happen" (#1047). Past the commit the folder Dan uploads from has
+            // already been replaced, so a cancel arriving later cannot undo it
+            // and must not pretend to: the run finishes and the done screen
+            // says the press came too late. Checked immediately before the
+            // swap rather than earlier, because everything between the two
+            // would otherwise be a window where the button silently did
+            // nothing (L157).
+            try Task.checkCancellation()
+
             var swapError: String? = nil
             do {
                 try textExport.staging.commit()
@@ -445,16 +543,39 @@ final class ExportManager {
             let errorWithSwap = [combinedError.isEmpty ? nil : combinedError, swapError]
                 .compactMap { $0 }.joined(separator: "\n\n")
 
+            // A cancel that arrived AFTER the export had been written. Read
+            // here rather than before the commit check above, because before
+            // it a request throws instead and this line is never reached: read
+            // early it could only ever be false, and the button Dan pushed
+            // would vanish without a word (#1047, L11).
+            //
+            // The run genuinely succeeded, so this is a warning and not an
+            // error: the folder is complete and the milestone is honestly
+            // stamped. What it must not do is report an ordinary success and
+            // leave him assuming the cancel worked.
+            let lateCancel = tracker.job(for: eventID)?.cancelRequested == true
+                ? "Cancel arrived after the export had already been written, so "
+                  + "it went ahead and the folder is complete. Delete it if you "
+                  + "did not want it."
+                : nil
+            let warningWithCancel = [combinedWarning.isEmpty ? nil : combinedWarning,
+                                     lateCancel]
+                .compactMap { $0 }.joined(separator: "\n\n")
+
             finishSuccess(eventID: eventID, folder: destination, onlyDay: onlyDay,
                           daysNeedingPython: daysNeedingPython,
                           daysExported: daysExported,
                           mediaError: errorWithSwap.isEmpty ? nil : errorWithSwap,
-                          mediaWarning: combinedWarning.isEmpty ? nil : combinedWarning,
+                          mediaWarning: warningWithCancel.isEmpty ? nil : warningWithCancel,
                           tagStamp: tagStamp,
                           appState: appState)
         } catch is CancellationError {
             // Cancelled (skipMedia handles its own terminal state).
+            //
+            // The staged work goes, so nothing half written is left looking
+            // like an export and the previous one is untouched (#442).
             staging?.abandon()
+            finishCancelled(eventID: eventID)
         } catch {
             staging?.abandon()
             destinationRoot.stopAccessingSecurityScopedResource()
@@ -474,6 +595,33 @@ final class ExportManager {
                 eventName: capturedEvent.name,
                 reason: reason)
         }
+    }
+
+    /// The run stopped because it was cancelled (#1047).
+    ///
+    /// Its own method rather than a block inside the catch so it can be driven
+    /// by a test: the catch itself is only reachable by running a real export,
+    /// so leaving the whole terminal transition in there would mean the phase a
+    /// cancel actually lands in was never exercised (L3).
+    ///
+    /// A terminal phase and a deactivation, both of which were missing while
+    /// nothing could reach that branch: without them a cancelled run stayed in
+    /// `generatingMedia` forever, `isExporting` stayed true, and the screen
+    /// went on showing a spinner for work that had already stopped (L110).
+    ///
+    /// Deliberately NO failure notification, and no `markFailed`. Dan pressed
+    /// the button; telling him his export failed would be a claim about
+    /// something that did not happen (L11).
+    func finishCancelled(eventID: Event.ID) {
+        tracker.update(eventID) {
+            $0.task = nil
+            $0.phase = .cancelled
+            // The media step is over too, so the sidebar does not go on
+            // claiming assets are still being written behind a stopped run
+            // (#182).
+            $0.finishingMedia = false
+        }
+        tracker.deactivate(eventID)
     }
 
     private func finishSuccess(eventID: Event.ID, folder: URL, onlyDay: DayName?,

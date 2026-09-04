@@ -777,7 +777,11 @@ enum PaintedSurfaces {
 
     private static func stagePillColours(_ state: StagePillState) -> (Color, Color) {
         switch state {
-        case .reading, .generating, .exporting, .finishingMedia:
+        case .reading, .generating, .exporting, .cancellingExport,
+             .finishingMedia:
+            // Cancelling shares the busy pair rather than borrowing the failed
+            // one: a cancel is not a failure, and the red would read as
+            // something having gone wrong (L112).
             return (Color.roseGold, Color.stageBusyInk)
         case .readingFailed, .generationFailed:
             return (Color.roseDeep, Color.stageFailedInk)
