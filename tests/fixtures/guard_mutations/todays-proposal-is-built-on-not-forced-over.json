@@ -1,0 +1,8 @@
+{
+  "name": "todays-proposal-is-built-on-not-forced-over",
+  "file": "tools/propose_recorded_change.sh",
+  "find": "  git checkout -q -B \"${branch}\" \"refs/remotes/origin/${branch}\"",
+  "replace": "  git checkout -q -B \"${branch}\"",
+  "test": "tests/test_recorded_change_is_proposed.py::test_the_second_run_keeps_what_the_first_one_committed",
+  "breaks": "the second run of a day branches from the base rather than from today's open proposal, so its push is not a fast forward and the only way to land it is a force that throws away the reading the earlier run committed (#1311, L5)"
+}
