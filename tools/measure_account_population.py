@@ -93,6 +93,68 @@ def store_path() -> Path:
     return base / "events.json"
 
 
+#: One line per observe cycle, appended (#1195).
+OBSERVATIONS = REPO_ROOT / "tests" / "fixtures" / "no_such_account_observations.json"
+
+#: The handles the LAST cycle asked about, as a set of salted digests.
+#:
+#: Only to answer "how many of these are new", which is the half of #1195's
+#: condition about the population changing. The salt is regenerated every cycle
+#: and stored beside the digests, so the digests are comparable within one
+#: comparison and worthless afterwards: they cannot be run back through to
+#: recover a handle, and they cannot be compared against any other file (L222).
+_SALT_BYTES = 16
+
+
+def _new_since_last(handles: list[str]) -> int | None:
+    """How many of `handles` the previous cycle did not ask about.
+
+    None when there is no previous cycle, which is not zero: a first cycle has
+    not failed to bring new handles, it simply has nothing to be new against
+    (L11).
+    """
+    import hashlib
+
+    held = _observations()
+    previous = held["cycles"][-1] if held.get("cycles") else None
+    if previous is None or "salt" not in previous:
+        return None
+    salt = bytes.fromhex(previous["salt"])
+    seen = set(previous.get("digests") or [])
+    mine = {hashlib.blake2b(h.encode(), salt=salt, digest_size=8).hexdigest()
+            for h in handles}
+    return len(mine - seen)
+
+
+def _observations() -> dict:
+    if not OBSERVATIONS.exists():
+        return {"cycles": []}
+    return json.loads(OBSERVATIONS.read_text(encoding="utf-8"))
+
+
+def record_observation(*, handles: list[str], outcomes, would_have_been,
+                       new_since_last: int | None) -> None:
+    """Append this cycle to the record #1195 reads."""
+    import hashlib
+    import os
+
+    held = _observations()
+    salt = os.urandom(_SALT_BYTES)
+    held.setdefault("cycles", []).append({
+        "measured_on": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "asked": len(handles),
+        "outcomes": dict(sorted(outcomes.items())),
+        "would_have_been": dict(sorted(would_have_been.items())),
+        "new_since_last": new_since_last,
+        "salt": salt.hex(),
+        "digests": sorted(
+            hashlib.blake2b(h.encode(), salt=salt, digest_size=8).hexdigest()
+            for h in handles),
+    })
+    OBSERVATIONS.parent.mkdir(parents=True, exist_ok=True)
+    OBSERVATIONS.write_text(json.dumps(held, indent=2) + "\n", encoding="utf-8")
+
+
 def _main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--limit", type=int, default=0,
@@ -121,9 +183,18 @@ def _main(argv: list[str]) -> int:
 
     rows: list[dict] = []
     outcomes: Counter[str] = Counter()
+    # What the fetch WOULD have written with `allow_no_such_account` on (#1195).
+    #
+    # Nothing read that field. The observe gate set it on every cycle and it
+    # went nowhere, so the one absent verdict seen on 2026-09-01 survives only
+    # as a sentence somebody typed into an issue. Stored data needs a reader
+    # (L46), and this is it.
+    would_have_been: Counter[str] = Counter()
     for index, handle in enumerate(handles, 1):
         figures = fetch(handle, token=token)
         outcomes[figures.outcome.value] += 1
+        if figures.would_have_been is not None:
+            would_have_been[figures.would_have_been.value] += 1
         rows.append({
             "followers": figures.followers,
             "likes": figures.likes,
@@ -149,6 +220,23 @@ def _main(argv: list[str]) -> int:
         "outcomes": dict(sorted(outcomes.items())),
         "accounts": rows,
     }, indent=1) + "\n", encoding="utf-8")
+
+    # The population file above is REPLACED every cycle, which is right for it:
+    # it is the current shape of the population. It is wrong for #1195, which
+    # asks for absent verdicts seen across SEVERAL cycles on a population that
+    # is not the same handles every time. A file that replaces itself can never
+    # answer that, so the cycle is appended to its own record here.
+    #
+    # Counts only, and how many handles were new since the last cycle, computed
+    # now from the live list. No handle is stored: a hash would be one too,
+    # because the set of handles this asks about is small enough to run back
+    # through any hash (L222).
+    record_observation(
+        handles=handles,
+        outcomes=outcomes,
+        would_have_been=would_have_been,
+        new_since_last=_new_since_last(handles),
+    )
 
     print(f"\nwrote {len(rows)} anonymised accounts to {args.out}")
     for outcome, count in outcomes.most_common():
