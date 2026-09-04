@@ -215,6 +215,81 @@ def fetch_run(run_id: str, into: Path) -> list[Path]:
     return found
 
 
+
+
+def _refuse_a_partial_sweep(paths: list[Path]) -> None:
+    """Every shard of the sweep, or nothing is written (#1344).
+
+    Only `_whole` asks this. `--add` scales a LATER, deliberately partial
+    reading onto an existing record and is supposed to take a subset; `_whole`
+    REPLACES the record, on the stated grounds that a whole sweep IS the
+    registry, and that is the one this can be wrong about.
+
+    #1344 made a sweep able to run only the shards with something to prove, so
+    a run can now upload one artifact out of seven. Replacing the record from
+    it would price the whole registry from a seventh of it: every reading in
+    that file is correct and there are simply far fewer of them, which is
+    exactly why nothing in the contents says so (L288: judge a run by the count
+    it EXECUTED against the count expected, before reading anything in it).
+
+    The artifacts say how wide the sweep was themselves, as `N/M`, so this
+    needs no second copy of the shard count to compare against (L70).
+    """
+    splits = []
+    for path in paths:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        splits.append((path, str(payload.get("shard") or "")))
+
+    declared = [(path, split) for path, split in splits if split]
+    if not declared:
+        # Every artifact predates #1090, which is the only way to have none:
+        # nothing written since carries no shard. There is no width to check
+        # against, and refusing would make every older reading unusable, which
+        # is the tolerance test_a_file_written_before_the_field_existed_is
+        # _accepted records. Said out loud rather than passed silently (L98).
+        print("none of these readings says which shard it came from, so "
+              "whether this is a whole sweep could not be established. They "
+              "predate #1090.")
+        return
+    if len(declared) != len(splits):
+        raise SystemExit(
+            f"{len(splits) - len(declared)} of these {len(splits)} readings do "
+            "not say which shard they came from and the rest do, so they are "
+            "not the shards of one sweep. Nothing was written.")
+
+    widths = set()
+    seen: dict[int, Path] = {}
+    for path, split in declared:
+        index, _, width = split.partition("/")
+        try:
+            widths.add(int(width))
+            seen[int(index)] = path
+        except ValueError:
+            raise SystemExit(
+                f"{path} records its shard as {split!r}, which is not an N/M "
+                "split, so its place in the sweep cannot be read. Nothing was "
+                "written.") from None
+
+    if len(widths) > 1:
+        raise SystemExit(
+            f"these readings come from sweeps split {sorted(widths)} ways, so "
+            "they are not the shards of one sweep and counting them would be "
+            "satisfied by any two of them. Nothing was written.")
+
+    width = widths.pop()
+    missing = sorted(set(range(1, width + 1)) - set(seen))
+    if missing:
+        raise SystemExit(
+            f"this is {len(seen)} shard(s) of a sweep split {width} ways: "
+            f"shard(s) {', '.join(str(m) for m in missing)} are absent. The "
+            "record replaces itself from a whole sweep, so recording these "
+            "would price the entire registry from the fraction that ran, and "
+            "every reading in them is correct which is why nothing in their "
+            "contents would say so. Re-run the sweep with every shard, by "
+            "dispatching it against a tree none of them has proved. Nothing "
+            "was written.")
+
+
 def write(record: dict, path: Path) -> None:
     path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n",
                     encoding="utf-8")
@@ -227,6 +302,7 @@ def _whole(paths: list[Path], record_path: Path) -> int:
     entry it does not hold is one the registry no longer has, and keeping it
     would leave the deal pricing guards that were deleted.
     """
+    _refuse_a_partial_sweep(paths)
     seconds, kinds, cold, run = readings_of(paths)
     write({
         "seconds": {name: round(value, 2)

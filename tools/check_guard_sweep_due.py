@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import enum
+import json
 import os
 import subprocess
 import sys
@@ -77,6 +78,22 @@ from tools.guard_sweep_history import (  # noqa: E402
 #: control proving the window cannot delay a sweep after a merge, and the
 #: arithmetic above as an assertion rather than a comment.
 UNCONDITIONAL_AFTER = timedelta(days=30)
+
+#: How many ways the sweep is split.
+#:
+#: ONE number, here. It used to be a literal matrix in guards.yml with `/7`
+#: written beside it in the command, so the two could disagree and every shard
+#: would still report success: the sweep would run seven ways while
+#: `check_guards` was told there were four, and three shards would re-prove
+#: entries that nearly half the registry never reached (L41).
+#:
+#: The matrix is built from this through the gate's own output now, and so is
+#: the denominator. tests/test_guard_sweep_fits_its_deadline.py projects the
+#: largest shard against the 1,800 second deadline from it, and that is the
+#: test that says when another shard is needed. Do not widen a shard's share
+#: instead: a shard that runs out of time reports its remaining entries as
+#: UNPROVEN while the workflow still goes green (L98, L315).
+SHARD_COUNT = 7
 
 
 class Due(enum.Enum):
@@ -167,6 +184,21 @@ class SweepDecision:
     def run(self) -> bool:
         return bool(self.due_shards)
 
+    def for_the_matrix(self) -> tuple[int, ...]:
+        """The shards to start, which is NEVER an empty list.
+
+        GitHub treats a matrix vector with no values as a workflow ERROR rather
+        than a skipped job, and the sweep's job condition is what actually
+        skips a quiet day. Betting the whole workflow on the order GitHub
+        evaluates a condition against a matrix would put the failure on exactly
+        the quiet day this gate exists to make free, so when nothing is due
+        this names every shard and lets the condition do the skipping. The
+        worst case if that condition is ever wrong is a sweep that ran when it
+        need not have, rather than a workflow that cannot be parsed.
+        """
+        return self.due_shards or tuple(
+            range(1, len(self.decisions) + 1))
+
     @property
     def message(self) -> str:
         if not self.due_shards:
@@ -240,7 +272,9 @@ def main(argv: list[str] | None = None) -> int:
     # them start, asked once on Linux so a quiet day takes no Mac (#1259).
     which = parser.add_mutually_exclusive_group(required=True)
     which.add_argument("--shard", type=int)
-    which.add_argument("--shards", type=int)
+    which.add_argument("--shards", type=int, nargs="?", const=SHARD_COUNT,
+                       help="ask for a whole sweep of this many shards "
+                            f"(default {SHARD_COUNT}, the one place it is set)")
     parser.add_argument("--sha", default=None)
     parser.add_argument("--repo", default=None)
     parser.add_argument("--window-days", type=int,
@@ -303,7 +337,12 @@ def _whole_sweep(args) -> int:
     if args.output:
         with open(args.output, "a", encoding="utf-8") as fh:
             fh.write(f"due={'true' if decision.run else 'false'}\n")
-            fh.write("shards=" + ",".join(str(s) for s in decision.due_shards) + "\n")
+            # JSON, because the matrix reads it through `fromJson`, and the
+            # shards to START rather than the shards that are due: those differ
+            # only when nothing is due, and the difference is what keeps the
+            # matrix from being empty.
+            fh.write("shards=" + json.dumps(list(decision.for_the_matrix())) + "\n")
+            fh.write(f"count={args.shards}\n")
     return 0
 
 

@@ -33,6 +33,8 @@ import pytest
 from tools.wait_for_checks import (
     UnreadableWorkflow, _job_blocks, _skips_on_pull_request)
 
+from source_text import without_prose
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 GUARDS = REPO_ROOT / ".github" / "workflows" / "guards.yml"
 
@@ -42,13 +44,23 @@ DUE_TOOL = "check_guard_sweep_due.py --shards"
 #: is what keeps a shard that was already proved from redoing its share when a
 #: neighbour is the reason the sweep ran.
 PER_SHARD_TOOL = "check_guard_sweep_due.py --shard "
-#: The step that costs the money.
-SWEEP_TOOL = "check_guards.py --shard"
+#: The step that costs the money, identified by the sweep's OWN deadline.
+#:
+#: Not "check_guards.py", which the pull request leg runs too, and not a
+#: spelling of the whole command: #1344 wrapped that across lines to
+#: interpolate the shard width, and a guard keyed on "check_guards.py --shard"
+#: then matched nothing and passed by finding nothing (L98, L100). 1,800
+#: seconds is the full sweep's deadline and the diff leg's is 900, so this
+#: names one job and says which.
+SWEEP_TOOL = "--deadline-seconds 1800"
 
 
 @pytest.fixture
 def jobs() -> dict[str, str]:
-    found = dict(_job_blocks(GUARDS.read_text(encoding="utf-8")))
+    # Through without_prose, because the comments in guards.yml describe every
+    # construct these tests hunt for, and a raw read is answered by the
+    # description as readily as by the code (L103, L135).
+    found = dict(_job_blocks(without_prose(GUARDS)))
     assert found, (
         "no jobs could be read out of guards.yml, so every assertion below "
         "would pass by finding nothing (L98, L100)")

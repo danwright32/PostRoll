@@ -13,17 +13,30 @@ import json
 
 import pytest
 
-from tools.record_guard_costs import readings_of, main
+from tools.record_guard_costs import (
+    _refuse_a_partial_sweep, readings_of, main)
 
 
-def readings(tmp_path, name, run, seconds, kinds=None, cold=None):
+def readings(tmp_path, name, run, seconds, kinds=None, cold=None, shard="1/1"):
     path = tmp_path / name
     path.write_text(json.dumps({
         "run": run, "seconds": seconds, "measured_on": "2026-08-31",
         "kinds": kinds if kinds is not None else {n: True for n in seconds},
-        "cold": cold, "shard": "1/6",
+        "cold": cold, "shard": shard,
     }))
     return path
+
+
+def whole_sweep(tmp_path, width=6, run="run-7"):
+    """Every shard of one sweep, which is what the record replaces itself from.
+
+    The default above is `1/1`, a sweep split one way, because every fixture
+    here that is not about shard completeness means "a whole sweep" and said it
+    as `1/6`, which #1344 made a partial one.
+    """
+    return [readings(tmp_path, f"s{n}.json", run, {f"entry-{n}": 1.0 + n},
+                     shard=f"{n}/{width}")
+            for n in range(1, width + 1)]
 
 
 def test_the_shards_of_one_sweep_are_one_set(tmp_path):
@@ -32,6 +45,65 @@ def test_the_shards_of_one_sweep_are_one_set(tmp_path):
     seconds, kinds, _, run = readings_of([a, b])
     assert seconds == {"one": 29.0, "two": 0.8}
     assert kinds == {"one": True, "two": True}
+    assert run == "run-7"
+
+
+def test_a_sweep_missing_a_shard_is_refused_rather_than_recorded(tmp_path):
+    """The defect #1344 introduced, caught before it merged.
+
+    The record REPLACES itself from one sweep, on the stated grounds that a
+    whole sweep IS the registry and an entry it does not hold is one the
+    registry no longer has. #1344 made a sweep able to run only the shards that
+    have something to prove, so a run where one shard was due now uploads one
+    artifact. Replacing the record from it would price the whole registry from
+    a seventh of it, silently: every reading in that file is correct, there are
+    simply far fewer of them, which is why nothing in the contents would say so.
+
+    What depends on the record makes it worse than noise. `shard_of` deals
+    entries into shards BY measured cost, and
+    tests/test_guard_sweep_fits_its_deadline.py projects the largest shard
+    against its deadline from the same numbers. Both would be confidently
+    wrong, and the sweep would go on reporting success (L288, L331, L98).
+    """
+    partial = [readings(tmp_path, "s3.json", "run-7", {"one": 29.0}, shard="3/7")]
+
+    with pytest.raises(SystemExit, match="shard"):
+        _refuse_a_partial_sweep(partial)
+
+
+def test_the_shards_that_are_missing_are_named(tmp_path):
+    """A refusal that does not say WHICH shards are absent leaves the reader
+    knowing something is wrong and with nowhere to go (L80)."""
+    present = [readings(tmp_path, "s1.json", "run-7", {"one": 1.0}, shard="1/4"),
+               readings(tmp_path, "s3.json", "run-7", {"two": 2.0}, shard="3/4")]
+
+    with pytest.raises(SystemExit) as refused:
+        _refuse_a_partial_sweep(present)
+
+    assert "2" in str(refused.value) and "4" in str(refused.value), (
+        f"the refusal does not name the missing shards: {refused.value}")
+
+
+def test_shards_disagreeing_about_the_width_are_refused(tmp_path):
+    """Two artifacts from sweeps split different ways are not one sweep, and
+    the completeness check above would be measuring nothing if they were let
+    through: it would count two of two and be satisfied."""
+    mixed = [readings(tmp_path, "s1.json", "run-7", {"one": 1.0}, shard="1/2"),
+             readings(tmp_path, "s2.json", "run-7", {"two": 2.0}, shard="2/9")]
+
+    with pytest.raises(SystemExit, match="split"):
+        _refuse_a_partial_sweep(mixed)
+
+
+def test_a_whole_sweep_is_still_accepted(tmp_path):
+    """The control. A completeness check that refused everything would also
+    make every test above pass (L159)."""
+    whole = whole_sweep(tmp_path)
+
+    _refuse_a_partial_sweep(whole)          # does not raise
+    seconds, _, _, run = readings_of(whole)
+
+    assert len(seconds) == 6
     assert run == "run-7"
 
 
@@ -263,7 +335,7 @@ def test_the_cold_build_reading_is_carried_into_the_record(tmp_path):
 
     written = json.loads(record.read_text())
     assert written["cold"] == [
-        {"entry": "first-swift", "seconds": 121.4, "shard": "1/6"}]
+        {"entry": "first-swift", "seconds": 121.4, "shard": "1/1"}]
     assert "first-swift" not in written["seconds"], (
         "the cold reading was carried through AND recorded as a cost, which is "
         "the mispricing it exists to avoid")

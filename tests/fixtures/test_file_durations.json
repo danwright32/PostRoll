@@ -254,6 +254,7 @@
     "test_the_layout_control_is_the_one_way_to_switch.py": 0.08,
     "test_the_pr_guard_job_has_a_deadline.py": 0.0,
     "test_the_suite_spreads_its_slowest_work.py": 0.0,
+    "test_the_sweep_runs_only_the_due_shards.py": 0.07,
     "test_the_test_target_stays_self_contained.py": 0.12,
     "test_the_two_sweep_windows_are_one_rule.py": 0.0,
     "test_thursday_reel_legibility.py": 126.39000000000001,
@@ -1293,6 +1294,10 @@
     },
     "test_the_suite_spreads_its_slowest_work.py": {
       "run": "full-2026-09-04T03:02Z",
+      "scale": 1.0
+    },
+    "test_the_sweep_runs_only_the_due_shards.py": {
+      "run": "partial-2026-09-04T21:20Z",
       "scale": 1.0
     },
     "test_the_test_target_stays_self_contained.py": {
