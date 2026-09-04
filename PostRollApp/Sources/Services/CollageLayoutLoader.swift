@@ -30,9 +30,16 @@ final class CollageLayoutLoader {
     struct Run {
         var startedAt: Date
         var elapsedSeconds: Int
+        /// The handle on the work, so it can be stopped (#1050).
+        ///
+        /// It was started with a bare `Task { }` and the handle thrown away, so
+        /// nothing could ever have stopped this: the screen put up a spinner
+        /// and offered no way back. `JobTracker` requires this now, so a new
+        /// owner cannot be written that way (L96).
+        fileprivate var task: Task<Void, Never>?
     }
 
-    private let tracker = JobTracker<Key, Run>(elapsed: \.elapsedSeconds)
+    private let tracker = JobTracker<Key, Run>(elapsed: \.elapsedSeconds, task: \.task)
 
     /// Whether anything this owner started is still running (#862).
     ///
@@ -50,6 +57,26 @@ final class CollageLayoutLoader {
 
     func startedAt(event: Event, day: DayName) -> Date? {
         tracker.job(for: Key(eventID: event.id, day: day))?.startedAt
+    }
+
+    /// Stop this run (#1050).
+    ///
+    /// Through the tracker, which is the one place stopping lives: it cancels
+    /// the task, remembers the request so a screen can say it is winding down,
+    /// and refuses a second press. Returns whether the request was taken, so a
+    /// caller can tell a stop from a press that arrived after the work was
+    /// already over (L197).
+    ///
+    /// This owner had no way to stop at all. It put up a spinner, and the only
+    /// ways out of a run started by mistake were to wait or to quit the app.
+    @discardableResult
+    func stop(event: Event, day: DayName) -> Bool {
+        tracker.requestStop(Key(eventID: event.id, day: day))
+    }
+
+    /// A stop was asked for and the work has not stopped yet.
+    func isStopping(event: Event, day: DayName) -> Bool {
+        tracker.isStopping(Key(eventID: event.id, day: day))
     }
 
     func failure(event: Event, day: DayName) -> String? {
@@ -106,12 +133,20 @@ final class CollageLayoutLoader {
 
         let work = render
         let deadline = activeDeadline
-        Task { @MainActor [weak self] in
+        let held = Task { @MainActor [weak self] in
             do {
                 let rendered = try await DeadlinedWork.run(within: deadline) {
                     try await work(event, day)
                 }
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else {
+                    // A stopped run ENDS rather than returning quietly (#1050).
+                    // This used to return with the job still active, so the
+                    // spinner ran for work that had stopped and nothing could
+                    // clear it (L110). Reachable only now that there is a
+                    // button that cancels.
+                    self?.tracker.remove(key)
+                    return
+                }
                 if rendered.isEmpty {
                     // Not an empty grid. A day with no photos assigned renders
                     // nothing, and a blank sheet says neither what happened nor
@@ -124,10 +159,19 @@ final class CollageLayoutLoader {
                         day: day, fingerprint: fingerprint, candidates: rendered)
                     self?.finish(key, failure: nil)
                 }
+            } catch is CancellationError {
+                // Dan pressed stop (#1050). Not a failure: reporting one would
+                // put a red banner over something he asked for, and the
+                // notification would say the work died (L11).
+                self?.tracker.remove(key)
             } catch {
                 self?.finish(key, failure: Self.failureMessage(error))
             }
         }
+        // Held so the work can be stopped (#1050). It was a bare
+        // `Task { }` and the handle went straight in the bin, so this
+        // put up a spinner that nothing could ever have ended.
+        tracker.update(key) { $0.task = held }
     }
 
     private func finish(_ key: Key, failure: String?) {

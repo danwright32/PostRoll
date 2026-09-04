@@ -10,10 +10,23 @@ final class JobTrackerTests: XCTestCase {
     private struct Job: Equatable {
         var elapsedSeconds: Int = 0
         var label: String = ""
+        /// The handle on the work. `JobTracker` requires one now, because an
+        /// owner that could leave it out would show a spinner with no way back
+        /// (#1050).
+        var task: Task<Void, Never>?
+
+        static func == (a: Job, b: Job) -> Bool {
+            a.elapsedSeconds == b.elapsedSeconds && a.label == b.label
+        }
     }
 
     private func makeTracker() -> JobTracker<UUID, Job> {
-        JobTracker<UUID, Job>(elapsed: \.elapsedSeconds)
+        JobTracker<UUID, Job>(elapsed: \.elapsedSeconds, task: \.task)
+    }
+
+    /// Work that never finishes on its own, so the only way it ends is a stop.
+    private func neverEnds() -> Task<Void, Never> {
+        Task { try? await Task.sleep(for: .seconds(30)) }
     }
 
     func testBeginMarksActiveAndStoresJob() {
@@ -127,7 +140,7 @@ final class JobTrackerTests: XCTestCase {
         // beside this one, and the two then drift: the whole reason the rule
         // holds is that there is ONE place a long run's progress, clock and
         // error live.
-        let t = JobTracker<AppJob, Job>(elapsed: \.elapsedSeconds)
+        let t = JobTracker<AppJob, Job>(elapsed: \.elapsedSeconds, task: \.task)
 
         t.begin(Job(label: "reading the CSVs"), for: .importCSV)
         t.begin(Job(label: "analysing"), for: .generateReport)
@@ -148,7 +161,7 @@ final class JobTrackerTests: XCTestCase {
         // The reason this matters on the Insights screen specifically: leaving
         // it and coming back destroyed the view, and with it the only copy of
         // why the analysis failed (L148).
-        let t = JobTracker<AppJob, Job>(elapsed: \.elapsedSeconds)
+        let t = JobTracker<AppJob, Job>(elapsed: \.elapsedSeconds, task: \.task)
         t.begin(Job(label: "analysing"), for: .generateReport)
         t.update(.generateReport) { $0.label = "the model refused" }
         t.markFailed(.generateReport)
@@ -157,4 +170,154 @@ final class JobTrackerTests: XCTestCase {
         XCTAssertTrue(t.hasFailed(.generateReport))
         XCTAssertEqual(t.job(for: .generateReport)?.label, "the model refused")
     }
+
+    // MARK: - #1050: stopping, once, here
+
+    func testAskingAJobToStopReachesTheWork() {
+        // The half that matters. A tracker that recorded the request and never
+        // cancelled the task would leave a screen saying "Stopping..." over an
+        // ffmpeg still burning the machine, which is worse than no button.
+        let t = makeTracker()
+        let id = UUID()
+        let work = neverEnds()
+        t.begin(Job(label: "a", task: work), for: id)
+
+        XCTAssertTrue(t.requestStop(id))
+
+        XCTAssertTrue(work.isCancelled,
+                      "the request was recorded without reaching the work")
+    }
+
+    func testAStoppingJobIsStillInFlight() {
+        // It has not stopped yet. Deactivating here would let a second run
+        // start against whatever the dying one is still writing.
+        let t = makeTracker()
+        let id = UUID()
+        t.begin(Job(label: "a", task: neverEnds()), for: id)
+
+        t.requestStop(id)
+
+        XCTAssertTrue(t.isActive(id))
+        XCTAssertTrue(t.hasWorkInFlight,
+                      "the app must not offer to quit and install over a run "
+                      + "that is still tearing down (#686)")
+        XCTAssertTrue(t.isStopping(id),
+                      "and the screen has to be able to say so, distinctly "
+                      + "from both running and stopped")
+    }
+
+    func testAskingTwiceIsOnlyOneStop() {
+        let t = makeTracker()
+        let id = UUID()
+        t.begin(Job(label: "a", task: neverEnds()), for: id)
+
+        XCTAssertTrue(t.requestStop(id))
+        XCTAssertFalse(t.requestStop(id),
+                       "a second press must not be reported as a second stop")
+    }
+
+    func testAJobThatIsNotRunningCannotBeStopped() {
+        // The press landed after the work was already over. There is nothing
+        // to stop, and saying otherwise would put a winding down state over a
+        // finished run (L109).
+        let t = makeTracker()
+        let id = UUID()
+        t.begin(Job(label: "a", task: neverEnds()), for: id)
+        t.deactivate(id)
+
+        XCTAssertFalse(t.requestStop(id))
+        XCTAssertFalse(t.isStopping(id))
+    }
+
+    func testStoppingAJobThatWasNeverStartedDoesNothing() {
+        let t = makeTracker()
+
+        XCTAssertFalse(t.requestStop(UUID()))
+    }
+
+    func testOnceTheWorkStopsItIsNoLongerWindingDown() {
+        // Three states, and this is the transition between the last two. The
+        // owner's own completion path calls `deactivate`, because that is
+        // where it knows what to leave on screen.
+        let t = makeTracker()
+        let id = UUID()
+        t.begin(Job(label: "a", task: neverEnds()), for: id)
+        t.requestStop(id)
+
+        t.deactivate(id)
+
+        XCTAssertFalse(t.isStopping(id))
+        XCTAssertFalse(t.hasWorkInFlight)
+    }
+
+    func testAStoppedRunStillRemembersItWasStopped() {
+        // Asked AFTER the work is over, so an outcome screen can say "you
+        // stopped this" rather than reporting an ordinary end (L11). It is the
+        // same record that answered `isStopping`, not a second flag beside it
+        // that could disagree (L53).
+        let t = makeTracker()
+        let id = UUID()
+        t.begin(Job(label: "a", task: neverEnds()), for: id)
+        t.requestStop(id)
+        t.deactivate(id)
+
+        XCTAssertTrue(t.wasStopRequested(id))
+        XCTAssertFalse(t.isStopping(id),
+                       "the two are different questions and must not collapse "
+                       + "into one another")
+    }
+
+    func testAJobThatEndedOnItsOwnIsNotReportedAsStopped() {
+        // The other direction (L159). Without it, "was it stopped" is
+        // satisfied by a tracker that says yes to everything.
+        let t = makeTracker()
+        let id = UUID()
+        t.begin(Job(label: "a", task: neverEnds()), for: id)
+
+        t.deactivate(id)
+
+        XCTAssertFalse(t.wasStopRequested(id))
+    }
+
+    func testAFreshRunUnderTheSameKeyIsNotBornStopped() {
+        // A durable record keyed on something reusable outlives the thing it
+        // was about (L186). Left behind, the next run would report itself as
+        // cancelled the moment it finished.
+        let t = makeTracker()
+        let id = UUID()
+        t.begin(Job(label: "a", task: neverEnds()), for: id)
+        t.requestStop(id)
+        t.deactivate(id)
+
+        t.begin(Job(label: "b", task: neverEnds()), for: id)
+
+        XCTAssertFalse(t.wasStopRequested(id))
+        XCTAssertFalse(t.isStopping(id))
+    }
+
+    func testRemovingAJobForgetsThatItWasStopped() {
+        let t = makeTracker()
+        let id = UUID()
+        t.begin(Job(label: "a", task: neverEnds()), for: id)
+        t.requestStop(id)
+
+        t.remove(id)
+
+        XCTAssertFalse(t.wasStopRequested(id))
+    }
+
+    func testStoppingOneJobLeavesTheOthersAlone() {
+        let t = makeTracker()
+        let a = UUID(), b = UUID()
+        let other = neverEnds()
+        t.begin(Job(label: "a", task: neverEnds()), for: a)
+        t.begin(Job(label: "b", task: other), for: b)
+
+        t.requestStop(a)
+
+        XCTAssertFalse(t.isStopping(b))
+        XCTAssertFalse(other.isCancelled,
+                       "stopping one event's work must not touch another's")
+    }
+
 }

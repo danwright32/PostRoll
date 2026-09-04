@@ -208,6 +208,11 @@ struct GenerationDoneBody: View {
     /// sitting on a label that reads the same whether it is working or dead
     /// (#460). nil renders nothing.
     var programPDFStartedAt: Date? = nil
+    /// How to stop the programme PDF bake, and whether it is winding down
+    /// (#1050). A multi page Vision OCR pass takes long enough to have a
+    /// spinner, so it takes long enough to need a way back.
+    var onStopProgramPDF: (() -> Void)? = nil
+    var isStoppingProgramPDF: Bool = false
     /// A bake that failed. Before #80 a `try?` dropped this and the program just
     /// stopped existing with nothing said.
     var programBakeError: String? = nil
@@ -340,7 +345,9 @@ struct GenerationDoneBody: View {
                 if programPDFStartedAt != nil {
                     LongRunIndicator(label: "Reading the program pages…",
                                      startedAt: programPDFStartedAt,
-                                     silenceThreshold: LongRunState.localWorkSilenceThreshold)
+                                     silenceThreshold: LongRunState.localWorkSilenceThreshold,
+                                     onStop: onStopProgramPDF,
+                                     isStopping: isStoppingProgramPDF)
                 }
             }
 

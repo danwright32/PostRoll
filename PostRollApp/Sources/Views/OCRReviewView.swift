@@ -349,6 +349,10 @@ struct OCRReviewView: View {
                 isFetchingFromWeb: lookupManager.isRunning(.fromWeb, for: event.id),
                 fetchFromWebStartedAt: lookupManager.run(.fromWeb, for: event.id)?.startedAt,
                 fetchError: lookupManager.failure(.fromWeb, for: event.id),
+                onStopHandleLookup: { lookupManager.stop(.handles, for: event.id) },
+                isStoppingHandleLookup: lookupManager.isStopping(.handles, for: event.id),
+                onStopFetchFromWeb: { lookupManager.stop(.fromWeb, for: event.id) },
+                isStoppingFetchFromWeb: lookupManager.isStopping(.fromWeb, for: event.id),
                 lookupBlockedReason: lookupManager.blockedReason(for: event.id),
                 onLookUpHandles: {
                     lookupManager.clearFailure(.handles, for: event.id)
@@ -406,7 +410,9 @@ struct OCRReviewView: View {
                     notesManager.clearFailure(for: event.id)
                     notesManager.start(eventID: event.id, org: event.org,
                                        eventName: event.name, appState: appState)
-                }
+                },
+                onStopFetchNotes: { notesManager.stop(eventID: event.id) },
+                isStoppingFetchNotes: notesManager.isStopping(event.id)
             ) { piece, idx in
                 scheduleUndo(message: "Work removed") {
                     ocr.pieces.insert(piece, at: min(idx, ocr.pieces.count))
@@ -644,6 +650,13 @@ private struct PerformersEditor: View {
     let isFetchingFromWeb: Bool
     let fetchFromWebStartedAt: Date?
     let fetchError: String?
+    /// Stop the run this section is showing, and whether it is winding down
+    /// (#1050). Passed in for the same reason the rest of the run state is:
+    /// this view goes away whenever another section is opened.
+    let onStopHandleLookup: () -> Void
+    let isStoppingHandleLookup: Bool
+    let onStopFetchFromWeb: () -> Void
+    let isStoppingFetchFromWeb: Bool
     /// Why neither lookup can be started right now, or nil when both can
     /// (#1049).
     ///
@@ -721,7 +734,9 @@ private struct PerformersEditor: View {
             if isLookingUpHandles {
                 LongRunIndicator(label: "Searching for Instagram handles…",
                                  startedAt: handleLookupStartedAt,
-                                 silenceThreshold: LongRunState.localWorkSilenceThreshold)
+                                 silenceThreshold: LongRunState.localWorkSilenceThreshold,
+                                 onStop: onStopHandleLookup,
+                                 isStopping: isStoppingHandleLookup)
                     .padding(.top, 2)
             } else if performersWithoutHandles {
                 VStack(alignment: .leading, spacing: 4) {
@@ -762,7 +777,9 @@ private struct PerformersEditor: View {
                 if isFetchingFromWeb {
                     LongRunIndicator(label: "Fetching from website…",
                                      startedAt: fetchFromWebStartedAt,
-                                     silenceThreshold: LongRunState.localWorkSilenceThreshold)
+                                     silenceThreshold: LongRunState.localWorkSilenceThreshold,
+                                     onStop: onStopFetchFromWeb,
+                                     isStopping: isStoppingFetchFromWeb)
                         .padding(.top, 2)
                 } else {
                     VStack(alignment: .leading, spacing: 4) {
@@ -1020,6 +1037,11 @@ private struct PiecesEditor: View {
     let fetchStartedAt: Date?
     let fetchError: String?
     let onFetchNotes: () -> Void
+    /// Stop the run this section is showing, and whether it is winding down
+    /// (#1050). Passed in for the same reason the rest of the run state is:
+    /// this view goes away whenever another section is opened.
+    let onStopFetchNotes: () -> Void
+    let isStoppingFetchNotes: Bool
     let onDeleted: (Piece, Int) -> Void
 
     @State private var reorderTargetID: UUID?
@@ -1077,7 +1099,9 @@ private struct PiecesEditor: View {
                     if isFetchingNotes {
                         LongRunIndicator(label: "Searching the web…",
                                          startedAt: fetchStartedAt,
-                                         silenceThreshold: LongRunState.localWorkSilenceThreshold)
+                                         silenceThreshold: LongRunState.localWorkSilenceThreshold,
+                                         onStop: onStopFetchNotes,
+                                         isStopping: isStoppingFetchNotes)
                     } else {
                         Button {
                             onFetchNotes()

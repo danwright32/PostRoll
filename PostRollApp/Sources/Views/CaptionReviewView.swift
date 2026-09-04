@@ -543,14 +543,18 @@ struct CaptionReviewView: View {
                     LongRunIndicator(label: "Regenerating captions…",
                                      startedAt: captionWork.startedAt(event.id, .regenerateWeek),
                                      eventID: event.id,
-                                     estimate: "~3 to 6 min")
+                                     estimate: "~3 to 6 min",
+                                     onStop: { captionWork.stop(event.id, .regenerateWeek) },
+                                     isStopping: captionWork.isStopping(event.id, .regenerateWeek))
                         .padding(Spacing.xl)
                 } else if isGeneratingGraphics {
                     LongRunIndicator(label: "Generating story graphics…",
                                      startedAt: graphics.startedAt(event.id),
                                      eventID: event.id,
                                      run: .media,
-                                     estimate: "~1 min")
+                                     estimate: "~1 min",
+                                     onStop: { graphics.stop(event.id) },
+                                     isStopping: graphics.isStopping(event.id))
                         .padding(Spacing.xl)
                 } else if let waiting = ExportReadiness.blockedReason(
                             for: liveEvent, preset: liveEvent.effectivePostingPreset,
@@ -561,7 +565,9 @@ struct CaptionReviewView: View {
                     actionBar(.waitingOnRebuild(reason: waiting))
                 } else if isAnalyzingEdits {
                     LongRunIndicator(label: "Reviewing your edits…",
-                                     startedAt: captionWork.startedAt(event.id, .learnFromEdits))
+                                     startedAt: captionWork.startedAt(event.id, .learnFromEdits),
+                                     onStop: { captionWork.stop(event.id, .learnFromEdits) },
+                                     isStopping: captionWork.isStopping(event.id, .learnFromEdits))
                         .padding(Spacing.xl)
                 } else {
                     actionBar(.ready(graphicsError: graphics.failure(for: event.id)))

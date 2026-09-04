@@ -43,6 +43,37 @@ final class PreviewGraphicsManager {
 
     func isGenerating(_ eventID: UUID) -> Bool { state.isRunningFull(eventID) }
     func startedAt(_ eventID: UUID) -> Date? { state.fullRunStartedAt(eventID) }
+
+    /// The full runs in flight, so one can be stopped (#1050).
+    ///
+    /// This owner does not compose a `JobTracker`, so it got none of the
+    /// stopping the tracker gained, and it was invisible to a sweep looking for
+    /// one: enumerating by that spelling missed the action that reaches the
+    /// same state by another route (L247). It is a minute of rendering behind a
+    /// spinner, which is exactly the shape #1050 is about.
+    private var fullRunTasks: [UUID: Task<Void, Never>] = [:]
+
+    /// Which runs have been asked to stop and have not stopped yet.
+    private var stopping: Set<UUID> = []
+
+    /// Stop the full preview run for this event.
+    ///
+    /// Returns whether the request was taken, so a caller can tell a stop from
+    /// a press that arrived after the work was already over (L197).
+    @discardableResult
+    func stop(_ eventID: UUID) -> Bool {
+        guard let task = fullRunTasks[eventID], !stopping.contains(eventID) else {
+            return false
+        }
+        stopping.insert(eventID)
+        task.cancel()
+        return true
+    }
+
+    /// A stop was asked for and the work has not stopped yet.
+    func isStopping(_ eventID: UUID) -> Bool {
+        stopping.contains(eventID) && isGenerating(eventID)
+    }
     func regeneratingDays(_ eventID: UUID) -> Set<DayName> { state.regeneratingDays(for: eventID) }
     func failure(for eventID: UUID) -> String? { failures[eventID] }
     func clearFailure(for eventID: UUID) { failures.removeValue(forKey: eventID) }
@@ -68,21 +99,34 @@ final class PreviewGraphicsManager {
     func startFullRun(eventID: UUID, appState: AppState, onFinish: (@MainActor () -> Void)? = nil) {
         guard state.beginFullRun(eventID) else { return }
         failures.removeValue(forKey: eventID)
-        Task {
+        // A fresh run was not stopped, whatever happened to the last one under
+        // this id. Left behind, the record would make the new run report itself
+        // as winding down the moment it started (L186).
+        stopping.remove(eventID)
+        let held = Task { @MainActor [weak self] in
             defer {
-                state.endFullRun(eventID)
+                self?.state.endFullRun(eventID)
+                self?.fullRunTasks.removeValue(forKey: eventID)
                 onFinish?()
             }
             guard let live = appState.events.first(where: { $0.id == eventID }) else { return }
             do {
-                let result = try await renderPreview(live, nil)
-                applyFullRunResult(result, for: eventID, appState: appState)
+                let result = try await self?.renderPreview(live, nil)
+                guard let result else { return }
+                self?.applyFullRunResult(result, for: eventID, appState: appState)
+            } catch is CancellationError {
+                // Dan pressed stop (#1050). Not a failure: a red banner over
+                // something he asked for would be a claim about what happened
+                // (L11).
             } catch {
                 // Loud, not silent: this used to be a `try?`, so a failed run
                 // left the screen looking like a finished one with no graphics.
-                failures[eventID] = error.localizedDescription
+                self?.failures[eventID] = error.localizedDescription
             }
         }
+        // Held so the run can be stopped. It was a bare `Task { }` and the
+        // handle went straight in the bin (#1050).
+        fullRunTasks[eventID] = held
     }
 
     /// Land a finished full run: the days that rendered, and the days that did

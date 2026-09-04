@@ -44,7 +44,7 @@ final class ProgramNotesManager {
         fileprivate var task: Task<Void, Never>?
     }
 
-    private let tracker = JobTracker<Event.ID, Run>(elapsed: \.elapsedSeconds)
+    private let tracker = JobTracker<Event.ID, Run>(elapsed: \.elapsedSeconds, task: \.task)
 
 
     /// Whether anything this owner started is still running (#862).
@@ -62,6 +62,22 @@ final class ProgramNotesManager {
     func run(for id: Event.ID) -> Run? { tracker.job(for: id) }
     func isRunning(_ id: Event.ID) -> Bool { tracker.isActive(id) }
     func failure(for id: Event.ID) -> String? { tracker.job(for: id)?.failure }
+
+    /// Stop this run (#1050).
+    ///
+    /// Through the tracker, which is the one place stopping lives: it cancels
+    /// the task, remembers the request so a screen can say it is winding down,
+    /// and refuses a second press. Returns whether the request was taken, so a
+    /// caller can tell a stop from a press that arrived after the work was
+    /// already over (L197).
+    ///
+    /// This owner had no way to stop at all. It put up a spinner, and the only
+    /// ways out of a run started by mistake were to wait or to quit the app.
+    @discardableResult
+    func stop(eventID: Event.ID) -> Bool { tracker.requestStop(eventID) }
+
+    /// A stop was asked for and the work has not stopped yet.
+    func isStopping(_ id: Event.ID) -> Bool { tracker.isStopping(id) }
 
     /// Forget the last failure for this event, so a retry starts clean.
     ///
@@ -133,7 +149,15 @@ final class ProgramNotesManager {
                 let results = try await DeadlinedWork.run(within: deadline) {
                     try await fetch(missing, org, eventName)
                 }
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else {
+                    // A stopped run ENDS rather than returning quietly (#1050).
+                    // This used to return with the job still active, so the
+                    // spinner ran for work that had stopped and nothing could
+                    // clear it (L110). Reachable only now that there is a
+                    // button that cancels.
+                    self?.tracker.remove(eventID)
+                    return
+                }
                 self?.apply(results, to: eventID, in: appState)
                 self?.tracker.remove(eventID)
             } catch is CancellationError {

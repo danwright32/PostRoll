@@ -61,7 +61,9 @@ struct InsightsOverviewView: View {
                 if insightsWork.isRunning(.importCSV) {
                     LongRunIndicator(label: "Reading the CSV files…",
                                      startedAt: insightsWork.startedAt(.importCSV),
-                                     silenceThreshold: LongRunState.localWorkSilenceThreshold)
+                                     silenceThreshold: LongRunState.localWorkSilenceThreshold,
+                                     onStop: { insightsWork.stop(.importCSV) },
+                                     isStopping: insightsWork.isStopping(.importCSV))
                 }
 
                 // Numbers produced by the old timezone reading (#549). Placed
@@ -122,7 +124,9 @@ struct InsightsOverviewView: View {
                             // and no stall state until #460, and behind nothing
                             // at all once the sidebar moved off Insights (#718).
                             LongRunIndicator(label: "Analyzing your posts…",
-                                             startedAt: insightsWork.startedAt(.generateReport))
+                                             startedAt: insightsWork.startedAt(.generateReport),
+                                             onStop: { insightsWork.stop(.generateReport) },
+                                             isStopping: insightsWork.isStopping(.generateReport))
                                 .padding(.leading, 4)
                         }
                         Spacer()
