@@ -1,110 +1,141 @@
 {
-  "what": "What the Swift suite costs, once per machine, because the two differ by 4x and a bare number gets read as whichever the reader is standing on (#1243).",
-  "runner_image": "macos-26",
-  "readings": [
-    {
-      "machine": "GitHub macos-26 runner",
-      "cores": 3,
-      "workers": 3,
-      "wall_seconds": 212.2,
-      "serial_test_body_seconds": 475.8,
-      "heaviest_class_seconds": 78.4,
-      "heaviest_class": "BannerLegibilityTests",
-      "tests": 2895,
-      "measured_on": "2026-09-03",
-      "measured_from": "workflow_dispatch run 33760431737 at commit 72e1574a315a3f085680048a2bfa91fc27c65fb8: the step's own `Swift suite on 3 workers, 3 cores` notice, xcodebuild's IDETestOperationsObserverDebug reporting `212.162 elapsed`, `Swift: 2895 tests` from tools/suite_counts.py, and the serial total summed off the per-test seconds in the same transcript",
-      "re_measure_with": "gh run view <newest swift.yml run> --log > run.log, then: grep -oE '[0-9.]+ elapsed' run.log for the wall, and sum the '(N seconds)' on every 'Test case ... passed on' line for the serial total"
-    },
-    {
-      "machine": "Daniels-MacBook-Pro-2, macOS 26.5.1, Xcode 26.6",
-      "cores": 12,
-      "workers": 12,
-      "wall_seconds": 123.4,
-      "serial_test_body_seconds": 475.1,
-      "heaviest_class_seconds": 98.0,
-      "heaviest_class": "UnseenSurfaceTests",
-      "tests": 2892,
-      "counts_three_fewer_because": "make test-swift skips the three REVIEW_TESTS dumps, which CI runs. That is the 2,892 against the runner's 2,895, not a lost worker's share.",
-      "measured_on": "2026-09-03",
-      "measured_from": "`make test-swift`, read out of the result bundle it writes rather than off the scroll",
-      "re_measure_with": "make test-swift, then `xcrun xcresulttool get test-results summary --path \"$(. PostRollApp/derived-data-path.sh; printf %s \"$POSTROLL_DERIVED_DATA\")/swift-suite.xcresult\" --format json` for the wall (finishTime minus startTime) and the count, and the same tool's `tests` subcommand for the per-class seconds"
-    }
-  ],
-  "what_the_pair_says": "The two machines run the same amount of test work (475.8s against 475.1s of bodies) and differ almost entirely in how many workers they can pack it onto. The runner loses to packing (212.2s against a perfect 158.6s), this Mac loses to one class (123.4s against a heaviest class of 98.0s). Neither is anywhere near the 'near perfect up to four workers' this record replaces.",
-  "invalidated_by": "any change to swift-unit's runs-on, its worker count, or a class getting materially heavier. tests/test_swift_suite_cost_names_its_machine.py fails on the first of those.",
-  "test_step": {
-    "what": "Where the `Run the Swift unit tests` step's time goes (#1250). The step is the largest thing on the pull request critical path, and nothing tracked either half of it.",
-    "runner_seconds": {
-      "step": 339,
-      "compiling": 127,
-      "running": 212.2,
-      "measured_on": "2026-09-03",
-      "measured_from": "dispatch run 33760431737 on the macos-26 runner: the step's own start and end, and xcodebuild's `212.162 elapsed`. The compiling figure is what is left of the step, so it also carries whatever else the step does.",
-      "note": "Compile and run are measured by two different instruments here. .github/workflows/ci-profile.yml passes -showBuildTimingSummary to the test invocation as well (#1247), so a dispatch of it reports the compile side from the invocation's own attribution rather than as a remainder."
-    },
-    "compile": {
-      "machine": "Daniels-MacBook-Pro-2, 12 cores, macOS 26.5.1, Xcode 26.6",
-      "measured_on": "2026-09-03",
-      "files": 541,
-      "as_the_job_builds_it": {
-        "batches": 22,
-        "frontend_cpu_seconds": 280.8,
-        "emit_module_cpu_seconds": 16.1,
-        "note": "what the step actually pays. The Swift driver batches the 541 files into 22 frontend jobs, and batching is why this is cheaper than the per-file total below."
-      },
-      "split": {
-        "method": "a second cold build with SWIFT_ENABLE_BATCH_MODE=NO, so there is one frontend job per file and each file's wall clock is its own",
-        "frontend_cpu_seconds": 282.9,
-        "sources": {
-          "files": 228,
-          "cpu_seconds": 143.0,
-          "seconds_per_file": 0.627
-        },
-        "tests": {
-          "files": 313,
-          "cpu_seconds": 139.9,
-          "seconds_per_file": 0.447
-        },
-        "sources_cost_ratio": 1.4
-      },
-      "what_it_says": "The app's own source is HALF the test bundle's compile cost (51%) while being 42% of the files, because a Sources file costs 1.4x what a Tests file does. The dearest files are all SwiftUI views: CaptionReviewView 5.89s, PhotoAssignmentView 5.66s, OCRReviewView 5.09s. So the lever is the Sources side, and it is about which files are compiled rather than how many.",
-      "superseded_reading": "The first attempt apportioned each BATCH's time across its own files and reported Sources 120.5s at 0.53s a file against Tests 160.3s at 0.51s, concluding that neither half dominates. That was the METHOD, not the code: all 22 batches were mixed at a nearly constant ratio, so apportioning by file count could only ever return a near identical cost per file whatever the truth was (L107, L63). Both the shares and the finding were wrong.",
-      "measured_from": "two cold build-for-testing runs into throwaway derived data paths, one as the job builds it and one with batch mode off, both with -showBuildTimingSummary and OTHER_SWIFT_FLAGS=-stats-output-dir",
-      "re_measure_with": "xcodebuild -project PostRollApp/PostRoll.xcodeproj -scheme PostRollTests -destination 'platform=macOS' -derivedDataPath <fresh dir> SWIFT_ENABLE_BATCH_MODE=NO OTHER_SWIFT_FLAGS='-stats-output-dir <fresh dir>' build-for-testing, then sum each stats file's swift-frontend wall by whether its file sits under Sources or Tests"
-    },
-    "unreached_sources": {
-      "machine": "Daniels-MacBook-Pro-2, 12 cores",
-      "measured_on": "2026-09-03",
-      "sources_files_in_the_bundle": 226,
-      "with_zero_executed_lines": 22,
-      "executable_lines_never_executed": 9339,
-      "executable_lines_in_sources": 58332,
-      "what_it_says": "22 of the 226 Sources files in the test bundle execute no line at all, 9,339 of 58,332 executable lines, and they cost a measured 19.4 CPU-seconds of the 282.9, which is 7%. On three cores that is a handful of seconds of wall. Still not a lever: it is small, and it stops being true the first time a test touches one of those files. The largest are CollagePreviewThumbnail at 3.02s, InstagramMockup at 2.68s and ReelStripPreviewThumbnail at 1.89s.",
-      "measured_from": "the suite run with -enableCodeCoverage YES read through `xcrun xccov view --report --json`, joined to the per-file frontend times from the batch-mode-off build",
-      "re_measure_with": "xcodebuild ... -enableCodeCoverage YES -resultBundlePath <path> test, then xcrun xccov view --report --json <path>",
-      "cpu_seconds": 19.4,
-      "share_of_the_compile": "7%"
-    },
-    "packing": {
-      "what": "Whether the 212s run is bounded by one heavy class or by how the classes are dealt.",
-      "measured_on": "2026-09-03",
-      "classes": 307,
-      "serial_test_body_seconds": 475.8,
-      "heaviest_class_seconds": 78.4,
-      "heaviest_three_classes": {
-        "BannerLegibilityTests": 78.4,
-        "UnseenSurfaceTests": 72.8,
-        "CaptionWorkManagerTests": 57.2
-      },
-      "best_effort_makespan_seconds": {
-        "3_workers": 158.6,
-        "5_workers": 95.2,
-        "12_workers": 78.4
-      },
-      "measured_runner_wall_seconds": 212.2,
-      "what_it_says": "On three workers a cost-aware deal reaches the perfect 158.6s, because the heaviest class is well under it, so the 212.2s the runner takes is about 53s of scheduling loss rather than a class that cannot be split. On twelve workers it inverts: perfect would be 39.7s and the heaviest class alone is the floor. So the one lever that helps both machines is splitting the three classes that hold 44% of the suite's seconds.",
-      "measured_from": "the per-test seconds in run 33760431737's transcript, summed per class, dealt longest-first onto N workers",
-      "re_measure_with": "sum the '(N seconds)' on every 'Test case ... passed on' line of a swift-unit log, group by the class before the dot, then deal longest-first"
-    }
+ "what": "What the Swift suite costs, once per machine, because the two differ by 4x and a bare number gets read as whichever the reader is standing on (#1243).",
+ "runner_image": "macos-26",
+ "readings": [
+  {
+   "machine": "GitHub macos-26 runner",
+   "cores": 3,
+   "workers": 3,
+   "wall_seconds": 212.2,
+   "serial_test_body_seconds": 475.8,
+   "heaviest_class_seconds": 78.4,
+   "heaviest_class": "BannerLegibilityTests",
+   "tests": 2895,
+   "measured_on": "2026-09-03",
+   "measured_from": "workflow_dispatch run 33760431737 at commit 72e1574a315a3f085680048a2bfa91fc27c65fb8: the step's own `Swift suite on 3 workers, 3 cores` notice, xcodebuild's IDETestOperationsObserverDebug reporting `212.162 elapsed`, `Swift: 2895 tests` from tools/suite_counts.py, and the serial total summed off the per-test seconds in the same transcript",
+   "re_measure_with": "gh run view <newest swift.yml run> --log > run.log, then: grep -oE '[0-9.]+ elapsed' run.log for the wall, and sum the '(N seconds)' on every 'Test case ... passed on' line for the serial total"
+  },
+  {
+   "machine": "Daniels-MacBook-Pro-2, macOS 26.5.1, Xcode 26.6",
+   "cores": 12,
+   "workers": 12,
+   "wall_seconds": 123.4,
+   "serial_test_body_seconds": 475.1,
+   "heaviest_class_seconds": 98.0,
+   "heaviest_class": "UnseenSurfaceTests",
+   "tests": 2892,
+   "counts_three_fewer_because": "make test-swift skips the three REVIEW_TESTS dumps, which CI runs. That is the 2,892 against the runner's 2,895, not a lost worker's share.",
+   "measured_on": "2026-09-03",
+   "measured_from": "`make test-swift`, read out of the result bundle it writes rather than off the scroll",
+   "re_measure_with": "make test-swift, then `xcrun xcresulttool get test-results summary --path \"$(. PostRollApp/derived-data-path.sh; printf %s \"$POSTROLL_DERIVED_DATA\")/swift-suite.xcresult\" --format json` for the wall (finishTime minus startTime) and the count, and the same tool's `tests` subcommand for the per-class seconds"
   }
+ ],
+ "what_the_pair_says": "The two machines run the same amount of test work (475.8s against 475.1s of bodies) and differ almost entirely in how many workers they can pack it onto. The runner loses to packing (212.2s against a perfect 158.6s), this Mac loses to one class (123.4s against a heaviest class of 98.0s). Neither is anywhere near the 'near perfect up to four workers' this record replaces.",
+ "invalidated_by": "any change to swift-unit's runs-on, its worker count, or a class getting materially heavier. tests/test_swift_suite_cost_names_its_machine.py fails on the first of those.",
+ "test_step": {
+  "what": "Where the `Run the Swift unit tests` step's time goes (#1250). The step is the largest thing on the pull request critical path, and nothing tracked either half of it.",
+  "runner_seconds": {
+   "step": 339,
+   "compiling": 127,
+   "running": 212.2,
+   "measured_on": "2026-09-03",
+   "measured_from": "dispatch run 33760431737 on the macos-26 runner: the step's own start and end, and xcodebuild's `212.162 elapsed`. The compiling figure is what is left of the step, so it also carries whatever else the step does.",
+   "note": "Compile and run are measured by two different instruments here. .github/workflows/ci-profile.yml passes -showBuildTimingSummary to the test invocation as well (#1247), so a dispatch of it reports the compile side from the invocation's own attribution rather than as a remainder."
+  },
+  "compile": {
+   "machine": "Daniels-MacBook-Pro-2, 12 cores, macOS 26.5.1, Xcode 26.6",
+   "measured_on": "2026-09-03",
+   "files": 541,
+   "as_the_job_builds_it": {
+    "batches": 22,
+    "frontend_cpu_seconds": 280.8,
+    "emit_module_cpu_seconds": 16.1,
+    "note": "what the step actually pays. The Swift driver batches the 541 files into 22 frontend jobs, and batching is why this is cheaper than the per-file total below."
+   },
+   "split": {
+    "method": "a second cold build with SWIFT_ENABLE_BATCH_MODE=NO, so there is one frontend job per file and each file's wall clock is its own",
+    "frontend_cpu_seconds": 282.9,
+    "sources": {
+     "files": 228,
+     "cpu_seconds": 143.0,
+     "seconds_per_file": 0.627
+    },
+    "tests": {
+     "files": 313,
+     "cpu_seconds": 139.9,
+     "seconds_per_file": 0.447
+    },
+    "sources_cost_ratio": 1.4
+   },
+   "what_it_says": "The app's own source is HALF the test bundle's compile cost (51%) while being 42% of the files, because a Sources file costs 1.4x what a Tests file does. The dearest files are all SwiftUI views: CaptionReviewView 5.89s, PhotoAssignmentView 5.66s, OCRReviewView 5.09s. So the lever is the Sources side, and it is about which files are compiled rather than how many.",
+   "superseded_reading": "The first attempt apportioned each BATCH's time across its own files and reported Sources 120.5s at 0.53s a file against Tests 160.3s at 0.51s, concluding that neither half dominates. That was the METHOD, not the code: all 22 batches were mixed at a nearly constant ratio, so apportioning by file count could only ever return a near identical cost per file whatever the truth was (L107, L63). Both the shares and the finding were wrong.",
+   "measured_from": "two cold build-for-testing runs into throwaway derived data paths, one as the job builds it and one with batch mode off, both with -showBuildTimingSummary and OTHER_SWIFT_FLAGS=-stats-output-dir",
+   "re_measure_with": "xcodebuild -project PostRollApp/PostRoll.xcodeproj -scheme PostRollTests -destination 'platform=macOS' -derivedDataPath <fresh dir> SWIFT_ENABLE_BATCH_MODE=NO OTHER_SWIFT_FLAGS='-stats-output-dir <fresh dir>' build-for-testing, then sum each stats file's swift-frontend wall by whether its file sits under Sources or Tests"
+  },
+  "unreached_sources": {
+   "machine": "Daniels-MacBook-Pro-2, 12 cores",
+   "measured_on": "2026-09-03",
+   "sources_files_in_the_bundle": 226,
+   "with_zero_executed_lines": 22,
+   "executable_lines_never_executed": 9339,
+   "executable_lines_in_sources": 58332,
+   "what_it_says": "22 of the 226 Sources files in the test bundle execute no line at all, 9,339 of 58,332 executable lines, and they cost a measured 19.4 CPU-seconds of the 282.9, which is 7%. On three cores that is a handful of seconds of wall. Still not a lever: it is small, and it stops being true the first time a test touches one of those files. The largest are CollagePreviewThumbnail at 3.02s, InstagramMockup at 2.68s and ReelStripPreviewThumbnail at 1.89s.",
+   "measured_from": "the suite run with -enableCodeCoverage YES read through `xcrun xccov view --report --json`, joined to the per-file frontend times from the batch-mode-off build",
+   "re_measure_with": "xcodebuild ... -enableCodeCoverage YES -resultBundlePath <path> test, then xcrun xccov view --report --json <path>",
+   "cpu_seconds": 19.4,
+   "share_of_the_compile": "7%"
+  },
+  "packing": {
+   "what": "Whether the 212s run is bounded by one heavy class or by how the classes are dealt.",
+   "measured_on": "2026-09-03",
+   "classes": 307,
+   "serial_test_body_seconds": 475.8,
+   "heaviest_class_seconds": 78.4,
+   "heaviest_three_classes": {
+    "BannerLegibilityTests": 78.4,
+    "UnseenSurfaceTests": 72.8,
+    "CaptionWorkManagerTests": 57.2
+   },
+   "best_effort_makespan_seconds": {
+    "3_workers": 158.6,
+    "5_workers": 95.2,
+    "12_workers": 78.4
+   },
+   "measured_runner_wall_seconds": 212.2,
+   "what_it_says": "On three workers a cost-aware deal reaches the perfect 158.6s, because the heaviest class is well under it, so the 212.2s the runner takes is about 53s of scheduling loss rather than a class that cannot be split. On twelve workers it inverts: perfect would be 39.7s and the heaviest class alone is the floor. So the one lever that helps both machines is splitting the three classes that hold 44% of the suite's seconds.",
+   "measured_from": "the per-test seconds in run 33760431737's transcript, summed per class, dealt longest-first onto N workers",
+   "re_measure_with": "sum the '(N seconds)' on every 'Test case ... passed on' line of a swift-unit log, group by the class before the dot, then deal longest-first"
+  }
+ },
+ "run_to_run_spread": {
+  "what": "How much the SAME code varies between two runs on the runner, which is the number that decides whether any before and after comparison here means anything (L224). Without it a difference gets read as a result.",
+  "machine": "GitHub macos-26 runner",
+  "cores": 3,
+  "measured_on": "2026-09-04",
+  "wall_seconds": [
+   183.4,
+   157.5
+  ],
+  "spread_seconds": 25.9,
+  "spread_percent": 16.5,
+  "measured_from": "two workflow_dispatch runs of swift.yml on the same commit of main, 33880346541 and 33880353129, each read off xcodebuild's own IDETestOperationsObserverDebug elapsed line",
+  "what_it_means": [
+   "A wall clock difference smaller than about 26 seconds between two",
+   "single runs on this runner is not evidence of anything. #1257 was",
+   "reported as a 10.8% improvement (188.99s against 168.67s, a 20.3s",
+   "gap) on one run per arm, and that gap is INSIDE this spread, so the",
+   "claim was not supported and has been withdrawn.",
+   "",
+   "What still stands for #1257 is the structural bound rather than the",
+   "wall clock: the heaviest class went from 55.2s to under 30s, which is",
+   "arithmetic over the per class sums and not a timing comparison, and",
+   "at 12 workers the heaviest class IS the floor.",
+   "",
+   "To claim a wall clock improvement here, take several runs per arm and",
+   "compare the medians against this spread, the way",
+   "tools/record_test_durations.py takes three readings for the same",
+   "reason (#976)."
+  ],
+  "re_measure_with": "gh workflow run swift.yml --ref main, twice, then read the elapsed line from each: gh run view <id> --log --job <swift-unit id> | grep -oE 'IDETestOperationsObserverDebug: [0-9.]+ elapsed'"
+ }
 }
