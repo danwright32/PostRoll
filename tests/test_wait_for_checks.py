@@ -239,6 +239,53 @@ def test_a_job_condition_this_cannot_read_refuses_to_answer(tmp_path: Path) -> N
         expected_checks(workflows)
 
 
+def test_a_job_that_also_waits_on_another_job_still_reads_as_skipping(
+        tmp_path: Path) -> None:
+    """A conjunction whose first half is the known condition (#1259).
+
+    The guard sweep now waits to be told whether it has anything to prove, so
+    its condition is `not a pull request AND the answer was yes`. On a pull
+    request the first half is false, so the job skips whatever the second half
+    says, and the bar is unchanged.
+
+    Only AND. `A || B` would be the opposite: the job could run on a pull
+    request through B, and treating it as skipping would drop a check nobody
+    then waits for.
+    """
+    workflows = tmp_path / "workflows"
+    workflows.mkdir()
+    (workflows / "guards.yml").write_text(
+        "name: Guard proofs\non:\n  pull_request:\n  schedule:\n"
+        "    - cron: '0 7 * * *'\njobs:\n"
+        "  full:\n    if: github.event_name != 'pull_request' && "
+        "needs.due.outputs.due == 'true'\n    runs-on: macos-26\n",
+        encoding="utf-8")
+
+    checks = expected_checks(workflows)
+
+    assert {(c.name, c.skips_on_pull_request) for c in checks} == {("full", True)}
+
+
+def test_a_job_that_could_run_on_a_pull_request_through_an_or_is_refused(
+        tmp_path: Path) -> None:
+    """The other half of the rule above, and the one that matters.
+
+    `A || B` can be true on a pull request through B. Reading it as skipping
+    would take a real check out of the bar, and a check nobody waits for is a
+    check that cannot block a merge (L98).
+    """
+    workflows = tmp_path / "workflows"
+    workflows.mkdir()
+    (workflows / "guards.yml").write_text(
+        "name: Guard proofs\non:\n  pull_request:\njobs:\n"
+        "  full:\n    if: github.event_name != 'pull_request' || "
+        "needs.due.outputs.due == 'true'\n    runs-on: macos-26\n",
+        encoding="utf-8")
+
+    with pytest.raises(UnreadableWorkflow, match="if:"):
+        expected_checks(workflows)
+
+
 def test_a_matrix_this_cannot_expand_refuses_to_answer(tmp_path: Path) -> None:
     workflows = tmp_path / "workflows"
     workflows.mkdir()

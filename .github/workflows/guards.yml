@@ -241,8 +241,186 @@ jobs:
   # This repository is public, so the standard runners cost nothing and the
   # price is wall clock on a branch nobody is waiting behind, since this runs
   # after the merge rather than before it.
-  full:
+  # Does the sweep have anything to prove at all? Asked ONCE, on Linux (#1259).
+  #
+  # `check_guard_sweep_due.py` has always existed to make a quiet day free, and
+  # it was the FIRST STEP OF EACH of the seven macOS shards below. So a quiet
+  # day still started seven macOS runners to be told, seven times, that there
+  # was nothing to do.
+  #
+  # That reads as almost free and is not, because the cost is per JOB rather
+  # than per minute of work: GitHub bills every job rounded UP to a whole minute
+  # and a macOS minute draws TEN from the allowance (L306, L310). Measured on
+  # the 2026-09-04 sweep, the steps that ran whatever the answer was came to 21
+  # seconds, which bills as a whole minute, so seven shards cost 70 allowance
+  # minutes a day. Over a month that is 2,100 against the 2,000 a private
+  # repository on the free plan gets, so a completely quiet month, with nothing
+  # proved at all, would spend the entire allowance asking a question whose
+  # answer is "nothing".
+  #
+  # Asked here it is one ubuntu job at a multiplier of one: about 30 allowance
+  # minutes a month rather than 2,100.
+  #
+  # The per-shard gate inside each shard STAYS. The two answer different
+  # questions: this one is "take any Mac at all", and that one is "does THIS
+  # shard have work" once a neighbour has already started the sweep. Without
+  # the second, one shard left unproved by a deadline would make the other six
+  # redo a share they had already proved.
+  #
+  # This IS a new check name, which the reporting steps below were deliberately
+  # kept out of a job to avoid. That cost is paid once, and by re-recording
+  # tests/fixtures/gh_pr_checks_real.json from a real pull request carrying it,
+  # never by hand-editing the fixture to agree with what it verifies (L48, L58).
+  due:
     if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    # A job without a deadline cannot fail, it can only hang (L110, L313). This
+    # reads a page of run history and writes one output, so 15 is generous.
+    #
+    # It is 15 rather than 5 because tests/test_a_wedged_test_names_itself.py
+    # requires every job deadline in a workflow that runs pytest to outlast the
+    # 600 second per-test deadline: a job killed first reports only that it ran
+    # out of time, and the per-test diagnostic goes inert while still reading as
+    # configured. That rule is about the shards below, which do run tests, and
+    # it reads the whole FILE rather than the job (L135). Satisfying it here
+    # costs nothing real, since this is a backstop against a hang rather than a
+    # budget.
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+    outputs:
+      due: ${{ steps.ask.outputs.due }}
+      shards: ${{ steps.ask.outputs.shards }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      # `--shards 7` rather than seven calls: ONE read of the run history
+      # answers for every shard, and seven reads to answer one question is the
+      # cost this job exists to remove. The 7 is the matrix width below, held to
+      # it by tests/test_guard_sweep_fits_its_deadline.py.
+      - name: Ask whether any shard has something to prove
+        id: ask
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python tools/check_guard_sweep_due.py --shards 7
+
+      # The three steps below moved here from the foot of `full` (#1259).
+      #
+      # They have to run whatever the sweep decides, and inside `full` they only
+      # ran on the days it did. The freshness watchdog is the clearest case: it
+      # exists because a schedule's failure mode is SILENCE, and left in the
+      # shards it fell silent at exactly the same moment as the thing it watches
+      # (L98, L144). None of the three needs a Mac, and none of them is about
+      # any one shard, which is why each carried `matrix.shard == 1` before.
+      #
+      # Asking BEFORE the sweep rather than after it is safe for the freshness
+      # check: its window is 14 days and the staleness rule forces a sweep every
+      # 7, so it cannot accuse a healthy schedule of having stopped.
+      # Whether the SCHEDULED sweep is still happening at all (#554). The weekly
+      # trigger's failure mode is silence: GitHub disables a repository's
+      # schedules after 60 days with no push and reports that nowhere, so
+      # without this the guards could stop being re-proved with nothing saying
+      # so.
+      #
+      # `always()` on purpose. This is an independent check that happens to
+      # share a job, and letting a red sweep above it skip the question of
+      # whether the schedule is alive would make the two failures hide each
+      # other (L73).
+      #
+      # On ONE shard, because the sweep became a matrix and the question is
+      # about the workflow rather than about any shard: asked on all four it
+      # would be answered four times. It was briefly its own job instead, which
+      # is tidier and wrong: a new job is a new CHECK NAME, and
+      # tests/test_wait_for_checks.py calibrates the checks it waits for against
+      # a RECORDED reply from a real pull request. Adding a name to the
+      # workflows without a new recording would have meant hand-editing that
+      # fixture, and a fixture edited to match the thing it is meant to verify
+      # is no longer evidence of anything (L48, L58).
+      - name: Say whether the scheduled sweep is still running
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python tools/check_guard_sweep_freshness.py
+
+      # How long each CI job has been taking, compared against itself (#1019).
+      #
+      # Nothing read its own duration over time, so the Swift step's median
+      # moved 11% in the week of 2026-08-22 and the guard sweep drifted to
+      # within a few entries of its own deadline, both found by an audit rather
+      # than by anything running. This is also the instrument #991 and #992 are
+      # judged by, which is why it lands ahead of them (L309).
+      #
+      # Here, on one shard, for exactly the reason written above the step it
+      # sits beside: a new job is a new CHECK NAME, and adding one costs a
+      # knowingly red merge. Same placement, same reason.
+      #
+      # It warns and never gates. A job getting slower does not make the change
+      # being merged wrong, and failing a run for it is how a check teaches
+      # everyone to bypass it (L36).
+      # The figures an OPEN ISSUE was written on (#1033).
+      #
+      # #991 recorded 58 cache entries holding 16 GB; a day later it was 76
+      # holding 20.9 GB, 30 percent out, and a previous session found three of
+      # six premises in one issue did not survive checking. A number with a date
+      # on it reads as MORE trustworthy, not less (L316), so the remedy is to
+      # re-take the reading.
+      #
+      # Here, on one shard, and warning only, for exactly the reasons written
+      # above the two steps below it: a new job is a new CHECK NAME, the
+      # question is about the repository rather than any shard, and a figure
+      # having moved does not make the change being merged wrong (L36).
+      - name: Say whether an open issue's recorded figures have moved
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python tools/check_issue_figures.py
+
+      - name: Say whether any CI job's duration has moved
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for workflow in swift.yml tests.yml guards.yml; do
+            python tools/check_job_durations.py --workflow "${workflow}"
+          done
+
+      # A red run here reaches nobody otherwise (#1011).
+      #
+      # This job never runs on a pull request, so nothing it does can block a
+      # merge and a failure would sit in the Actions tab until somebody opened
+      # it. That is how every guard in the registry stopped being re-proved for
+      # hours on 2026-08-19 (L13).
+      #
+      # It matters more here than almost anywhere else: this job is the gate on
+      # the whole sweep now, so a failure means the shards never start, and
+      # them not starting reads exactly like a quiet day (L98).
+      - name: Say so if this run went red
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python tools/say_when_ci_goes_red.py \
+            --workflow guards.yml \
+            --job "due" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+  full:
+    # `needs` alone would only make the shards WAIT for the answer; the
+    # condition is what makes them act on it (L197).
+    #
+    # The conjunction is classifiable by tools/wait_for_checks.py, which
+    # derives the merge bar from these files and refuses a condition it
+    # cannot read rather than guessing. On a pull request the first half is
+    # false, so this skips whatever the second half says, and the bar is
+    # unchanged.
+    needs: due
+    if: github.event_name != 'pull_request' && needs.due.outputs.due == 'true'
     runs-on: macos-26
     timeout-minutes: 45
     strategy:
@@ -369,74 +547,6 @@ jobs:
           name: guard-timings-${{ matrix.shard }}
           path: guard-timings-${{ matrix.shard }}.json
           if-no-files-found: warn
-
-      # Whether the SCHEDULED sweep is still happening at all (#554). The weekly
-      # trigger's failure mode is silence: GitHub disables a repository's
-      # schedules after 60 days with no push and reports that nowhere, so
-      # without this the guards could stop being re-proved with nothing saying
-      # so.
-      #
-      # `always()` on purpose. This is an independent check that happens to
-      # share a job, and letting a red sweep above it skip the question of
-      # whether the schedule is alive would make the two failures hide each
-      # other (L73).
-      #
-      # On ONE shard, because the sweep became a matrix and the question is
-      # about the workflow rather than about any shard: asked on all four it
-      # would be answered four times. It was briefly its own job instead, which
-      # is tidier and wrong: a new job is a new CHECK NAME, and
-      # tests/test_wait_for_checks.py calibrates the checks it waits for against
-      # a RECORDED reply from a real pull request. Adding a name to the
-      # workflows without a new recording would have meant hand-editing that
-      # fixture, and a fixture edited to match the thing it is meant to verify
-      # is no longer evidence of anything (L48, L58).
-      - name: Say whether the scheduled sweep is still running
-        if: always() && matrix.shard == 1
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python tools/check_guard_sweep_freshness.py
-
-      # How long each CI job has been taking, compared against itself (#1019).
-      #
-      # Nothing read its own duration over time, so the Swift step's median
-      # moved 11% in the week of 2026-08-22 and the guard sweep drifted to
-      # within a few entries of its own deadline, both found by an audit rather
-      # than by anything running. This is also the instrument #991 and #992 are
-      # judged by, which is why it lands ahead of them (L309).
-      #
-      # Here, on one shard, for exactly the reason written above the step it
-      # sits beside: a new job is a new CHECK NAME, and adding one costs a
-      # knowingly red merge. Same placement, same reason.
-      #
-      # It warns and never gates. A job getting slower does not make the change
-      # being merged wrong, and failing a run for it is how a check teaches
-      # everyone to bypass it (L36).
-      # The figures an OPEN ISSUE was written on (#1033).
-      #
-      # #991 recorded 58 cache entries holding 16 GB; a day later it was 76
-      # holding 20.9 GB, 30 percent out, and a previous session found three of
-      # six premises in one issue did not survive checking. A number with a date
-      # on it reads as MORE trustworthy, not less (L316), so the remedy is to
-      # re-take the reading.
-      #
-      # Here, on one shard, and warning only, for exactly the reasons written
-      # above the two steps below it: a new job is a new CHECK NAME, the
-      # question is about the repository rather than any shard, and a figure
-      # having moved does not make the change being merged wrong (L36).
-      - name: Say whether an open issue's recorded figures have moved
-        if: always() && matrix.shard == 1
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python tools/check_issue_figures.py
-
-      - name: Say whether any CI job's duration has moved
-        if: always() && matrix.shard == 1
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          for workflow in swift.yml tests.yml guards.yml; do
-            python tools/check_job_durations.py --workflow "${workflow}"
-          done
 
       # A red run here reaches nobody otherwise (#1011).
       #

@@ -53,7 +53,8 @@ from tools.guard_sweep_history import (
     shard_of_job_name,
     sweeps_from_jobs,
 )
-from tools.check_guard_sweep_due import Due, Decision, decide
+from tools.check_guard_sweep_due import (
+    Due, Decision, SweepDecision, decide, decide_sweep)
 
 NOW = datetime(2026, 8, 30, 7, 0, tzinfo=timezone.utc)
 WINDOW = timedelta(days=7)
@@ -267,3 +268,119 @@ def test_an_unreadable_timestamp_on_a_run_is_not_read_as_now():
         jobs=[job("full (1)", (PROOF_STEP, "success"))])
     assert summary.created_at is None
     assert call([summary]).run is True
+
+
+# ── asking for the whole sweep, once, before any Mac starts (#1259) ───────────
+#
+# The per-shard question above stays exactly as it is: it is what keeps a shard
+# that was already proved from redoing its share when a NEIGHBOUR is the reason
+# the sweep ran. What is new is asking it for every shard at once, off the Mac,
+# so a day with nothing to prove starts no macOS runner at all.
+#
+# The measurement that makes this worth doing is per JOB, not per minute:
+# GitHub bills every job rounded up to a whole minute and a macOS minute draws
+# ten from the allowance, so seven shards discovering they have nothing to do
+# cost 70 allowance minutes a day, 2,100 a month, against the 2,000 a private
+# repository on the free plan gets (#1259, L306, L310).
+
+
+def sweep_call(history, *, shards: int = 7, sha: str = TREE) -> SweepDecision:
+    return decide_sweep(sha=sha, shards=shards, history=history, now=NOW,
+                        unconditional_after=WINDOW)
+
+
+def proved_all(shards: int = 7) -> list[Sweep]:
+    """One run that proved every shard, which is what a normal sweep leaves."""
+    return [Sweep(run_id=100, head_sha=TREE, created_at=NOW - timedelta(days=1),
+                  event="schedule",
+                  ran_shards=frozenset(range(1, shards + 1)),
+                  passed_shards=frozenset(range(1, shards + 1)))]
+
+
+def test_a_tree_every_shard_has_proved_starts_no_mac():
+    result = sweep_call(proved_all())
+
+    assert result.run is False
+    assert result.due_shards == ()
+
+
+def test_one_unproved_shard_is_enough_to_start_the_sweep():
+    """The shards are not independent jobs here: the decision is whether to
+    take any Mac at all. A single shard with something to prove is a yes, and
+    the per-shard gate inside each shard is what stops the other six redoing
+    work they have already done."""
+    history = [Sweep(run_id=100, head_sha=TREE, created_at=NOW - timedelta(days=1),
+                     event="schedule", ran_shards=frozenset(range(1, 8)),
+                     passed_shards=frozenset({1, 2, 3, 4, 5, 7}))]
+
+    result = sweep_call(history)
+
+    assert result.run is True
+    assert result.due_shards == (6,)
+
+
+def test_it_says_which_shards_it_is_starting_the_sweep_for():
+    """A yes that does not say which shard asked for it cannot be told from a
+    yes for every shard, and those are a 21 second run and a 25 minute one
+    (L11)."""
+    history = [Sweep(run_id=100, head_sha=TREE, created_at=NOW - timedelta(days=1),
+                     event="schedule", ran_shards=frozenset(range(1, 8)),
+                     passed_shards=frozenset({1, 2, 3, 4, 5, 7}))]
+
+    assert "6" in sweep_call(history).message
+
+
+def test_a_history_that_could_not_be_read_starts_the_sweep():
+    """Same asymmetry as the per-shard gate: a query that failed must never
+    pass for a proof that succeeded (L98)."""
+    result = sweep_call(None)
+
+    assert result.run is True
+    assert result.due_shards == tuple(range(1, 8))
+    assert Due.HISTORY_UNREADABLE.value in result.message, (
+        "a sweep that runs because the history could not be read reads the "
+        "same as one that runs because the tree is new, and those need "
+        f"different answers from a reader (L11): {result.message}")
+    assert Due.TREE_NOT_PROVED.value not in result.message
+
+
+def test_a_proof_older_than_the_window_starts_the_sweep_on_an_unchanged_tree():
+    """The runner image, the pinned Xcode and Homebrew all move with no commit
+    here, so an unchanged tree is not an unchanged proof (#551)."""
+    stale = [Sweep(run_id=100, head_sha=TREE, created_at=NOW - timedelta(days=9),
+                   event="schedule", ran_shards=frozenset(range(1, 8)),
+                   passed_shards=frozenset(range(1, 8)))]
+
+    assert sweep_call(stale).run is True
+
+
+def test_it_asks_about_every_shard_rather_than_the_first_one():
+    """The positive control on the loop. Asking only shard 1 would report a
+    quiet day whenever shard 1 happened to be proved, and the six shards it
+    never asked about would go unswept with nothing saying so (L98)."""
+    history = [Sweep(run_id=100, head_sha=TREE, created_at=NOW - timedelta(days=1),
+                     event="schedule", ran_shards=frozenset(range(1, 8)),
+                     passed_shards=frozenset({1}))]
+
+    assert sweep_call(history).due_shards == (2, 3, 4, 5, 6, 7)
+
+
+def test_it_reads_the_history_once_rather_than_once_per_shard():
+    """Structural, and the reason this is one function rather than seven calls
+    to the old one: the history arrives as an argument, so nothing here can
+    fetch it per shard. Seven queries to answer one question is the cost this
+    was written to remove."""
+    import inspect
+
+    signature = inspect.signature(decide_sweep)
+
+    assert "history" in signature.parameters, (
+        "decide_sweep no longer takes the history, so it is free to fetch it "
+        "per shard and the saving can be undone without any test noticing")
+
+
+def test_no_shards_at_all_is_refused_rather_than_read_as_nothing_to_do():
+    """Zero shards would answer "nothing is due" about a sweep that has no
+    shards to run, which is a broken workflow reading as a quiet day (L98)."""
+    with pytest.raises(ValueError, match="shard"):
+        sweep_call(proved_all(), shards=0)

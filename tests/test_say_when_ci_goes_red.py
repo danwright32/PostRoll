@@ -22,6 +22,8 @@ from pathlib import Path
 
 import pytest
 
+from tools.wait_for_checks import _job_blocks
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "tools"))
 
@@ -206,16 +208,21 @@ def _job(name: str) -> str:
     """One job's own text, so a check about `full` is not answered by `changed`.
 
     A rule matched over a whole file is satisfied by any occurrence in it, and
-    with two jobs in one file that is exactly how a step present in the wrong
-    one reads as present (L135).
+    with several jobs in one file that is exactly how a step present in the
+    wrong one reads as present (L135).
+
+    Where the job ends is DERIVED rather than found by naming the jobs that
+    might follow. It used to be a hand-written pair, ("changed", "full"), and
+    #1259 added a third job between them: `changed` then ran to the start of
+    `full`, swallowing the new job whole, and a check asserting the reporter was
+    absent from `changed` failed on the reporter belonging to a job it should
+    never have been reading (L96, L100).
     """
-    text = GUARDS.read_text(encoding="utf-8")
-    start = text.index(f"\n  {name}:\n")
-    rest = text[start + 1:]
-    following = [rest.index(f"\n  {other}:\n")
-                 for other in ("changed", "full") if other != name
-                 and f"\n  {other}:\n" in rest]
-    return rest[:min(following)] if following else rest
+    blocks = dict(_job_blocks(GUARDS.read_text(encoding="utf-8")))
+    assert name in blocks, (
+        f"guards.yml has no {name!r} job, so every check reading it would be "
+        f"answered by nothing at all (L100). It has {sorted(blocks)}")
+    return blocks[name]
 
 
 def test_the_job_that_cannot_gate_anything_reports_its_own_failure():
