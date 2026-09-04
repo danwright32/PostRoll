@@ -233,12 +233,63 @@ final class RepoFixtureTests: XCTestCase {
         for url in entries where url.pathExtension == "swift" {
             guard url.lastPathComponent != "RepoFixture.swift",
                   url.lastPathComponent != "RepoFixtureTests.swift",
-                  let text = try? String(contentsOf: url, encoding: .utf8),
-                  text.contains("tests/fixtures/") else { continue }
+                  let raw = try? String(contentsOf: url, encoding: .utf8)
+            else { continue }
+            // Comments blanked before the scan (#1230). The scan used to read
+            // the whole file, so a DOC COMMENT naming a fixture was
+            // indistinguishable from code reading one: on 2026-09-02 a comment
+            // explaining that the shared payload contract no longer declares a
+            // key named the file by its path, and a suite that reads no fixture
+            // at all was reported as reading one unsafely.
+            //
+            // That failure named the file but not the line, and the remedy it
+            // suggested was not the remedy, so it read as a real defect and it
+            // surfaced only in a ten minute run (L361, L103).
+            let text = SwiftSourceText.withoutComments(raw)
+            guard text.contains("tests/fixtures/") else { continue }
             if !text.contains("RepoFixture.") { offenders.append(url.lastPathComponent) }
         }
         XCTAssertTrue(offenders.isEmpty,
                       "these suites read a repo fixture without RepoFixture, so a refused "
                       + "folder reports as a broken test: \(offenders.sorted())")
+    }
+
+    func testAFixturePathInACommentIsNotReadingAFixture() throws {
+        // The case #1230 came from, and the one the whole-file scan could not
+        // tell from a real read.
+        let mentioned = """
+        /// Explains that tests/fixtures/bridge_payload_contract.json no longer
+        /// declares the key, which is what this suite is about.
+        final class SomeTests: XCTestCase {
+            func testSomething() { XCTAssertTrue(true) }
+        }
+        """
+
+        let code = SwiftSourceText.withoutComments(mentioned)
+
+        XCTAssertFalse(code.contains("tests/fixtures/"),
+                       "a fixture named only in a comment still reads as a "
+                       + "suite reading one, which is the false failure #1230 "
+                       + "is about")
+    }
+
+    func testAFixturePathInCodeIsStillFound() throws {
+        // The positive control (L159). Without it, "a comment is not a read" is
+        // satisfied by a stripper that blanked the whole file, and the guard
+        // would then find nothing anywhere.
+        let reads = """
+        final class SomeTests: XCTestCase {
+            func testSomething() throws {
+                let url = root.appendingPathComponent("tests/fixtures/thing.json")
+                _ = try Data(contentsOf: url)
+            }
+        }
+        """
+
+        let code = SwiftSourceText.withoutComments(reads)
+
+        XCTAssertTrue(code.contains("tests/fixtures/"),
+                      "the stripper blanked a string literal, so the guard can "
+                      + "no longer see a suite that really does read a fixture")
     }
 }

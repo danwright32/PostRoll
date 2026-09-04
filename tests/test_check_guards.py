@@ -1933,3 +1933,120 @@ def test_a_failed_shared_build_does_not_record_a_cold_reading(tmp_path: Path,
                   warm=WarmBuild(seconds=3.0, ok=False))
 
     assert json.loads(path.read_text())["cold"] is None
+
+
+# ── an anchor survives reindentation (#1040) ─────────────────────────────────
+#
+# Several entries anchor on exact indented text from a workflow, so ordinary
+# reformatting broke them and the error named the guard rather than the edit.
+# Hit twice on 2026-08-30 in one change: nesting an xcodebuild call under a
+# wrapper shifted its arguments two spaces, and `derived-data-actually-built-into`
+# matched 0 places instead of 1, needing a hand re-anchor with no behaviour
+# change.
+#
+# A guard that breaks on whitespace teaches people that a red guard means a
+# stale registry rather than a real regression, which is the reading that
+# eventually waves a genuine one through.
+
+def test_an_anchor_is_found_after_the_block_is_indented():
+    from tools.check_guards import anchor_span
+
+    recorded = "  - name: Run it\n    run: xcodebuild -scheme X\n"
+    reindented_file = "jobs:\n  outer:\n      - name: Run it\n        run: xcodebuild -scheme X\n"
+
+    start, end = anchor_span(reindented_file, recorded)
+
+    assert reindented_file[start:end].strip().startswith("- name: Run it")
+
+
+def test_an_exact_match_wins_over_a_looser_one():
+    """Elasticity costs uniqueness. Three anchors in this registry are unique
+    only by their indentation, and matching loosely FIRST made all three
+    ambiguous, so the loose match is reached only when the exact one finds
+    nothing, which is precisely the reformatting case (L214)."""
+    from tools.check_guards import anchor_span
+
+    # Two places that differ only in indentation; the recorded one is exact.
+    text = "  run: a\n" + "      run: a\n"
+
+    start, end = anchor_span(text, "      run: a\n")
+
+    assert text[start:end] == "      run: a\n"
+
+
+def test_an_anchor_matching_several_places_exactly_is_not_retried_loosely():
+    """Loosening a pattern that already matches too much can only match
+    more, so the refusal has to stand (L11)."""
+    from tools.check_guards import StaleAnchor, anchor_span
+
+    with pytest.raises(StaleAnchor) as refusal:
+        anchor_span("  run: a\n  run: a\n", "  run: a\n")
+
+    assert "2 places" in str(refusal.value)
+    assert "indentation" not in str(refusal.value), (
+        "it blamed indentation for an anchor that matches too much exactly, "
+        "which sends the reader to fix the wrong thing (L11)")
+
+
+def test_only_the_leading_whitespace_is_elastic():
+    """It must not start matching a DIFFERENT place. Everything after the first
+    non-space character is literal, so two steps that differ in their body are
+    still two steps (L100)."""
+    from tools.check_guards import StaleAnchor, anchor_span
+
+    with pytest.raises(StaleAnchor):
+        anchor_span("    run: xcodebuild -scheme Y\n", "  run: xcodebuild -scheme X\n")
+
+
+def test_two_matches_after_reindentation_are_still_refused():
+    from tools.check_guards import StaleAnchor, anchor_span
+
+    # Neither is exact, and both match once indentation is allowed to vary.
+    twice = "    run: a\n" + "      run: a\n"
+
+    with pytest.raises(StaleAnchor) as refusal:
+        anchor_span(twice, "  run: a\n")
+    assert "2 " in str(refusal.value)
+
+
+def test_the_replacement_follows_the_files_own_indentation():
+    """Elastic matching alone would fix the FINDING and break the WRITING: a
+    replacement pasted at the recorded indentation into a reindented file
+    produces YAML that does not parse, and the guard would then fail for a
+    reason unrelated to what it checks."""
+    from tools.check_guards import reindented
+
+    out = reindented(replace="  run: a\n  run: b\n",
+                     matched="      run: a\n      run: b\n",
+                     find="  run: a\n  run: b\n")
+
+    assert out == "      run: a\n      run: b\n"
+
+
+def test_a_replacement_needs_no_shift_when_nothing_moved():
+    from tools.check_guards import reindented
+
+    assert reindented("  a\n", "  a\n", "  a\n") == "  a\n"
+
+
+def test_an_outdented_file_shifts_the_replacement_back():
+    from tools.check_guards import reindented
+
+    assert reindented("      a\n", "  a\n", "      a\n") == "  a\n"
+
+
+def test_tabs_refuse_the_shift_rather_than_guessing():
+    """The shift is a count of characters, and mixing tabs with spaces makes
+    that arithmetic meaningless. Every file in this registry indents with
+    spaces, so this is a refusal to guess rather than a path anybody takes."""
+    from tools.check_guards import reindented
+
+    assert reindented("  a\n", "\t\ta\n", "  a\n") == "  a\n"
+
+
+def test_a_blank_line_in_the_replacement_stays_blank():
+    from tools.check_guards import reindented
+
+    out = reindented("  a\n\n  b\n", "    a\n\n    b\n", "  a\n\n  b\n")
+
+    assert out == "    a\n\n    b\n"
