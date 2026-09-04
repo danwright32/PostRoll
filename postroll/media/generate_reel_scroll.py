@@ -141,6 +141,22 @@ CHROME_BOTTOM_Y = TITLE_BAND_BOTTOM
 TITLE_TOP_Y = TITLE_BAND_TOP + 26
 # The bottom chrome. The colophon does not live here (it is baked into the strip
 # right under the last photo), so this is a thin band closing the gallery.
+# The overlap with Instagram's caption is DELIBERATE, decided on a measurement
+# (#1238). This reserves 100px where `SAFE_BOTTOM` covers 160, so the bottom
+# 60px of the gallery is behind the caption.
+#
+# Nothing is lost by it. Mid scroll a photograph passes through that band and is
+# at worst 28% covered while it does, against the 50% that counts as losing one.
+# At the closing HOLD, which is the one moment the "only passing through"
+# reasoning does not cover, no photograph is in the band at all: the strip
+# carries a mat below its last row deeper than the overlap, measured 2026-09-04
+# at 218px across 6 to 24 photographs and four seeds each, and 309px at six.
+#
+# Raising this to SAFE_BOTTOM would take 60px of gallery height off every
+# Thursday reel, and a design version with it, to fix something that does not
+# happen. `tests/test_photo_coverage_registry.py` holds both halves, so a layout
+# change that starts putting a photograph behind the caption goes red rather
+# than quietly shipping.
 FOOTER_H = 100
 
 # ── The viewport (#898) ──────────────────────────────────────────────────────
