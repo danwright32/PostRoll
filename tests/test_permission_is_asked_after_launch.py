@@ -31,7 +31,9 @@ APP = ROOT / "PostRollApp" / "Sources" / "PostRollApp.swift"
 DELEGATE = ROOT / "PostRollApp" / "Sources" / "Services" / "DeepLinkInbox.swift"
 
 
-def _code(path: Path = APP) -> str:
+def _code(path: Path | None = None) -> str:
+    if path is None:
+        path = APP
     return swift_without_comments(path.read_text())
 
 

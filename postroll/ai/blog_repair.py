@@ -240,14 +240,14 @@ def repair_alt_text(
         program: dict[str, Any] | None,
         venue: str,
         photo_paths: dict[str, str],
-        runner: Callable[..., Any] = run_json_prompt,
+        runner: Callable[..., Any] | None = None,
         now: Callable[[], float] | None = None,
         deadline: float | None = None,
         max_rounds: int = MAX_ROUNDS,
         timeout: int = CALL_TIMEOUT,
         journal: Callable[[dict], None] | None = None,
         log: RepairLog | None = None,
-        say: Any = None,
+        say: Any | None = None,
         only: list[str] | None = None,
 ) -> RepairOutcome:
     """Rewrite every alt text a check refused, one call per marker.
@@ -269,6 +269,8 @@ def repair_alt_text(
     is shared differently on each path, and a budget expressed as a constant is
     safe only for whichever path calibrated it (L227, L522).
     """
+    if runner is None:
+        runner = run_json_prompt
     import time
 
     now = now or time.monotonic

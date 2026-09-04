@@ -83,7 +83,7 @@ def _comment_lines(path: Path) -> list[tuple[int, str]]:
             if line.lstrip().startswith("#")]
 
 
-def scanned_files(root: Path = REPO_ROOT) -> list[Path]:
+def scanned_files(root: Path | None = None) -> list[Path]:
     """The files this reads, resolved.
 
     Its own function so a test can assert the sweep is actually looking at
@@ -91,6 +91,8 @@ def scanned_files(root: Path = REPO_ROOT) -> list[Path]:
     recomputed beside it, because two derivations of the same list drift and the
     control would then pass while the sweep read nothing (L70, L107).
     """
+    if root is None:
+        root = REPO_ROOT
     found: list[Path] = []
     for pattern in SCANNED:
         paths = sorted(root.glob(pattern)) if "*" in pattern else [root / pattern]
@@ -98,8 +100,10 @@ def scanned_files(root: Path = REPO_ROOT) -> list[Path]:
     return found
 
 
-def unattributed(root: Path = REPO_ROOT) -> list[dict]:
+def unattributed(root: Path | None = None) -> list[dict]:
     """Every stated duration with nothing nearby saying where it was measured."""
+    if root is None:
+        root = REPO_ROOT
     found: list[dict] = []
     for path in scanned_files(root):
         lines = path.read_text(encoding="utf-8").splitlines()

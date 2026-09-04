@@ -83,7 +83,7 @@ def _tracked_dirs(tracked: Collection[str]) -> set[str]:
 
 
 def scan(root: Path, tracked: Collection[str],
-         walk: Callable[..., Iterable] = os.walk) -> list[str]:
+         walk: Callable[..., Iterable] | None = None) -> list[str]:
     """Numbered copies of tracked paths present under `root`, repo relative.
 
     A copy is compared against the tracked path it sits beside, not against a
@@ -94,6 +94,8 @@ def scan(root: Path, tracked: Collection[str],
     Raises ValueError when `tracked` is empty, because a scan against an empty
     list reports a clean tree whatever is on disk (LESSONS.md L98).
     """
+    if walk is None:
+        walk = os.walk
     if not tracked:
         raise ValueError(
             "no tracked files: refusing to report a clean tree, because an "

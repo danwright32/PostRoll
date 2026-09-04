@@ -78,7 +78,9 @@ def camel(snake: str) -> str:
     return head + "".join(word.capitalize() for word in rest)
 
 
-def python_functions(root: Path = REPO_ROOT) -> dict[str, set[str]]:
+def python_functions(root: Path | None = None) -> dict[str, set[str]]:
+    if root is None:
+        root = REPO_ROOT
     found: dict[str, set[str]] = {}
     for path in sorted((root / "postroll").rglob("*.py")):
         for match in PY_DEF.finditer(path.read_text(encoding="utf-8")):
@@ -87,8 +89,10 @@ def python_functions(root: Path = REPO_ROOT) -> dict[str, set[str]]:
     return found
 
 
-def swift_functions(root: Path = REPO_ROOT) -> dict[str, set[str]]:
+def swift_functions(root: Path | None = None) -> dict[str, set[str]]:
     """Swift functions with a body, minus the ones that await Python."""
+    if root is None:
+        root = REPO_ROOT
     found: dict[str, set[str]] = {}
     sources = root / "PostRollApp" / "Sources"
     for path in sorted(sources.rglob("*.swift")):
@@ -100,8 +104,10 @@ def swift_functions(root: Path = REPO_ROOT) -> dict[str, set[str]]:
     return found
 
 
-def contracts(root: Path = REPO_ROOT) -> dict[str, str]:
+def contracts(root: Path | None = None) -> dict[str, str]:
     """Every shared fixture, by file name, with its text."""
+    if root is None:
+        root = REPO_ROOT
     found = {}
     for path in sorted((root / "tests" / "fixtures").rglob("*")):
         if (path.is_file() and path.suffix in CONTRACT_SUFFIXES
@@ -114,8 +120,10 @@ def _reads(text: str, names: set[str]) -> set[str]:
     return {name for name in names if name in text}
 
 
-def twins(root: Path = REPO_ROOT) -> list[dict]:
+def twins(root: Path | None = None) -> list[dict]:
     """Every candidate pair, and what pins it."""
+    if root is None:
+        root = REPO_ROOT
     python, swift = python_functions(root), swift_functions(root)
     shared = contracts(root)
     names = set(shared)

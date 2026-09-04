@@ -179,8 +179,10 @@ def _say(message: str) -> None:
 
 
 def measure(clips: list[Path], workspace: Path, *, seconds: float,
-            log=_say) -> list[dict]:
+            log=None) -> list[dict]:
     """Render every variant and read each one against the lossless reference."""
+    if log is None:
+        log = _say
     selections = _selections(clips, seconds=seconds)
     rendered: dict[str, Path] = {}
     took: dict[str, float] = {}

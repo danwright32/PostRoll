@@ -108,8 +108,10 @@ def _split(path: Path, text: str) -> tuple[str, str]:
         return text, text
 
 
-def offences(root: Path = REPO_ROOT) -> dict[str, list[str]]:
+def offences(root: Path | None = None) -> dict[str, list[str]]:
     """Every line breaking the rule, as `kind -> ["path:line: text", ...]`."""
+    if root is None:
+        root = REPO_ROOT
     found: dict[str, list[str]] = {"copyInTheApp": [], "copyElsewhere": [],
                                    "prose": []}
     for area in ROOTS:

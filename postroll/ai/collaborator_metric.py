@@ -139,13 +139,15 @@ def assumed_rate(accounts: Iterable[Account],
     return percentile(in_band, ASSUMED_PERCENTILE)
 
 
-def load(path: Path = POPULATION) -> list[Account]:
+def load(path: Path | None = None) -> list[Account]:
     """The committed population.
 
     Refuses an empty file rather than returning an empty list, for the same
     reason `percentile` refuses one: every figure here is a percentile, and a
     percentile of nothing reads as a very small number to whoever gets it.
     """
+    if path is None:
+        path = POPULATION
     if not path.exists():
         raise FileNotFoundError(
             f"{path} is missing, so nothing can say what the collaborator "

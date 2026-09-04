@@ -105,8 +105,10 @@ class RecordingRunner:
     """
 
     def __init__(self, inner: Callable[..., str],
-                 clock: Callable[[], float] = time.monotonic,
+                 clock: Callable[[], float] | None = None,
                  sink: Callable[[CallRecord], None] | None = None):
+        if clock is None:
+            clock = time.monotonic
         self._inner = inner
         self._clock = clock
         self._records: list[CallRecord] = []
@@ -148,7 +150,7 @@ class RecordingRunner:
 SEAMS = ("_run_sdk", "_run_cli")
 
 
-def install_recorder(claude_client, clock: Callable[[], float] = time.monotonic):
+def install_recorder(claude_client, clock: Callable[[], float] | None = None):
     """Patch the seams, returning (records, restore).
 
     Both seams carry the step (#343), so a call is recorded against the work it
@@ -156,6 +158,8 @@ def install_recorder(claude_client, clock: Callable[[], float] = time.monotonic)
     subscription call up with its metered twin under the switch, which routes
     everything through the CLI.
     """
+    if clock is None:
+        clock = time.monotonic
     records: list[CallRecord] = []
     originals = {name: getattr(claude_client, name) for name in SEAMS}
 
@@ -202,12 +206,14 @@ IMAGES_REFUSED = (
 
 
 def replay(baseline: Sequence[CallRecord], runner: Callable[..., str],
-           clock: Callable[[], float] = time.monotonic) -> list[CallRecord]:
+           clock: Callable[[], float] | None = None) -> list[CallRecord]:
     """Re-run each captured prompt on the other transport.
 
     A call carrying images is refused and recorded as refused, never sent with
     the images dropped and never quietly skipped.
     """
+    if clock is None:
+        clock = time.monotonic
     out: list[CallRecord] = []
     for call in baseline:
         if call.carries_images:

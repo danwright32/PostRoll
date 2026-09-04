@@ -251,9 +251,11 @@ def record_kept_frames(run: Run, kept: Path, repo_root: Path) -> tuple[str, ...]
     return tuple(recorded)
 
 
-def record(repo_root: Path, *, runner=run_reference_tests,
+def record(repo_root: Path, *, runner=None,
            env: dict[str, str] | None = None, log=print) -> int:
     """Re-record what the evidence allows, refuse the rest by name, and say which."""
+    if runner is None:
+        runner = run_reference_tests
     environment = dict(os.environ if env is None else env)
     existing = json.loads((repo_root / RECORD_PATH).read_text(encoding="utf-8"))
     moved = templates_to_record(fp.fingerprints(repo_root), existing)

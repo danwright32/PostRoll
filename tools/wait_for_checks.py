@@ -292,8 +292,10 @@ def _skips_on_pull_request(job: str, body: str) -> bool:
         "expected to skip is a check nobody waits for.")
 
 
-def expected_checks(workflows: Path = WORKFLOWS) -> set[ExpectedCheck]:
+def expected_checks(workflows: Path | None = None) -> set[ExpectedCheck]:
     """Every check a pull request will report, derived from the workflow files."""
+    if workflows is None:
+        workflows = WORKFLOWS
     files = sorted(
         path for path in workflows.glob("*.y*ml") if path.suffix in (".yml", ".yaml"))
     if not files:
@@ -369,7 +371,7 @@ MERGE_METHOD = "squash"
 
 def merge_commit(number: str, sha: str, *,
                  method: str = MERGE_METHOD,
-                 run: Callable[..., object] = subprocess.run) -> str:
+                 run: Callable[..., object] | None = None) -> str:
     """Merge pull request `number`, but only while its head is still `sha`.
 
     The green above proves that ONE named commit passed. Merging the top of the
@@ -383,6 +385,8 @@ def merge_commit(number: str, sha: str, *,
     0 having been told "not mergeable" is not a merge, and reporting one over a
     pull request still sitting open is a success claim nobody verified (L12).
     """
+    if run is None:
+        run = subprocess.run
     path = f"repos/{{owner}}/{{repo}}/pulls/{number}/merge"
     try:
         done = run(
@@ -428,7 +432,7 @@ class BaseStanding:
 
 
 def base_standing(number: str, sha: str, *,
-                  api: Callable[[str], dict] = gh_json) -> BaseStanding:
+                  api: Callable[[str], dict] | None = None) -> BaseStanding:
     """How far `sha` is behind the branch pull request `number` would land on.
 
     The green above proves that one named commit passed the checks. It says
@@ -445,6 +449,8 @@ def base_standing(number: str, sha: str, *,
     whether the base has moved is not the same as it not having moved, and zero
     is the answer that merges (L42).
     """
+    if api is None:
+        api = gh_json
     pull = api(f"repos/{{owner}}/{{repo}}/pulls/{number}")
     base = pull.get("base") or {}
     repo = str(((base.get("repo") or {}).get("full_name") or ""))
@@ -542,7 +548,7 @@ def _all_of(reply: dict, key: str, path: str) -> list[dict]:
     return list(items)
 
 
-def poll_checks(number: str, *, api: Callable[[str], dict] = gh_json) -> Poll:
+def poll_checks(number: str, *, api: Callable[[str], dict] | None = None) -> Poll:
     """Every check at the pull request's head commit, and nothing from another.
 
     The head SHA is resolved first and then carried into every later question,
@@ -552,6 +558,8 @@ def poll_checks(number: str, *, api: Callable[[str], dict] = gh_json) -> Poll:
     only prove that lookup is self-consistent (L70). A job carries its own
     `head_sha`, which is a second reply and therefore a second witness.
     """
+    if api is None:
+        api = gh_json
     pull = api(f"repos/{{owner}}/{{repo}}/pulls/{number}")
     head_sha = str(((pull.get("head") or {}).get("sha") or ""))
     repo = str((((pull.get("base") or {}).get("repo") or {}).get("full_name") or ""))
@@ -817,14 +825,24 @@ def ask(
 def main(
     argv: Sequence[str],
     *,
-    poll: Callable[[str], Poll] = poll_checks,
-    merge: Callable[[str, str], str] = merge_commit,
-    base: Callable[[str, str], BaseStanding] = base_standing,
+    poll: Callable[[str], Poll] | None = None,
+    merge: Callable[[str, str], str] | None = None,
+    base: Callable[[str, str], BaseStanding] | None = None,
     now: Callable[[], float] | None = None,
     sleep: Callable[[float], None] | None = None,
-    workflows: Path = WORKFLOWS,
-    out: Callable[[str], None] = say,
+    workflows: Path | None = None,
+    out: Callable[[str], None] | None = None,
 ) -> int:
+    if workflows is None:
+        workflows = WORKFLOWS
+    if poll is None:
+        poll = poll_checks
+    if merge is None:
+        merge = merge_commit
+    if base is None:
+        base = base_standing
+    if out is None:
+        out = say
     import time
 
     now = now or time.monotonic

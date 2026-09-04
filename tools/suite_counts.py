@@ -193,7 +193,7 @@ def read_bundle_summary(bundle: Path) -> dict:
 
 
 def swift_tests_run(log: str, bundle: Path | None = None,
-                    read_summary=read_bundle_summary) -> int:
+                    read_summary=None) -> int:
     """How many tests xcodebuild reported executing.
 
     From the result bundle when the caller names one, and from the transcript
@@ -207,6 +207,8 @@ def swift_tests_run(log: str, bundle: Path | None = None,
     number from one sub-suite, so falling back would report a short run as a
     full one, which is the defect this whole file exists to prevent.
     """
+    if read_summary is None:
+        read_summary = read_bundle_summary
     if bundle is not None:
         if not bundle.exists():
             raise SuiteCountError(

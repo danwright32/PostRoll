@@ -63,6 +63,7 @@ from pathlib import Path
 
 import pytest
 
+from tools import wait_for_checks
 from tools.wait_for_checks import (
     EXIT_BEHIND,
     EXIT_GREEN,
@@ -655,9 +656,24 @@ def test_the_default_voice_flushes_every_line() -> None:
     assert recorder.flushes >= 1, "the line was written and left in the buffer"
 
 
-def test_the_wait_speaks_through_the_flushing_voice_by_default() -> None:
-    """A flushing printer nothing calls is a wait that still says nothing (L3)."""
-    assert inspect.signature(main).parameters["out"].default is say
+def test_the_wait_speaks_through_the_flushing_voice_by_default(monkeypatch) -> None:
+    """A flushing printer nothing calls is a wait that still says nothing (L3).
+
+    Driven rather than read off the signature. `out` used to default to `say`
+    itself, which meant the check could only ever confirm the spelling, and the
+    default bound at definition time so nothing could replace it (#1325). Now
+    the resolution happens in the body, so a run with `out` unset can be watched
+    going through the real voice.
+    """
+    spoken: list[str] = []
+    monkeypatch.setattr(wait_for_checks, "say", spoken.append)
+    clock = FakeClock()
+
+    main(["7", "--timeout", "60", "--interval", "30"],
+         poll=lambda _n: Poll(head_sha=HEAD_SHA, rows=[]),
+         now=clock.now, sleep=clock.sleep)
+
+    assert spoken, "the wait ran with out unset and said nothing at all"
 
 
 def test_every_exit_code_is_distinct() -> None:
@@ -1043,9 +1059,32 @@ def test_without_the_merge_flag_nothing_is_compared() -> None:
     assert standing.asked == [], standing.asked
 
 
-def test_the_wait_compares_through_the_real_reading_by_default() -> None:
-    """A comparison nothing calls is a rule that lives only in a docstring (L3)."""
-    assert inspect.signature(main).parameters["base"].default is base_standing
+def test_the_wait_compares_through_the_real_reading_by_default(monkeypatch) -> None:
+    """A comparison nothing calls is a rule that lives only in a docstring (L3).
+
+    Driven rather than read off the signature, for the reason in #1325: the
+    default used to hold `base_standing` itself, so the check could only
+    confirm the spelling and nothing could replace it. The resolution now
+    happens in the body, so a run with `base` unset can be watched reaching it.
+    """
+    asked: list[tuple[str, str]] = []
+
+    def watched(number: str, sha: str, **_kwargs) -> BaseStanding:
+        asked.append((number, sha))
+        return BaseStanding(branch="main", base_sha=MAIN_SHA,
+                            behind_by=0, ahead_by=1)
+
+    monkeypatch.setattr(wait_for_checks, "base_standing", watched)
+    clock = FakeClock()
+
+    code = main(["7", "--timeout", "600", "--interval", "30", "--merge"],
+                poll=lambda _n: Poll(head_sha=HEAD_SHA, rows=real_reply()),
+                merge=lambda _n, _s: "abc1234",
+                now=clock.now, sleep=clock.sleep,
+                workflows=WORKFLOWS, out=lambda _l: None)
+
+    assert code == EXIT_GREEN, code
+    assert asked == [("7", HEAD_SHA)], asked
 
 
 class CompareApi:

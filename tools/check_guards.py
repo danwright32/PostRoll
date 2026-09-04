@@ -1116,7 +1116,9 @@ def _dirty(path: Path, repo_root: Path) -> bool:
     return bool(status.stdout.strip())
 
 
-def run_entry(entry: Entry, repo_root: Path, runner, log=say) -> Result:
+def run_entry(entry: Entry, repo_root: Path, runner, log=None) -> Result:
+    if log is None:
+        log = say
     target = repo_root / entry.file
     if not target.is_file():
         return Result(entry, Outcome.ERROR,
@@ -1240,7 +1242,7 @@ class WarmBuild:
 
 
 def warm_the_build(entries: list[Entry], repo_root: Path, runner,
-                   log=say, now=time.monotonic) -> WarmBuild | None:
+                   log=None, now=None) -> WarmBuild | None:
     """Build the app ONCE, before any entry runs (#1096).
 
     The first Swift entry of each shard used to pay for the cold build that
@@ -1259,6 +1261,10 @@ def warm_the_build(entries: list[Entry], repo_root: Path, runner,
     pay a build for a cache nothing in it reads, which is the `changed` job on
     a Python-only diff, the job every pull request waits on.
     """
+    if log is None:
+        log = say
+    if now is None:
+        now = time.monotonic
     if not any(e.test.startswith("PostRollTests/") for e in entries):
         return None
     if derived_data_path(repo_root) is None:
@@ -1555,9 +1561,13 @@ def check_guards(repo_root: Path, registry_path: Path, runner,
                  deadline_seconds: float | None = None,
                  timings_path: Path | None = None,
                  blocking: set[str] | None = None,
-                 log=say, now=time.monotonic) -> int:
+                 log=None, now=None) -> int:
     # Installed here rather than in main() so every caller that can perturb the
     # tree is covered, including the tests that drive this directly (#547).
+    if log is None:
+        log = say
+    if now is None:
+        now = time.monotonic
     install_interrupt_restore(repo_root, log=log)
     entries = load_registry(registry_path)
     if only is not None:

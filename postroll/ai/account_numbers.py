@@ -482,7 +482,7 @@ def fetch(
     *,
     token: str,
     account_id: str = QUERYING_ACCOUNT_ID,
-    http: Callable[[str, Mapping[str, str]], Response] = _real_transport,
+    http: Callable[[str, Mapping[str, str]], Response] | None = None,
     sleep: Callable[[float], None] | None = None,
     allow_no_such_account: bool = False,
 ) -> Figures:
@@ -503,6 +503,8 @@ def fetch(
     So it stays off, and it is not off forever by accident: #1195 is the issue
     that turns it on, and it names the reading required to do so (L65).
     """
+    if http is None:
+        http = _real_transport
     if sleep is None:
         import time
         sleep = time.sleep
@@ -669,7 +671,7 @@ def as_row(figures: Figures) -> dict[str, Any]:
 
 
 def main(argv: Sequence[str],
-         fetch: Callable[..., Figures] = fetch) -> int:
+         fetch: Callable[..., Figures] | None = None) -> int:
     """Answer about every handle in a manifest, and write the results.
 
     `fetch` is a parameter so the suite can drive this without a token and
@@ -677,6 +679,8 @@ def main(argv: Sequence[str],
     accidentally get a fake: a seam whose default became the test double would
     leave the app fetching nothing (L196).
     """
+    if fetch is None:
+        fetch = fetch
     import argparse
 
     parser = argparse.ArgumentParser(description=__doc__)

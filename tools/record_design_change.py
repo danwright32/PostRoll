@@ -197,13 +197,17 @@ def rerecord_goldens(repo_root: Path, environment: dict[str, str]) -> None:
 
 def prepare(repo_root: Path, *, unbumped: list[str] | None = None,
             undated: list[str] | None = None,
-            stamp=write_stamp, runner=rerecord_goldens) -> Outcome:
+            stamp=None, runner=None) -> Outcome:
     """Steps 3 and 4, in order, having checked 1 and 2 were done.
 
     `unbumped` and `undated` are passed in rather than computed here so the
     checks can be driven against a tree that is not this checkout, which is what
     the tests do. The caller below computes both from the real fingerprints.
     """
+    if stamp is None:
+        stamp = write_stamp
+    if runner is None:
+        runner = rerecord_goldens
     unbumped = [] if unbumped is None else unbumped
     undated = [] if undated is None else undated
     if unbumped:

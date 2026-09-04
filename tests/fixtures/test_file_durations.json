@@ -105,6 +105,7 @@
     "test_cover_photo_reuse.py": 0.0,
     "test_crop_geometry_parity.py": 0.0,
     "test_debug_build_signs_nested_code.py": 2.87,
+    "test_default_argument_seams.py": 0.79,
     "test_design_tokens.py": 0.02,
     "test_enrich_program_shapes.py": 0.0,
     "test_enrich_step_attribution.py": 0.0,
@@ -693,6 +694,10 @@
     "test_debug_build_signs_nested_code.py": {
       "run": "full-2026-09-04T03:02Z",
       "scale": 1.0
+    },
+    "test_default_argument_seams.py": {
+      "run": "partial-2026-09-04T14:42Z",
+      "scale": 1.143
     },
     "test_design_tokens.py": {
       "run": "full-2026-09-04T03:02Z",
