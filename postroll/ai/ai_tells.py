@@ -150,6 +150,29 @@ def markers_preserved_validator(prior: dict, revised: dict) -> str | None:
                                  photo_markers(revised.get("body", "")))
 
 
+def markers_repairable_validator(prior: dict, revised: dict) -> str | None:
+    """The same rule with alt text left to the splice (#1218).
+
+    `run_review_pass` answers a validator failure by DISCARDING the pass, so
+    every fault this refuses costs a paid review pass and returns none of its
+    prose. That is only worth paying where the fault cannot be repaired
+    afterwards.
+
+    An add, a drop, a rename or a reorder all change WHICH photograph a
+    paragraph is about, and a drop in particular cannot be put back without
+    inventing a position for it, so those stay refusals. Rewritten alt text is
+    repaired by `splice_retained_markers`, which restores every retained marker
+    from the draft verbatim, so refusing on it discards a pass over a fault the
+    next step undoes (L93: a guard that avoids a wrong action by falling back
+    to a different action has only chosen which defect to ship).
+
+    Same split the revise path has used since #1131.
+    """
+    return ordered_marker_change(photo_markers(prior.get("body", "")),
+                                 photo_markers(revised.get("body", "")),
+                                 compare_alt=False)
+
+
 # Default global install path for the humanizer skill (cloned via
 # `git clone https://github.com/blader/humanizer.git ~/.claude/skills/humanizer`).
 HUMANIZER_DEFAULT_PATH = Path.home() / ".claude" / "skills" / "humanizer" / "SKILL.md"

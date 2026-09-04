@@ -49,7 +49,7 @@ from .ai_tells import (
     build_voice_review_prompt,
     is_humanizer_available,
     load_humanizer_rules,
-    markers_preserved_validator,
+    markers_repairable_validator,
     photo_marker_filenames,
     strip_em_dashes,
 )
@@ -71,7 +71,9 @@ from .blog_prose import (
 from .blog_photo_stamps import photo_stamps
 from .blog_repair import deadline_from, repair_alt_text
 from .repair_log import RepairLog
-from .blog_quality import (check_blog_targeted, filenames_used_by, finding_entry,
+from .blog_marker_splice import splice_retained_markers
+from .blog_quality import (_PHOTO_MARKER, check_blog_targeted,
+                           filenames_used_by, finding_entry,
                            outside_markers,
                            refuse_colliding_filenames,
                            repair_marker_filenames,
@@ -1754,6 +1756,10 @@ def generate_blog(
             " markers preserved exactly as-is, photo_count: integer}"
         )
 
+        # The body the review passes are about to be given, kept so every
+        # marker in it can be restored afterwards (#1218).
+        drafted_body = data.get("body", "")
+
         # === Pass 2: voice review (does this actually sound like Dan?) ===
         if not skip_voice_pass:
             say.step("Blog: checking it sounds like you")
@@ -1765,7 +1771,7 @@ def generate_blog(
             )
             data = run_review_pass(
                 voice_prompt, data, label="voice", timeout=600,
-                runner=run_json_prompt, validate=markers_preserved_validator,
+                runner=run_json_prompt, validate=markers_repairable_validator,
             )
 
         # === Pass 3: humanizer, always last, non-negotiable ===
@@ -1783,7 +1789,7 @@ def generate_blog(
             )
             data = run_review_pass(
                 review_prompt, data, label="humanizer", timeout=600,
-                runner=run_json_prompt, validate=markers_preserved_validator,
+                runner=run_json_prompt, validate=markers_repairable_validator,
             )
 
         # The finalisation tail runs INSIDE the staging block (#1128).
@@ -1802,6 +1808,38 @@ def generate_blog(
         # (pure regex), then per-paragraph second-person and contraction fixes
         # (one focused call per offending paragraph, which the model reliably
         # edits, unlike a full-body rewrite).
+        # Every marker restored from the draft the passes were given (#1218).
+        #
+        # `run_review_pass` answers a validator failure by DISCARDING the pass,
+        # so before this a model that touched one marker cost a paid review
+        # pass and returned none of its prose, and the humanizer is the pass
+        # this repo calls non-negotiable. The validator now refuses only what a
+        # splice cannot repair, and this repairs the rest.
+        #
+        # Applied before the dash strip, so what ships is what Dan already had,
+        # dash stripped once like everything else. Same order as revise_blog.
+        #
+        # The count is REPORTED because the splice destroys the evidence it was
+        # needed: a model that rewrote every marker and one that reproduced
+        # them all produce a byte identical body afterwards (L340).
+        reviewed_body = data.get("body", "")
+        try:
+            reviewed_body, drift = splice_retained_markers(
+                drafted_body, reviewed_body,
+                {name for name, _alt in _PHOTO_MARKER.findall(drafted_body)})
+        except ValueError as e:
+            # Not fatal and not silent: a dropped marker cannot be put back
+            # without inventing a position for it (#998), and the validator
+            # above already refuses a pass that drops one, so reaching here
+            # means the DRAFT itself lost it. check_blog reports the loss.
+            print(f"[generate_blog] {e}", flush=True, file=sys.stderr)
+        else:
+            if drift:
+                print(f"[generate_blog] RESTORED {drift} photo marker(s) a "
+                      f"review pass rewrote despite being told to preserve "
+                      f"them verbatim", flush=True, file=sys.stderr)
+            data = dict(data, body=reviewed_body)
+
         final_body = strip_em_dashes(data.get("body", "").strip())
         final_body = _fix_wrong_names(final_body, program)
         final_body = _fix_second_person(final_body)
