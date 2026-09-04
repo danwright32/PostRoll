@@ -20,7 +20,8 @@ struct OutdatedDesignsSheet: View {
     ///
     /// Their own list rather than rows mixed into the one above, because the
     /// list above exists to point at work worth doing and rebuilding a day
-    /// whose files have gone out changes nothing anyone will see. Kept on
+    /// whose files were exported does not reach the copies already in the
+    /// export folder. Kept on
     /// screen rather than dropped: they are still behind the design, and a
     /// surface that hid them would claim a cleaner machine than it measured
     /// (L98).
@@ -121,17 +122,15 @@ struct OutdatedDesignsSheet: View {
         }
     }
 
-    /// The days that have already gone out, below everything worth acting on
-    /// and introduced by a line saying why they are set apart.
+    /// The days that have already been exported, below everything worth acting
+    /// on and introduced by a line saying why they are set apart.
     private var alreadyExported: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             RoseGoldDivider()
             Text("Already exported")
                 .font(.signPainter(20))
                 .foregroundStyle(PaintedSurfaces.bodyText)
-            Text("These are behind the current design too, but their files have "
-                 + "already gone out, so rebuilding them would not change anything "
-                 + "anyone has seen.")
+            Text(OutdatedDesignsDisplay.exportedSectionBlurb)
                 .font(.light(12))
                 .foregroundStyle(PaintedSurfaces.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)

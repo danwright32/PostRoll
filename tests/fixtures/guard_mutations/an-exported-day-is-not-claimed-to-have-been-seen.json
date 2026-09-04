@@ -1,0 +1,8 @@
+{
+  "name": "an-exported-day-is-not-claimed-to-have-been-seen",
+  "file": "PostRollApp/Sources/Services/OutdatedDesignsDisplay.swift",
+  "find": "    static let setAsideReason =\n        \"Rebuilding one changes the files here, not the copies already in the \"\n        + \"export folder, so a day still waiting to post would have to be \"\n        + \"exported again.\"",
+  "replace": "    static let setAsideReason =\n        \"Rebuilding them would not change anything that has gone out.\"",
+  "test": "PostRollTests/OutdatedDesignsDisplayTests/testNeitherSurfaceClaimsAnExportedDayReachedAnybody",
+  "breaks": "both surfaces claim an exported day reached an audience, which PostRoll has no way of knowing: it records that files were written into a folder and nothing more. Dan files exports into 1. To Do, 2. Not in Metricool and 3. Done:Waiting to post, so a day can be exported and still be waiting, and for that day the sentence is false and the conclusion it draws is wrong, because rebuilding WOULD change what people eventually see (#925, #1111, L347)"
+}

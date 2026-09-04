@@ -59,10 +59,16 @@ struct DesignScanResult: Equatable {
     /// lands in exactly one of them.
     var staleNotExported: [StaleDay] { stale.filter { $0.exportedAt == nil } }
 
-    /// The stale days that have already gone out. Rebuilding one changes
-    /// nothing anyone will see, so they are set apart rather than dropped: a
-    /// day silently removed would make "nothing stale" and "nothing stale that
-    /// has not gone out yet" the same answer (L98).
+    /// The stale days that have already been exported. Rebuilding one does not
+    /// reach the copies already in the export folder, so they are set apart
+    /// rather than dropped: a day silently removed would make "nothing stale"
+    /// and "nothing stale that has not been exported yet" the same answer
+    /// (L98).
+    ///
+    /// Exported, never posted. PostRoll records that the files were written
+    /// into a folder and nothing more, and a day can sit exported and still be
+    /// waiting to go out, so a rebuild of one of these WOULD change what people
+    /// eventually see once it is exported again (#1111).
     var staleExported: [StaleDay] { stale.filter { $0.exportedAt != nil } }
 }
 
