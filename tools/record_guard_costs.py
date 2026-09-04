@@ -144,7 +144,7 @@ def _gh(args: list[str]) -> tuple[int, str]:
     return done.returncode, done.stdout + done.stderr
 
 
-def newest_sweep_run(run=_gh) -> str:
+def newest_sweep_run(run=None) -> str:
     """The newest successful scheduled sweep, as a run id.
 
     Every way of not finding one is its own refusal rather than an empty
@@ -152,6 +152,8 @@ def newest_sweep_run(run=_gh) -> str:
     to record" on a broken token would say it every day and read as a record
     that is up to date (L11, L98).
     """
+    if run is None:
+        run = _gh
     code, output = run([
         "gh", "run", "list",
         "--workflow", SWEEP_WORKFLOW,

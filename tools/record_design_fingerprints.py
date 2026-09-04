@@ -270,9 +270,11 @@ def _dirty_goldens(repo_root: Path) -> tuple[list[str], str | None]:
 # ── the tool ─────────────────────────────────────────────────────────────────
 
 
-def record(repo_root: Path, *, runner=run_reference_tests,
+def record(repo_root: Path, *, runner=None,
            env: dict[str, str] | None = None, log=print) -> int:
     """Record what can be proven, refuse the rest by name, and say which."""
+    if runner is None:
+        runner = run_reference_tests
     environment = dict(os.environ if env is None else env)
     record_file = repo_root / RECORD_PATH
     existing = json.loads(record_file.read_text(encoding="utf-8"))

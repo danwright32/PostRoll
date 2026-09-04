@@ -24,9 +24,9 @@ from postroll.ai import claude_client as cc
 from postroll.ai.claude_client import ClaudeError, run_prompt
 
 
-def _fake_client(usage=SimpleNamespace(input_tokens=1200, output_tokens=340,
-                                       cache_creation_input_tokens=0,
-                                       cache_read_input_tokens=0)):
+def _fake_client(usage=None):
+    if usage is None:
+        usage = SimpleNamespace(input_tokens=1200, output_tokens=340, cache_creation_input_tokens=0, cache_read_input_tokens=0)
     message = SimpleNamespace(
         stop_reason="end_turn",
         content=[SimpleNamespace(text='{"ok": true}')],

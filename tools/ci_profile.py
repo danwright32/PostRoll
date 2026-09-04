@@ -123,7 +123,7 @@ REPORTED_SETTINGS = ("CONFIGURATION", "SWIFT_COMPILATION_MODE",
 
 
 def scheme_settings(scheme: str, configuration: str | None = None,
-                    run: Runner = run_command) -> dict[str, str]:
+                    run: Runner | None = None) -> dict[str, str]:
     """What one scheme resolves to, asking the build action first.
 
     The build action first because that is the one most schemes use, and a
@@ -136,6 +136,8 @@ def scheme_settings(scheme: str, configuration: str | None = None,
     a Debug reading for a Release build, which is #1243's mistake in another
     costume.
     """
+    if run is None:
+        run = run_command
     pinned = ["-configuration", configuration] if configuration else []
     attempts: list[str] = []
     for action in ("build", "test"):
@@ -162,8 +164,10 @@ def _settings(output: str) -> dict[str, str]:
     return settings
 
 
-def machine(run: Runner = run_command) -> Machine:
+def machine(run: Runner | None = None) -> Machine:
     """The machine this ran on, read off the machine."""
+    if run is None:
+        run = run_command
     def ask(args: list[str]) -> str:
         code, output = run(args)
         if code != 0:
@@ -249,7 +253,9 @@ USAGE = ("usage: ci_profile.py [--build NAME=PATH]... [--scheme NAME[=CONFIGURAT
          "[--result-bundle PATH]")
 
 
-def bundle_summary(bundle: str, run: Runner = run_command) -> Mapping[str, object]:
+def bundle_summary(bundle: str, run: Runner | None = None) -> Mapping[str, object]:
+    if run is None:
+        run = run_command
     import json
 
     code, output = run(["xcrun", "xcresulttool", "get", "test-results",
@@ -265,7 +271,9 @@ def bundle_summary(bundle: str, run: Runner = run_command) -> Mapping[str, objec
         ) from error
 
 
-def main(argv: list[str], run: Runner = run_command) -> int:
+def main(argv: list[str], run: Runner | None = None) -> int:
+    if run is None:
+        run = run_command
     from pathlib import Path
 
     builds: dict[str, str] = {}

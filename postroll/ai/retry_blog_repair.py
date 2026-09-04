@@ -58,10 +58,10 @@ def retry_blog_repair(
         program: dict[str, Any] | None = None,
         venue: str = "",
         event_id: str = "",
-        runner: Callable[..., Any] = run_json_prompt,
+        runner: Callable[..., Any] | None = None,
         now: Callable[[], float] | None = None,
         deadline: float | None = None,
-        say: Any = None,
+        say: Any | None = None,
 ) -> dict[str, Any]:
     """Re-run the alt text repair over `markers` only.
 
@@ -79,6 +79,8 @@ def retry_blog_repair(
     retry that repaired nothing and a retry that never ran would otherwise read
     identically to the only surface that reports either (L98).
     """
+    if runner is None:
+        runner = run_json_prompt
     if not body or not body.strip():
         raise ValueError("a retry needs the current body")
     if not markers:

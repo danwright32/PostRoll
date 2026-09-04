@@ -65,7 +65,9 @@ def _events(store: Path) -> list[dict[str, Any]]:
     return data if isinstance(data, list) else data.get("events", [])
 
 
-def event_names(store: Path = DEFAULT_STORE) -> list[str]:
+def event_names(store: Path | None = None) -> list[str]:
+    if store is None:
+        store = DEFAULT_STORE
     return [e.get("name", "") for e in _events(store)]
 
 

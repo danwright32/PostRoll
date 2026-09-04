@@ -117,7 +117,7 @@ def _gh(args: list[str]) -> tuple[int, str]:
 RUNS_TO_LOOK_BACK = 10
 
 
-def green_swift_runs(run=_gh, limit: int = RUNS_TO_LOOK_BACK
+def green_swift_runs(run=None, limit: int = RUNS_TO_LOOK_BACK
                      ) -> list[tuple[str, str]]:
     """The newest successful runs of the Swift suite, newest first.
 
@@ -126,6 +126,8 @@ def green_swift_runs(run=_gh, limit: int = RUNS_TO_LOOK_BACK
     reports: it only ever refuses runs beneath it, so every later run clears it
     and the check goes on reading as protection (L182).
     """
+    if run is None:
+        run = _gh
     code, output = run([
         "gh", "run", "list",
         "--workflow", SUITE_WORKFLOW,
@@ -150,12 +152,14 @@ def green_swift_runs(run=_gh, limit: int = RUNS_TO_LOOK_BACK
     return [(str(r["databaseId"]), str(r["headSha"])) for r in runs]
 
 
-def newest_green_swift_run(run=_gh) -> tuple[str, str]:
+def newest_green_swift_run(run=None) -> tuple[str, str]:
     """The newest successful run of the Swift suite, as (run id, head commit)."""
+    if run is None:
+        run = _gh
     return green_swift_runs(run=run, limit=1)[0]
 
 
-def newest_counted_run(run=_gh) -> tuple[str, str, int]:
+def newest_counted_run(run=None) -> tuple[str, str, int]:
     """The newest green run that actually ran the suite, and what it counted.
 
     Walks back rather than taking the first, because a push to main whose tree
@@ -166,6 +170,8 @@ def newest_counted_run(run=_gh) -> tuple[str, str, int]:
     rather than the last one's reason: "the newest run skipped" and "nothing in
     a day of runs ran the suite" are different problems (L11).
     """
+    if run is None:
+        run = _gh
     candidates = green_swift_runs(run=run)
     reasons: list[str] = []
     for run_id, head in candidates:
@@ -218,8 +224,10 @@ def count_in_log(log: str) -> int:
     return counted
 
 
-def log_of(run_id: str, run=_gh) -> str:
+def log_of(run_id: str, run=None) -> str:
     """One run's log for the Swift job, or a refusal naming why not."""
+    if run is None:
+        run = _gh
     code, output = run(["gh", "run", "view", str(run_id), "--log",
                         "--job", SUITE_JOB])
     if code != 0:
