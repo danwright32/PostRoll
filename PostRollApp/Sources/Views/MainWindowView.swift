@@ -337,7 +337,9 @@ struct MainWindowView: View {
     /// after a generation has just read the same folder for its own log.
     private func refreshCheckoutNotice() async {
         guard case .ready(let repo) = LaunchProjectCheck.outcome() else { return }
-        _ = await Task.detached { CheckoutRevision.readIfStale(inRepo: repo) }.value
+        // Off the cooperative pool, not merely off the main actor (#1143): the
+        // read runs git and then blocks on a semaphore waiting for it (L241).
+        _ = await Blocking.run { CheckoutRevision.readIfStale(inRepo: repo) }
     }
 
     /// Ask at launch what the code folder is and whether this build predates it.
@@ -378,11 +380,14 @@ struct MainWindowView: View {
         case .ready(let root):
             repo = root
         }
-        // Which code a generation would run, from the same folder and the same
-        // detached task (#664). Off the main actor for the same reason as the
-        // check below it: it runs git, three times, and the thread drawing the
-        // window is not where that belongs.
-        let revision = await Task.detached { CheckoutRevision.read(inRepo: repo) }.value
+        // Which code a generation would run, from the same folder and off the
+        // same pool (#664, #1143). Not the main actor, for the reason the check
+        // below it is not: it runs git, three times, and the thread drawing the
+        // window is not where that belongs. Not the cooperative pool either,
+        // because it then blocks waiting for git to exit (L241).
+        let revision = await Blocking.run(qos: .userInitiated) {
+            CheckoutRevision.read(inRepo: repo)
+        }
         // Applied here as well as through the subscription above, so the notice
         // at launch does not depend on the subscription having been made. The
         // same reading applied twice is the same sentence.

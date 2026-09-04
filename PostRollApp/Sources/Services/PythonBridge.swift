@@ -2574,11 +2574,13 @@ actor PythonBridge {
             "export POSTROLL_BRAND_VOICE=\(Self.shellQuoted(AppPaths.brandVoiceFile.path))"
 
         // Which code this run is about to execute (#661). Read off the checkout
-        // it was cleared to use, on a detached task so a git that never answers
-        // cannot hold the actor other runs are waiting on.
-        let revision = await Task.detached(priority: .userInitiated) {
+        // it was cleared to use, off the cooperative pool so a git that never
+        // answers holds neither the actor other runs are waiting on nor one of
+        // the fixed number of threads every other concurrent task shares
+        // (#1143, L241).
+        let revision = await Blocking.run(qos: .userInitiated) {
             CheckoutRevision.read(inRepo: root)
-        }.value
+        }
 
         // Python cannot reproduce AppPaths' marker-gated choice between
         // Documents and Application Support, so the app tells it. The AI usage
