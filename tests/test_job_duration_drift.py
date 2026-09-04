@@ -847,3 +847,27 @@ def test_a_record_naming_a_zero_spread_is_refused(tmp_path):
         '{"run_to_run_spread": {"spread_percent_at_least": 0}}')
 
     assert check_job_durations.noise_floor("swift-unit", root=tmp_path) is None
+
+
+def test_a_broken_record_is_told_from_a_job_nobody_measured(tmp_path):
+    """Both fall back to the same bar, and they are not the same fact (L11).
+
+    "no measured spread for this job" is a claim about the repository, and it
+    is false when a record exists and is broken. That is the case where the
+    reader most needs to know, because the bar being used is not the runner's
+    measured noise and the message would say it was nobody's fault.
+    """
+    (tmp_path / "tests" / "fixtures").mkdir(parents=True)
+    (tmp_path / "tests" / "fixtures" / "swift_suite_cost.json").write_text("{}")
+
+    assert check_job_durations.unreadable_floor("swift-unit", root=tmp_path) == (
+        "tests/fixtures/swift_suite_cost.json")
+    # A job nobody has measured has nothing to fail to read, so accusing it
+    # would be a finding about every such job (L93).
+    assert check_job_durations.unreadable_floor("python", root=tmp_path) is None
+
+
+def test_a_readable_record_reports_no_failure_to_read_it():
+    """A positive control: without this, the check above is satisfied by the
+    function always answering with a path (L159)."""
+    assert check_job_durations.unreadable_floor("swift-unit") is None

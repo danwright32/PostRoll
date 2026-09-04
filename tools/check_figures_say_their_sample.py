@@ -117,7 +117,14 @@ def _is_duration(key: str, value: object) -> bool:
 
 
 def scanned_files(root=None) -> list[Path]:
-    """Every fixture this reads, in a stable order."""
+    """Every fixture this reads, in a stable order.
+
+    A named fixture that is not there is SKIPPED here rather than refused,
+    because `--root` is pointed at trees that hold one file. That would make a
+    name gone stale silently exempt from its own check (L96), so the refusal
+    lives in the test instead: `test_every_named_fixture_is_actually_there`
+    fails when a name in MEASUREMENT_FIXTURES names nothing in this repository.
+    """
     base = Path(root) if root is not None else REPO_ROOT / "tests" / "fixtures"
     return [base / name for name in MEASUREMENT_FIXTURES if (base / name).is_file()]
 

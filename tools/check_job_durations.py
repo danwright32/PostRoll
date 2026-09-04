@@ -91,10 +91,15 @@ NOISE_FLOORS = {
 def noise_floor(job: str, root=None) -> tuple[float, str] | None:
     """A job's measured run to run spread, and where it was measured, or None.
 
-    Returns None for a job with nothing recorded, and also when the record
-    cannot be read: a missing or malformed fixture must leave the shared
-    default in place rather than produce a floor of zero, which would make
-    every reading material (L42, L215).
+    None for a job with nothing recorded. A recorded floor that cannot be READ
+    is a different fact and gets `unreadable_floor` below, because both fall
+    back to the same threshold but only one of them means "nobody has measured
+    this job", and a message saying so when a record exists and is broken is a
+    claim the check never made (L11).
+
+    Falling back rather than raising is deliberate: a missing or malformed
+    record must leave the shared default in place rather than produce a floor
+    of zero, which would make every reading material (L42, L215).
     """
     where = NOISE_FLOORS.get(work_family(job))
     if where is None:
@@ -108,6 +113,19 @@ def noise_floor(job: str, root=None) -> tuple[float, str] | None:
     if floor <= 0:
         return None
     return floor, f"{where[0]} {where[1]}"
+
+
+def unreadable_floor(job: str, root=None) -> str | None:
+    """Where a job's floor SHOULD have been read from, when it could not be.
+
+    Only for a job this repository claims to have measured. A job absent from
+    NOISE_FLOORS has nothing to fail to read, and reporting one would be an
+    accusation about every job nobody has measured (L11, L93).
+    """
+    where = NOISE_FLOORS.get(work_family(job))
+    if where is None or noise_floor(job, root=root) is not None:
+        return None
+    return where[0]
 
 #: The fewest runs that can be split into two halves and still say anything.
 #: Three a side: two would make a median a mean of two numbers, which one slow
@@ -394,11 +412,16 @@ def drift_of(job: str, seconds: list[float],
                 f"several runs per arm and compare the medians, or use a "
                 f"measure that is not wall clock (#1329)")
 
-    bar, why = (measured if measured
-                else (MATERIAL_SHIFT, "no measured spread for this job, so the "
-                                      "shared default"))
-    if isinstance(bar, tuple):
-        bar, why = bar
+    if measured is not None:
+        bar, why = measured
+    else:
+        broken = unreadable_floor(job)
+        bar = MATERIAL_SHIFT
+        why = (f"{broken} records a spread for this job but it could not be "
+               f"read, so the shared default is standing in and the bar below "
+               f"is NOT this runner's measured noise"
+               if broken else
+               "no measured spread for this job, so the shared default")
 
     if abs(shift) < bar:
         return Verdict(
