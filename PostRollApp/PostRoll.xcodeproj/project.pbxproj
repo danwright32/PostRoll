@@ -468,6 +468,7 @@
 		91048B657F405DD148B5B106 /* HandleBookMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CA17BAD6C216DDBA80251DC /* HandleBookMark.swift */; };
 		910FC7348837A08AD8169BB5 /* UnsavedReportNoticeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67398A7190582FD9D22E9F55 /* UnsavedReportNoticeTests.swift */; };
 		9159B12FE396CAF67509AD2B /* PythonBridgeRunLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29AFF788381FCF9BF097FDB2 /* PythonBridgeRunLogTests.swift */; };
+		921FE3577B138EAC3B626F21 /* PhotoPromotionRateMeasurement.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E5F90FC57157115AA90A1CC /* PhotoPromotionRateMeasurement.swift */; };
 		92BEB7EE4991E996DD2FEEE4 /* BrandVoiceSaveText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A9549DFACC0BB70D33D1FF0 /* BrandVoiceSaveText.swift */; };
 		92F8F76E6F146249F23C0684 /* ProgramReadiness.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE8C9C97B50D9470AF3C34A8 /* ProgramReadiness.swift */; };
 		9385C6EE396D783BD03BE157 /* CollageGeometryFixtureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79FC243A49F97D724DC33391 /* CollageGeometryFixtureTests.swift */; };
@@ -870,6 +871,7 @@
 		1D504A37FCE01EEAADDE23CA /* PostingPresetSharedFixtureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostingPresetSharedFixtureTests.swift; sourceTree = "<group>"; };
 		1D8D22A832FE6FE9C4BE2FDC /* CopyAcknowledgementTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CopyAcknowledgementTests.swift; sourceTree = "<group>"; };
 		1DE15219B34619263C17CBBF /* AudioPreviewPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPreviewPlayer.swift; sourceTree = "<group>"; };
+		1E5F90FC57157115AA90A1CC /* PhotoPromotionRateMeasurement.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoPromotionRateMeasurement.swift; sourceTree = "<group>"; };
 		1EAA8F9B224243D364F5730D /* DeepLinkInboxTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkInboxTests.swift; sourceTree = "<group>"; };
 		1F70A7DEAF673BC9604B88CC /* RepairStateDisplayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepairStateDisplayTests.swift; sourceTree = "<group>"; };
 		1F7CE7C8D51C500B94CAAB6E /* CollageOverrideStalePathsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollageOverrideStalePathsTests.swift; sourceTree = "<group>"; };
@@ -1892,6 +1894,7 @@
 				57C7136BE382FB0BAD6409EA /* PerformerRowNotesTests.swift */,
 				CE6168E5148F1F3CEA01159C /* PhoneChromeOverlayTests.swift */,
 				D4C4D733E16ACB54E3B8CBA3 /* PhotoLightboxTests.swift */,
+				1E5F90FC57157115AA90A1CC /* PhotoPromotionRateMeasurement.swift */,
 				DCD831F35C24FF22BA1772E6 /* PhotoTagBatchRemovalTests.swift */,
 				9851A2EB1A9B4746A7F59C98 /* PhotoTagBatchTests.swift */,
 				B1EAE4543AA4C48F0FBC68B0 /* PhotoTagBatchUndoTests.swift */,
@@ -2779,6 +2782,7 @@
 				8DC797DA9ECB7DFA37307C68 /* PhotoAssignmentView.swift in Sources */,
 				AD15C8387D6DA4C3840AC3CA /* PhotoLightbox.swift in Sources */,
 				B25910BF15A940876FB88A65 /* PhotoLightboxTests.swift in Sources */,
+				921FE3577B138EAC3B626F21 /* PhotoPromotionRateMeasurement.swift in Sources */,
 				CDD244E3A61A5B3988E3459E /* PhotoTagBatch.swift in Sources */,
 				BF241A2DBDEEAC7D79BC4A86 /* PhotoTagBatchRemovalTests.swift in Sources */,
 				8CDE144CBEBCF239F6364F90 /* PhotoTagBatchTests.swift in Sources */,

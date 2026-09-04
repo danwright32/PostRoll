@@ -180,6 +180,7 @@
     "test_perturbation_lock.py": 0.26999999999999996,
     "test_phone_safe_area.py": 18.040000000000003,
     "test_photo_coverage_registry.py": 14.2,
+    "test_photo_promotion_rate.py": 0.0,
     "test_posting_preset.py": 0.0,
     "test_prd_matches_the_build.py": 0.15,
     "test_print_rect.py": 0.11,
@@ -989,6 +990,10 @@
     "test_photo_coverage_registry.py": {
       "run": "full-2026-09-04T03:02Z",
       "scale": 1.0
+    },
+    "test_photo_promotion_rate.py": {
+      "run": "partial-2026-09-04T11:27Z",
+      "scale": 1.278
     },
     "test_posting_preset.py": {
       "run": "full-2026-09-04T03:02Z",
