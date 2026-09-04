@@ -1220,5 +1220,29 @@
         "handles": "always"
       }
     }
+  },
+  "_siblings": {
+    "_what": "Payload shapes with MORE THAN ONE producer, and what each producer must therefore emit. Each payload above is checked against its own entry; nothing compared the two paths that make the same shape, so a key carried by one and dropped by the other was invisible at both ends. #1008 added alt_text_photo_paths to the generation path and the revision dropped it silently; it was caught only because Swift happened to read the key (#1023). `only_in` excuses a key one producer legitimately has nothing to put in, with the reason, and tests/test_sibling_payloads_agree.py holds every excuse to still being true.",
+    "a day caption": {
+      "_what": "What a day's caption panel reads, however it was produced.",
+      "payloads": [
+        "day_caption",
+        "revised_caption"
+      ],
+      "only_in": {
+        "skipped_photos": {
+          "payload": "day_caption",
+          "why": "The photographs too large or unsupported to upload, decided by partition_uploadable when the photos are STAGED. A revision works from an existing caption and stages nothing, so it has none to report rather than having lost them."
+        }
+      }
+    },
+    "a blog post": {
+      "_what": "What the blog panel reads, however it was produced.",
+      "payloads": [
+        "blog_output",
+        "revised_blog"
+      ],
+      "only_in": {}
+    }
   }
 }
