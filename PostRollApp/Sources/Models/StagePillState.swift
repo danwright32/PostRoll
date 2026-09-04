@@ -14,6 +14,13 @@ enum StagePillState: Equatable {
     case generating
     case generationFailed
     case exporting          // export in flight
+    /// Cancel was pressed and the run is winding down (#1047).
+    ///
+    /// Its own state rather than leaving `exporting` to cover it, for the same
+    /// reason `finishingMedia` is its own: the pane says "Cancelling…" at this
+    /// point, and a sidebar still claiming "Exporting…" is the pill and the
+    /// screen disagreeing about what the app is doing (#182, L53).
+    case cancellingExport
     /// Text export finished and the folder is open, while assets are still
     /// being written in the background ("Skip, text export only"). Its own
     /// state rather than a reuse of `exporting`, because that one flag also
@@ -34,14 +41,19 @@ enum StagePillState: Equatable {
     /// while the walk still reported a clean run (L96).
     static var allPillStates: [StagePillState] {
         [.reading, .readingFailed, .generating, .generationFailed,
-         .exporting, .finishingMedia, .awaitingGeneration, .awaitingExport]
+         .exporting, .cancellingExport, .finishingMedia, .awaitingGeneration,
+         .awaitingExport]
         + EventStage.allCases.map { .stage($0) }
     }
 
     /// True for any in-flight background work — drives the pulsing dot.
     var isBusy: Bool {
         switch self {
-        case .reading, .generating, .exporting, .finishingMedia: return true
+        case .reading, .generating, .exporting, .cancellingExport,
+             .finishingMedia:
+            // Cancelling counts: the subprocess is still being torn down, so
+            // the dot keeps pulsing until the work has actually stopped.
+            return true
         default: return false
         }
     }
@@ -64,12 +76,17 @@ enum StagePillState: Equatable {
                         isReading: Bool = false,
                         readingFailed: Bool = false,
                         isExporting: Bool = false,
+                        isCancellingExport: Bool = false,
                         isFinishingMedia: Bool = false,
                         awaitingGeneration: Bool,
                         awaitingExport: Bool) -> StagePillState {
         // Live work first (most informative), then failures, then static labels.
         if isGenerating { return .generating }
         if isReading { return .reading }
+        // Before `isExporting`, which is still true while a cancel winds
+        // down: the run has not stopped yet, so it is genuinely both, and the
+        // more informative of the two is what happened most recently (#1047).
+        if isCancellingExport { return .cancellingExport }
         if isExporting { return .exporting }
         // After exporting, so a run genuinely still in flight wins.
         if isFinishingMedia { return .finishingMedia }
@@ -87,6 +104,7 @@ enum StagePillState: Equatable {
         case .generating:         return "Generating…"
         case .generationFailed:   return "Needs Attention"
         case .exporting:          return "Exporting…"
+        case .cancellingExport:   return "Cancelling…"
         case .finishingMedia:     return "Finishing assets…"
         case .awaitingGeneration: return "Ready to Generate"
         case .awaitingExport:     return "Ready to Export"
