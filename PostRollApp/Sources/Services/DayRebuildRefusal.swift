@@ -46,10 +46,7 @@ enum DayRebuildRefusal {
         (action, nil)
     }
 
-    /// "Tuesday", "Tuesday and Friday", "Tuesday, Thursday and Friday".
-    private static func list(_ named: [String]) -> String {
-        guard let last = named.last else { return "" }
-        guard named.count > 1 else { return last }
-        return named.dropLast().joined(separator: ", ") + " and " + last
-    }
+    /// "Tuesday", "Tuesday and Friday", "Tuesday, Thursday, and Friday",
+    /// through the one joiner (#933).
+    private static func list(_ named: [String]) -> String { SentenceList.of(named) }
 }

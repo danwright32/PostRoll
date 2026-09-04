@@ -2,16 +2,19 @@ import Foundation
 
 /// Names read out inside a sentence: "a", "a and b", "a, b and c".
 ///
-/// One home for a joiner the codebase already spells ten times by hand, in
+/// The one home for a joiner this codebase used to spell ten times by hand, in
 /// `PhotoTagSheetNote`, `DuplicateHandleMark`, `BackgroundWork`, `MissingMediaScan`,
 /// `DesignStamp`, `DesignStaleScan`, `RecurringAccounts`, `DayRebuildRefusal`,
-/// `ExportReadiness` and `GenerationFailureText`. Those copies do not agree:
-/// some write "a, b and c" and some write "a, b, and c", so two sentences Dan
-/// reads on the same screen can punctuate the same list differently.
+/// `ExportReadiness` and `GenerationFailureText`. Those copies did not agree:
+/// five wrote "a, b and c" and five wrote "a, b, and c", so two sentences Dan
+/// read on the same screen could punctuate the same list differently.
 ///
-/// New code uses this rather than adding an eleventh copy. Migrating the ten is
-/// deliberately NOT done here, because it settles which convention is right and
-/// that is a copy decision rather than a refactor, still to be put to Dan.
+/// Dan settled it on 2026-08-28: the comma before "and" stays, and it appears
+/// only from three items, so two are joined by "and" alone. All ten now come
+/// here (#933), and `tests/test_one_list_joiner.py` is what stops an eleventh
+/// being written: sharing a rule's DATA while copying the code that applies it
+/// is not consolidation, because a change to how the data is applied then lands
+/// in one copy only (L370).
 enum SentenceList {
 
     /// Empty for no items, so a caller that has nothing to name produces

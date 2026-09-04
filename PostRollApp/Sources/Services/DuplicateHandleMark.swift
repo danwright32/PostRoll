@@ -106,9 +106,5 @@ enum DuplicateHandleMark {
         return name.isEmpty ? performer.handle.trimmingCharacters(in: .whitespaces) : name
     }
 
-    private static func list(_ items: [String]) -> String {
-        guard let last = items.last else { return "" }
-        guard items.count > 1 else { return last }
-        return items.dropLast().joined(separator: ", ") + " and " + last
-    }
+    private static func list(_ items: [String]) -> String { SentenceList.of(items) }
 }

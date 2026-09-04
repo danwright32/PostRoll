@@ -37,9 +37,5 @@ enum PhotoTagSheetNote {
             + "an account can only be tagged once."
     }
 
-    private static func list(_ items: [String]) -> String {
-        guard let last = items.last else { return "" }
-        if items.count == 1 { return last }
-        return items.dropLast().joined(separator: ", ") + " and " + last
-    }
+    private static func list(_ items: [String]) -> String { SentenceList.of(items) }
 }

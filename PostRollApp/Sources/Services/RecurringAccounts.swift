@@ -207,12 +207,7 @@ enum RecurringAccounts {
     private static func list(_ items: [Attention]) -> String {
         let names = items.prefix(namesShown).map { "@\($0.handle)" }
         let rest = items.count - names.count
-        let joined: String
-        switch names.count {
-        case 1:  joined = names[0]
-        case 2:  joined = "\(names[0]) and \(names[1])"
-        default: joined = names.dropLast().joined(separator: ", ") + ", and " + names[names.count - 1]
-        }
+        let joined = SentenceList.of(Array(names))
         return rest > 0 ? "\(joined) and \(rest) more" : joined
     }
 }

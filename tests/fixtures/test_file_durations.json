@@ -168,6 +168,7 @@
     "test_ocr_batch_durability.py": 0.0,
     "test_ocr_batching.py": 8.049999999999999,
     "test_ocr_rescan_merge.py": 0.0,
+    "test_one_list_joiner.py": 0.33,
     "test_optional_organisation.py": 0.49,
     "test_page_regions.py": 3.78,
     "test_paid_default_path.py": 0.0,
@@ -932,6 +933,10 @@
     },
     "test_ocr_rescan_merge.py": {
       "run": "full-2026-09-04T03:02Z",
+      "scale": 1.0
+    },
+    "test_one_list_joiner.py": {
+      "run": "partial-2026-09-04T06:06Z",
       "scale": 1.0
     },
     "test_optional_organisation.py": {
