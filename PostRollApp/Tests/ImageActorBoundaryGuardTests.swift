@@ -121,8 +121,13 @@ final class ImageActorBoundaryGuardTests: XCTestCase {
     }
 
     func testTheGuardDoesNotFlagBuildingAnImageFromBytesAfterwards() throws {
-        // The shape this whole change is moving TO: an unrelated detached task,
-        // then the image built from Sendable bytes on this side.
+        // A shape the scanner must not flag: an unrelated detached task, then an
+        // image built on this side. It was the shape #966 moved TO, and #1117
+        // moved the last two call sites off it and deleted `ImageLoad.bytes`
+        // with them, because building the image on this side is decoding on the
+        // main actor. It stays here as a NEGATIVE case for the scanner, which
+        // must still tell an image built outside a detached closure from one
+        // built inside it, and not as an endorsement of the shape.
         let sample = """
             async let bytes = ImageLoad.bytes(url)
             async let decoded = Task.detached {

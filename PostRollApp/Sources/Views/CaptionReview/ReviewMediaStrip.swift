@@ -37,18 +37,23 @@ struct ReviewMediaStrip: View {
     /// when the day is regenerated.
     @State private var staleTemplates: [String] = []
 
+    /// Which of this day's preview files are on disk (#1117).
+    ///
+    /// Held in state and refreshed on the same events as `staleTemplates`, for
+    /// the same reason that one is: the three properties below used to ask the
+    /// filesystem, and `body` runs on every redraw.
+    @State private var present = PresentPreviewFiles.none
+
     /// Reel video path for this day (Tuesday / Thursday only).
     private var reelURL: URL? {
-        guard let p = previewPaths?["reel"],
-              FileManager.default.fileExists(atPath: p) else { return nil }
+        guard present.has("reel"), let p = previewPaths?["reel"] else { return nil }
         return URL(fileURLWithPath: p)
     }
 
     /// Collage PNG + layout sidecar — any collage day (the "collage" key is only
     /// present for collage-carousel days: Wednesday always, Sun/Mon under balanced).
     private var collageInfo: (url: URL, layoutURL: URL)? {
-        guard let p = previewPaths?["collage"],
-              FileManager.default.fileExists(atPath: p) else { return nil }
+        guard present.has("collage"), let p = previewPaths?["collage"] else { return nil }
         let url = URL(fileURLWithPath: p)
         return (url, LayoutSidecar.url(for: url))
     }
@@ -61,12 +66,9 @@ struct ReviewMediaStrip: View {
             ("story_cover",  "STORY COVER"),
             ("story",        "STORY"),
         ]
-        for (key, label) in priority {
-            if let p = paths[key], FileManager.default.fileExists(atPath: p) {
-                return (URL(fileURLWithPath: p), label)
-            }
-        }
-        return nil
+        guard let best = present.firstPresent(of: priority),
+              let p = paths[best.key] else { return nil }
+        return (URL(fileURLWithPath: p), best.value)
     }
 
     /// The folder this day's cached assets live in.
@@ -86,6 +88,15 @@ struct ReviewMediaStrip: View {
     /// of it.
     private func refreshDesignStaleness() {
         staleTemplates = dayFolder.map { DesignStamp.staleTemplates(in: $0) } ?? []
+    }
+
+    /// Re-read which preview files are there (#1117).
+    ///
+    /// On the same three events as the staleness above, which are exactly the
+    /// ones that can change the answer: arriving at the day, a render of it
+    /// finishing, and the paths themselves changing.
+    private func refreshPresentFiles() {
+        present = PresentPreviewFiles.of(previewPaths)
     }
 
     var body: some View {
@@ -302,13 +313,23 @@ struct ReviewMediaStrip: View {
             }
         }
         .padding(.bottom, Spacing.xs)
-        .onAppear { refreshDesignStaleness() }
+        .onAppear {
+            refreshDesignStaleness()
+            refreshPresentFiles()
+        }
+        .onChange(of: previewPaths) { _, _ in refreshPresentFiles() }
         // A finished regeneration rewrites the stamp with the current design,
         // so the badge has to go without leaving the screen. graphicVersion is
         // bumped by every completed render of this day.
-        .onChange(of: graphicVersion) { _, _ in refreshDesignStaleness() }
+        .onChange(of: graphicVersion) { _, _ in
+            refreshDesignStaleness()
+            refreshPresentFiles()
+        }
         .onChange(of: isRegenerating) { _, running in
-            if !running { refreshDesignStaleness() }
+            if !running {
+                refreshDesignStaleness()
+                refreshPresentFiles()
+            }
         }
     }
 }

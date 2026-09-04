@@ -95,6 +95,27 @@ final class LayoutSidecarContentsTests: XCTestCase {
     /// calling it) is satisfied by two unrelated files if the text is read as
     /// one body, which would prove neither half (L178, L135). The strip moved
     /// out of `CaptionReviewView.swift` when the screen was split (#741).
+    /// The body of the first `.onAppear { ... }` in `source`, braces matched.
+    ///
+    /// Enough for the shape these views are written in, and it fails in the SAFE
+    /// direction: an unbalanced read returns everything after the handler, which
+    /// can only make the assertion easier to satisfy, and the assertion beside
+    /// it would then be the thing to distrust rather than this.
+    private static func appearHandler(in source: String) -> String {
+        guard let start = source.range(of: ".onAppear {") else { return "" }
+        var depth = 0
+        var out = ""
+        for char in source[start.upperBound...] {
+            if char == "{" { depth += 1 }
+            if char == "}" {
+                if depth == 0 { break }
+                depth -= 1
+            }
+            out.append(char)
+        }
+        return out
+    }
+
     func testTheReviewScreenReadsTheStampOnceRatherThanEveryRedraw() throws {
         let source = try String(
             contentsOf: URL(fileURLWithPath: #filePath)
@@ -122,7 +143,15 @@ final class LayoutSidecarContentsTests: XCTestCase {
         XCTAssertTrue(source.contains("private func refreshDesignStaleness()"),
                       "the read has no named home to be called from")
         // And it is actually called back when the answer can have changed.
-        XCTAssertTrue(source.contains(".onAppear { refreshDesignStaleness() }"))
+        //
+        // Asserted as the CALL being inside the appear handler, not as the exact
+        // one line rendering of it. The first version pinned
+        // `.onAppear { refreshDesignStaleness() }` character for character and
+        // went red the moment a second refresh was added beside it in #1117,
+        // which is a guard defending a spelling rather than a rule (L103).
+        XCTAssertTrue(Self.appearHandler(in: source).contains("refreshDesignStaleness()"),
+                      "the staleness is not refreshed when the row appears, so "
+                      + "the badge shows whatever the last day left behind")
         XCTAssertTrue(source.contains("onChange(of: graphicVersion)"),
                       "a finished regeneration rewrites the stamp, so the badge "
                       + "must clear without leaving the screen")

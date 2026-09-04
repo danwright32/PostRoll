@@ -167,19 +167,6 @@ enum ImageLoad: Equatable {
         image.map(ImageLoad.loaded) ?? .missing
     }
 
-    /// Just the bytes, for a call site loading an image CONCURRENTLY with
-    /// something else.
-    ///
-    /// `async let` starts a child task, and an `ImageLoad` (or a bare NSImage)
-    /// coming back from one is the same non-Sendable crossing `read` avoids.
-    /// Data is Sendable, so the concurrency is kept and only the decode moves.
-    static func bytes(_ url: URL) async -> Data? {
-        // Off the cooperative pool (#1143). `Data(contentsOf:)` takes any URL,
-        // and for a remote one it blocks the thread for as long as the far end
-        // takes, with no bound this side can set (L241).
-        await Blocking.run { try? Data(contentsOf: url) }
-    }
-
     var image: NSImage? {
         if case .loaded(let image) = self { return image }
         return nil
