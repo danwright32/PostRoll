@@ -151,11 +151,16 @@ struct ProcessRunner {
         // below already relies on that from a nonisolated context.
         nonisolated(unsafe) let watchedProcess = process
         let grace = killGrace
+        // The SLEEP detaches; the TEARDOWN does not (#1143). Waiting on a clock
+        // is what the cooperative pool is for, and `tearDown` walks the process
+        // tree with `pgrep`, waiting for each one to exit. Killing a run that
+        // has overrun is exactly when the app is least able to spare one of the
+        // fixed number of threads every other concurrent task shares (L241).
         let watchdog = Task.detached {
             try? await Task.sleep(for: .seconds(timeout))
             if !Task.isCancelled, watchedProcess.isRunning {
                 timedOut.fired = true
-                Self.tearDown(watchedProcess, grace: grace)
+                await Blocking.run { Self.tearDown(watchedProcess, grace: grace) }
             }
         }
         defer { watchdog.cancel() }

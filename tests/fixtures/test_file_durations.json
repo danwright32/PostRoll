@@ -20,6 +20,7 @@
     "test_audio_download_failures.py": 0.0,
     "test_audio_fit.py": 1.39,
     "test_backup_doc_inventory.py": 0.0,
+    "test_blocking_work_stays_off_the_cooperative_pool.py": 4.51,
     "test_blog_backstop_splice.py": 0.0,
     "test_blog_correction_fixtures.py": 0.01,
     "test_blog_draft_text.py": 0.02,
@@ -338,6 +339,10 @@
     "test_backup_doc_inventory.py": {
       "run": "full-2026-09-04T03:02Z",
       "scale": 1.0
+    },
+    "test_blocking_work_stays_off_the_cooperative_pool.py": {
+      "run": "partial-2026-09-04T04:24Z",
+      "scale": 1.232
     },
     "test_blog_backstop_splice.py": {
       "run": "full-2026-09-04T03:02Z",

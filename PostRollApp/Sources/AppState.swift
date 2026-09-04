@@ -100,9 +100,14 @@ final class AppState {
     ///
     /// Off the main actor: it stats a file and runs git, and neither belongs on
     /// the thread drawing the window.
+    ///
+    /// Through `Blocking.run` rather than `Task.detached` (#1143). Detaching
+    /// does not give the work a thread of its own, it puts it on the
+    /// cooperative pool, which is sized to the cores and does not grow, and git
+    /// here is a subprocess this side waits for (L241).
     func refreshBuildFreshness(inRepo repo: URL) async {
         let judge = judgeBuildFreshness
-        let verdict = await Task.detached { judge(repo) }.value
+        let verdict = await Blocking.run { judge(repo) }
         present(verdict, forRepo: repo)
     }
 

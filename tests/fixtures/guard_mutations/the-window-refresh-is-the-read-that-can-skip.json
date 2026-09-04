@@ -1,8 +1,8 @@
 {
   "name": "the-window-refresh-is-the-read-that-can-skip",
   "file": "PostRollApp/Sources/Views/MainWindowView.swift",
-  "find": "        _ = await Task.detached { CheckoutRevision.readIfStale(inRepo: repo) }.value",
-  "replace": "        _ = await Task.detached { CheckoutRevision.read(inRepo: repo) }.value",
+  "find": "        _ = await Blocking.run { CheckoutRevision.readIfStale(inRepo: repo) }",
+  "replace": "        _ = await Blocking.run { CheckoutRevision.read(inRepo: repo) }",
   "test": "PostRollTests/CheckoutReReadTests/testTheWindowsRefreshIsTheOneThatCanSkip",
   "breaks": "the window goes back to the read that cannot skip itself, so the recency is kept and consulted by nothing and every activation pays for a fresh reading (#676)"
 }
