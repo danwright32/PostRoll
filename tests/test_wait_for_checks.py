@@ -753,9 +753,14 @@ def real_compare(name: str) -> dict:
 class FakeStanding:
     """Stands in for the comparison against the base branch."""
 
-    def __init__(self, *, behind_by: int = 0, raising: Exception | None = None) -> None:
+    def __init__(self, *, behind_by: int = 0, raising: Exception | None = None,
+                 shared: frozenset[str] | None = None) -> None:
         self.behind_by = behind_by
         self.raising = raising
+        # Defaults to "cannot tell", which is the answer that refuses, so a test
+        # that says nothing about the files gets the behaviour every test
+        # written before #1323 was asserting.
+        self.shared = shared
         self.asked: list[tuple[str, str]] = []
 
     def __call__(self, number: str, sha: str) -> BaseStanding:
@@ -763,7 +768,8 @@ class FakeStanding:
         if self.raising:
             raise self.raising
         return BaseStanding(branch="main", base_sha=MAIN_SHA,
-                            behind_by=self.behind_by, ahead_by=1)
+                            behind_by=self.behind_by, ahead_by=1,
+                            shared=self.shared)
 
 
 class FakeMerge:
@@ -1091,8 +1097,13 @@ class CompareApi:
     """Answers the three paths `base_standing` asks, from recorded replies."""
 
     def __init__(self, *, compare: dict, branch: str = "main",
-                 tip: str = MAIN_SHA) -> None:
+                 tip: str = MAIN_SHA, reversed_compare: dict | None = None) -> None:
         self.compare = compare
+        # The compare read the other way round, which is what landed on the base
+        # since this change diverged. Defaults to the same reply, which is what
+        # every test written before #1323 needs.
+        self.reversed_compare = (compare if reversed_compare is None
+                                 else reversed_compare)
         self.branch = branch
         self.tip = tip
         self.paths: list[str] = []
@@ -1103,10 +1114,91 @@ class CompareApi:
             return {"head": {"sha": STALE_SHA},
                     "base": {"ref": self.branch, "repo": {"full_name": REPO}}}
         if "/compare/" in path:
-            return self.compare
+            # `head...base` is the reversed one: the tip named LAST is the base.
+            return (self.reversed_compare if path.endswith(self.tip)
+                    else self.compare)
         if "/commits/" in path:
             return {"sha": self.tip}
         raise AssertionError(f"the tool asked for a path nothing recorded: {path}")
+
+
+def _compare(*filenames: str, behind: int = 0, ahead: int = 1,
+             merge_base: str | None = None) -> dict:
+    """A compare reply carrying a named file list."""
+    return {
+        "behind_by": behind,
+        "ahead_by": ahead,
+        "merge_base_commit": {"sha": merge_base if merge_base is not None
+                              else (MAIN_SHA if behind == 0 else "0" * 40)},
+        "files": [{"filename": name} for name in filenames],
+    }
+
+
+def test_a_change_behind_main_that_shares_no_file_is_read_as_disjoint() -> None:
+    """The whole point of #1323: two changes to different files do not need
+    re-testing against each other, and 22% of a real day's merges were this."""
+    api = CompareApi(compare=_compare("tools/a.py", behind=2),
+                     reversed_compare=_compare("postroll/b.py", behind=0, ahead=2))
+
+    standing = base_standing("7", STALE_SHA, api=api)
+
+    assert standing.behind_by == 2
+    assert standing.shared == frozenset(), standing.shared
+
+
+def test_a_shared_file_is_named_rather_than_merely_counted() -> None:
+    api = CompareApi(compare=_compare("tools/a.py", "shared.py", behind=2),
+                     reversed_compare=_compare("shared.py", behind=0, ahead=2))
+
+    standing = base_standing("7", STALE_SHA, api=api)
+
+    assert standing.shared == frozenset({"shared.py"}), standing.shared
+
+
+def test_a_workflow_moving_on_the_base_overlaps_everything() -> None:
+    """A workflow decides what the tests DO, so sharing no file proves nothing."""
+    api = CompareApi(compare=_compare("tools/a.py", behind=2),
+                     reversed_compare=_compare(".github/workflows/tests.yml",
+                                               behind=0, ahead=2))
+
+    assert base_standing("7", STALE_SHA, api=api).shared is None
+
+
+def test_a_conftest_moving_on_the_base_overlaps_everything() -> None:
+    api = CompareApi(compare=_compare("tools/a.py", behind=2),
+                     reversed_compare=_compare("tests/conftest.py",
+                                               behind=0, ahead=2))
+
+    assert base_standing("7", STALE_SHA, api=api).shared is None
+
+
+def test_a_file_list_at_the_cap_is_unreadable_rather_than_disjoint() -> None:
+    """A truncated list is missing exactly the files nobody looked at (L108)."""
+    many = [f"f{n}.py" for n in range(wait_for_checks.COMPARE_FILE_CAP)]
+    api = CompareApi(compare=_compare(*many, behind=2),
+                     reversed_compare=_compare("postroll/b.py", behind=0, ahead=2))
+
+    assert base_standing("7", STALE_SHA, api=api).shared is None
+
+
+def test_a_compare_with_no_file_list_is_unreadable_rather_than_disjoint() -> None:
+    """An absent list and an empty one are different answers (L215)."""
+    without = {"behind_by": 2, "ahead_by": 1,
+               "merge_base_commit": {"sha": "0" * 40}}
+    api = CompareApi(compare=without,
+                     reversed_compare=_compare("postroll/b.py", behind=0, ahead=2))
+
+    assert base_standing("7", STALE_SHA, api=api).shared is None
+
+
+def test_a_change_that_is_not_behind_never_asks_the_second_question() -> None:
+    """One extra call, and only on the path that was about to cost a CI cycle."""
+    api = CompareApi(compare=_compare("tools/a.py", behind=0, ahead=1))
+
+    standing = base_standing("7", HEAD_SHA, api=api)
+
+    assert standing.shared == frozenset()
+    assert len([p for p in api.paths if "/compare/" in p]) == 1, api.paths
 
 
 def test_a_real_reply_about_a_stale_branch_reads_as_behind() -> None:
@@ -1345,3 +1437,79 @@ def test_a_clean_run_says_nothing_about_recovering():
          out=lines.append)
 
     assert not [line for line in lines if "recovered" in line], lines
+
+
+# --- what the wait DOES with a behind branch (#1323) -------------------------
+
+
+def _green_run(standing, merge, lines):
+    """One --merge run that reaches the base comparison with a green."""
+    clock = FakeClock()
+    return main(["7", "--timeout", "600", "--interval", "30", "--merge"],
+                poll=lambda _n: Poll(head_sha=HEAD_SHA, rows=real_reply()),
+                base=standing, merge=merge, now=clock.now, sleep=clock.sleep,
+                workflows=WORKFLOWS, out=lines.append)
+
+
+def test_behind_but_sharing_no_file_is_merged_and_says_why() -> None:
+    """The saving #1323 asked for: 22% of a real day's merges were this."""
+    merge = FakeMerge()
+    lines: list[str] = []
+
+    code = _green_run(FakeStanding(behind_by=3, shared=frozenset()), merge, lines)
+
+    assert code == EXIT_GREEN, "\n".join(lines)
+    assert merge.asked == [("7", HEAD_SHA)], merge.asked
+    said = "\n".join(lines)
+    assert "none of the files it changes moved there" in said, said
+    assert "3 commits behind" in said, said
+
+
+def test_behind_and_sharing_a_file_is_still_refused() -> None:
+    """78% of that same day. The check is doing real work and stays."""
+    merge = FakeMerge()
+    lines: list[str] = []
+
+    code = _green_run(
+        FakeStanding(behind_by=2, shared=frozenset({"tools/wait_for_checks.py"})),
+        merge, lines)
+
+    assert code == EXIT_BEHIND
+    assert merge.asked == [], "a shared file must never reach the merge"
+    said = "\n".join(lines)
+    assert "tools/wait_for_checks.py" in said, said
+    assert "moved there too" in said, said
+
+
+def test_behind_and_unable_to_compare_the_files_is_refused() -> None:
+    """Not knowing is not the same as there being no overlap (L42)."""
+    merge = FakeMerge()
+    lines: list[str] = []
+
+    code = _green_run(FakeStanding(behind_by=1, shared=None), merge, lines)
+
+    assert code == EXIT_BEHIND
+    assert merge.asked == []
+    assert "could not be compared" in "\n".join(lines)
+
+
+def test_a_shared_file_refusal_names_at_most_three_and_counts_the_rest() -> None:
+    lines: list[str] = []
+    shared = frozenset({f"f{n}.py" for n in range(7)})
+
+    _green_run(FakeStanding(behind_by=1, shared=shared), FakeMerge(), lines)
+
+    said = "\n".join(lines)
+    assert "and 4 more" in said, said
+
+
+def test_not_behind_at_all_still_reads_as_earned_against_what_it_lands_on() -> None:
+    """The message for the ordinary case must not have been lost in the split."""
+    merge = FakeMerge()
+    lines: list[str] = []
+
+    code = _green_run(FakeStanding(behind_by=0, shared=frozenset()), merge, lines)
+
+    assert code == EXIT_GREEN
+    assert merge.asked == [("7", HEAD_SHA)]
+    assert "contains main at" in "\n".join(lines)

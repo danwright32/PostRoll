@@ -1,0 +1,8 @@
+{
+  "name": "a-shared-file-still-stops-the-merge",
+  "file": "tools/wait_for_checks.py",
+  "find": "            if standing.behind_by and standing.shared:",
+  "replace": "            if standing.behind_by and not standing.shared:",
+  "test": "tests/test_wait_for_checks.py::test_behind_and_sharing_a_file_is_still_refused",
+  "breaks": "the disjointness saving added in #1323 inverts: a change that touches the very files main just changed is merged without being run against them, which is the one case the behind-main refusal exists for, while a change that touches nothing in common is refused instead. Measured on 2026-09-04, 32 of 41 merges that day shared a file, so this is the common case rather than the edge"
+}

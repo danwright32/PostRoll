@@ -430,6 +430,41 @@ class BaseStanding:
     behind_by: int
     ahead_by: int
 
+    #: The files this change touches that ALSO moved on the base since it
+    #: diverged, or `None` when that could not be established.
+    #:
+    #: `None` and `frozenset()` are deliberately different answers. Empty means
+    #: the two sets were both read in full and share nothing; None means one of
+    #: them could not be read, and a caller must treat that as an overlap, since
+    #: not knowing is not the same as there being none (L42, L215).
+    shared: frozenset[str] | None = None
+
+
+#: GitHub's compare endpoint returns at most this many files, and says so
+#: nowhere in the reply. A list at the cap is therefore a list that may be
+#: truncated, and it is read as unreadable rather than as complete: a truncated
+#: list is missing exactly the files nobody looked at (L108).
+COMPARE_FILE_CAP = 300
+
+
+#: Files whose change re-aims every test in the suite, so a change to one of
+#: them overlaps everything whatever the file lists say.
+#:
+#: The disjointness test below asks whether two changes touched the same files.
+#: That question is meaningless for a workflow file, a conftest, or the
+#: dependency pins: those decide what the tests DO, so a green earned before one
+#: moved says nothing about the tree that lands, even with no file in common.
+#: Named by prefix, because the rule is about what the file governs and a list
+#: of exact names goes stale the first time one is added (L362, L96).
+REACHES_EVERYTHING = (
+    ".github/workflows/",
+    "conftest.py",
+    "pyproject.toml",
+    "requirements",
+    "Makefile",
+    "tests/conftest.py",
+)
+
 
 def base_standing(number: str, sha: str, *,
                   api: Callable[[str], dict] | None = None) -> BaseStanding:
@@ -488,8 +523,54 @@ def base_standing(number: str, sha: str, *,
             f"{merge_base[:12] or '(unnamed)'} against a {branch} at "
             f"{base_sha[:12]}, and those two cannot both be true")
 
+    shared: frozenset[str] | None = frozenset()
+    if behind:
+        shared = _shared_files(api, repo, sha, base_sha, reply)
+
     return BaseStanding(branch=branch, base_sha=base_sha,
-                        behind_by=behind, ahead_by=ahead)
+                        behind_by=behind, ahead_by=ahead, shared=shared)
+
+
+def _files_of(reply: dict) -> frozenset[str] | None:
+    """The filenames a compare reply lists, or None when it may be truncated."""
+    listed = reply.get("files")
+    if not isinstance(listed, list):
+        # A compare with no file list at all is not a compare of nothing. It is
+        # a reply this cannot read, and reading it as empty would report every
+        # such pair as disjoint (L215).
+        return None
+    if len(listed) >= COMPARE_FILE_CAP:
+        return None
+    names = {str(entry.get("filename") or "") for entry in listed
+             if isinstance(entry, dict)}
+    if "" in names:
+        return None
+    return frozenset(names)
+
+
+def _shared_files(api, repo: str, sha: str, base_sha: str,
+                  behind_reply: dict) -> frozenset[str] | None:
+    """What this change touches that also moved on the base since it diverged.
+
+    Two file lists, both taken from a compare between the same pair of commits
+    read in opposite directions: `base...head` is what this change did, and
+    `head...base` is what landed on the base meanwhile. Each is measured from
+    the merge base, which is the only point both sides agree on.
+
+    Returns `None` the moment either list is unreadable or either side touched
+    something that reaches every test, because the caller acts on emptiness and
+    an unreadable list must not be able to produce it (L42).
+    """
+    mine = _files_of(behind_reply)
+    if mine is None:
+        return None
+    theirs = _files_of(api(f"repos/{repo}/compare/{sha}...{base_sha}"))
+    if theirs is None:
+        return None
+    for name in mine | theirs:
+        if name.startswith(REACHES_EVERYTHING) or name.endswith("/conftest.py"):
+            return None
+    return mine & theirs
 
 
 #: What a job's status and conclusion mean, in the vocabulary `verdict` judges.
@@ -895,16 +976,51 @@ def main(
                 out(f"green at {judged[:12]} but not merged: cannot tell "
                     f"whether the branch is up to date: {error}")
                 return EXIT_UNUSABLE
-            if standing.behind_by:
+            if standing.behind_by and standing.shared is None:
                 out(f"green at {judged[:12]} but not merged: it is "
                     f"{_commits(standing.behind_by)} behind {standing.branch}, "
-                    f"now at {standing.base_sha[:12]}, so nothing has run this "
-                    f"change against what it would land on. Rebase onto "
-                    f"{standing.branch}, push, and wait again.")
+                    f"now at {standing.base_sha[:12]}, and what moved there "
+                    f"could not be compared against what this changes, so "
+                    f"nothing can say the green still describes the tree that "
+                    f"would land. Rebase onto {standing.branch}, push, and "
+                    f"wait again.")
                 return EXIT_BEHIND
-            out(f"  {judged[:12]} contains {standing.branch} at "
-                f"{standing.base_sha[:12]}, so the green was earned against "
-                "what it lands on")
+            if standing.behind_by and standing.shared:
+                named = ", ".join(sorted(standing.shared)[:3])
+                more = (f" and {len(standing.shared) - 3} more"
+                        if len(standing.shared) > 3 else "")
+                out(f"green at {judged[:12]} but not merged: it is "
+                    f"{_commits(standing.behind_by)} behind {standing.branch}, "
+                    f"now at {standing.base_sha[:12]}, and {named}{more} moved "
+                    f"there too, so nothing has run this change against what it "
+                    f"would land on. Rebase onto {standing.branch}, push, and "
+                    f"wait again.")
+                return EXIT_BEHIND
+            if standing.behind_by:
+                # Behind, but nothing this change touches moved on the base, so
+                # the merged tree differs from the judged one only in files this
+                # change never reads (#1323).
+                #
+                # A reduction in risk, not a proof, and worth saying plainly:
+                # this cannot see a test in THIS change that exercises code the
+                # base just rewrote, because that shares no file. What it can
+                # see, and refuses on, is a shared file or anything that reaches
+                # every test. The backstop for the rest is main's own run and
+                # the red-main alarm (#1011), which is the same backstop a
+                # rebased merge has.
+                #
+                # Measured on 2026-09-04 before this shipped: of 41 merges that
+                # day only 9 were disjoint this way, so this skips the re-run
+                # about a fifth of the time and leaves the other four fifths
+                # exactly as they were.
+                out(f"  {judged[:12]} is {_commits(standing.behind_by)} behind "
+                    f"{standing.branch} at {standing.base_sha[:12]}, but none of "
+                    f"the files it changes moved there, so the green still "
+                    f"describes the tree that would land")
+            else:
+                out(f"  {judged[:12]} contains {standing.branch} at "
+                    f"{standing.base_sha[:12]}, so the green was earned against "
+                    "what it lands on")
             # The merge names the commit the green was earned by, so a push
             # landing in between is refused by GitHub rather than merged (#674).
             try:
