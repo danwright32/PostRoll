@@ -1,8 +1,8 @@
 {
   "name": "a-branch-behind-main-is-not-merged",
   "file": "tools/wait_for_checks.py",
-  "find": "            if standing.behind_by:",
+  "find": "            if standing.behind_by and standing.shared is None:",
   "replace": "            if standing.behind_by < 0:",
   "test": "tests/test_wait_for_checks.py::test_a_branch_behind_its_base_is_refused_rather_than_merged",
-  "breaks": "a commit green against a base that has since moved is merged anyway, so two changes that were each green against their own base land on a main neither of them was ever run against, and nothing reports a problem until the next run on main goes red (#680)"
+  "breaks": "a commit behind a base whose changes could not be compared against this one is merged anyway, so a green earned against a different base lands with nothing having established that the two do not touch each other, and nothing reports a problem until the next run on main goes red (#680, #1323)"
 }

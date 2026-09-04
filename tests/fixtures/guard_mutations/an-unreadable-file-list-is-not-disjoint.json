@@ -1,0 +1,8 @@
+{
+  "name": "an-unreadable-file-list-is-not-disjoint",
+  "file": "tools/wait_for_checks.py",
+  "find": "    if len(listed) >= COMPARE_FILE_CAP:\n        return None",
+  "replace": "    if False:\n        return None",
+  "test": "tests/test_wait_for_checks.py::test_a_file_list_at_the_cap_is_unreadable_rather_than_disjoint",
+  "breaks": "a compare whose file list GitHub truncated at 300 is read as the whole list, so the files past the cap are treated as not having moved and a change that genuinely collides with them is merged. A truncated list is missing exactly the files nobody looked at (L108)"
+}
