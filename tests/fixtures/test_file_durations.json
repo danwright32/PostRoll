@@ -168,6 +168,7 @@
     "test_model_pinning.py": 0.0,
     "test_no_dead_build_cache.py": 0.0,
     "test_no_dead_tuning_controls.py": 6.010000000000001,
+    "test_no_such_account_calibration.py": 0.01,
     "test_ocr_batch_durability.py": 0.0,
     "test_ocr_batching.py": 8.049999999999999,
     "test_ocr_rescan_merge.py": 0.0,
@@ -943,6 +944,10 @@
     "test_no_dead_tuning_controls.py": {
       "run": "full-2026-09-04T03:02Z",
       "scale": 1.0
+    },
+    "test_no_such_account_calibration.py": {
+      "run": "partial-2026-09-04T12:04Z",
+      "scale": 1.182
     },
     "test_ocr_batch_durability.py": {
       "run": "full-2026-09-04T03:02Z",
