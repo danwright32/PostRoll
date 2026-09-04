@@ -361,7 +361,21 @@ and footprint checks.
 fails on any guard that stays green (#416). It is not part of `make test`: it
 mutates the working tree and recompiles per entry, so it costs about 12 to 22
 seconds each. Run it when a guard is added or changed; for just the entries your
-diff touches, `venv/bin/python tools/check_guards.py --changed`.
+diff touches, `. ./venv-python.sh && "$POSTROLL_PYTHON" tools/check_guards.py
+--changed`.
+
+That two part form is worth knowing generally. `venv/` is gitignored, so it
+lives in the primary checkout and a git worktree has none, and every command in
+this file and in the tools' own usage lines that begins `venv/bin/python`
+therefore fails from a worktree with "no such file or directory" (#960). Every
+`make` target resolves the interpreter itself, so `make test-python` and the
+rest work from a worktree unchanged; for a tool run by hand, source
+`venv-python.sh` first and it answers with the interpreter belonging to this
+checkout, or to the checkout this worktree came from:
+
+```
+. ./venv-python.sh && "$POSTROLL_PYTHON" tools/<whatever>.py
+```
 
 `make install-force` skips the gate that `make install` runs. It exists for
 getting a build onto the machine while something unrelated is red, and using it
