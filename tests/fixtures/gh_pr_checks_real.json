@@ -40,5 +40,11 @@
     "name": "swift-unit",
     "state": "SUCCESS",
     "workflow": "macOS"
+  },
+  {
+    "bucket": "skipping",
+    "name": "due",
+    "state": "SKIPPED",
+    "workflow": "Guard proofs"
   }
 ]

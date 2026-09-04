@@ -419,6 +419,8 @@ def test_ci_builds_the_configuration_that_ships(swift):
 
 # ── the guard proofs are re-run rather than only recorded (#541) ──────────────
 
+from tools.wait_for_checks import _job_blocks  # noqa: E402
+
 GUARDS = REPO_ROOT / ".github" / "workflows" / "guards.yml"
 
 
@@ -579,10 +581,25 @@ def test_the_steps_that_report_are_not_behind_the_gate(guards):
     workflow would look healthy for as long as it lasted (L106, a liveness
     signal emitted over dead work).
     """
-    silent = [name for name, text in _steps(_full_job(guards))
-              if ("check_guard_sweep_freshness" in text
-                  or "check_job_durations" in text)
-              and "steps.due.outputs.due" in text]
+    reporters = [(name, text)
+                 for _, body in _job_blocks(guards)
+                 for name, text in _steps(body)
+                 if "check_guard_sweep_freshness" in text
+                 or "check_job_durations" in text]
+
+    # The positive control, and the reason this is here rather than inside the
+    # sweep's own job. It used to read `_full_job(guards)`, and #1259 moved
+    # these steps OUT of that job and into the gate: the search then matched
+    # nothing and the guard passed by finding nothing, which is how its
+    # registered mutation SURVIVED (L98, L100).
+    assert len(reporters) >= 2, (
+        f"the freshness check and the duration series are not in this workflow "
+        f"at all, so nothing here is being checked: found {reporters}")
+
+    # Any spelling of the answer, not one step id. The old form named
+    # `steps.due.outputs.due`, and renaming the step that produces it was
+    # enough to make this blind while it still read as a rule (L103, L135).
+    silent = [name for name, text in reporters if "outputs.due" in text]
     assert not silent, (
         f"these reporting steps only run when the sweep does, so a gate stuck "
         f"shut would silence the only things that could report it: {silent}")
