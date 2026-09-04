@@ -122,15 +122,15 @@ enum OutdatedDesignsDisplay {
                  + "first time it is exported from here."
         }
 
-        // Every stale day has already gone out. There is nothing to rebuild,
-        // and saying so is a different answer from a library that is current:
-        // these assets ARE behind the design, they just are not work.
+        // Every stale day has already been exported. There is nothing here
+        // worth acting on, and saying so is a different answer from a library
+        // that is current: these assets ARE behind the design, they just are
+        // not work on this machine.
         guard waiting > 0 else {
             let they = gone == 1 ? "The one day" : "All \(gone) days"
-            let it = gone == 1 ? "it" : "them"
             return "\(they) made with an older version of the design "
-                 + "\(gone == 1 ? "has" : "have") already been exported, so rebuilding "
-                 + "\(it) would not change anything that has gone out."
+                 + "\(gone == 1 ? "has" : "have") already been exported. "
+                 + setAsideReason
         }
 
         let lead = waiting == 1
@@ -138,11 +138,41 @@ enum OutdatedDesignsDisplay {
             : "\(waiting) days were made with an older version of the design."
         let other = gone == 1 ? "day was" : "days were"
         let has = gone == 1 ? "has" : "have"
-        let it = gone == 1 ? "it" : "them"
         return lead + " \(gone) other \(other) made with an older version too and "
-             + "\(has) already been exported, so rebuilding \(it) would not change "
-             + "anything that has gone out."
+             + "\(has) already been exported. " + setAsideReason
     }
+
+    /// Why an exported day is set aside, and what reaching one would take.
+    ///
+    /// #925 set these apart because rebuilding one does not touch the copies
+    /// already written into the export folder, and it was explicit that the
+    /// surface must not claim more than the record supports. What PostRoll
+    /// records is that a day's files were exported. It has no way of knowing
+    /// that anybody saw them, and "gone out" claims exactly that (#1111).
+    ///
+    /// Not a pedantic distinction. Dan files exports into `1. To Do`,
+    /// `2. Not in Metricool` and `3. Done:Waiting to post`, so a day can be
+    /// exported and still be waiting, and for that day rebuilding WOULD change
+    /// what people eventually see. So the sentence says what is true of every
+    /// day in the pile, and names the one step that carries a rebuild out to
+    /// them, rather than leaving a set-aside pile with no route out (L111).
+    ///
+    /// One sentence for both surfaces rather than one written at each, because
+    /// two copies of a claim is two things to keep in step and the one that
+    /// drifts is the one no test can reach (L41).
+    static let setAsideReason =
+        "Rebuilding one changes the files here, not the copies already in the "
+        + "export folder, so a day still waiting to post would have to be "
+        + "exported again."
+
+    /// The line introducing that pile on the sheet.
+    ///
+    /// Here rather than in the view for the reason this whole type is here:
+    /// the wording is the part that goes quietly wrong, and a sentence spelled
+    /// inside a view body is one nothing can assert.
+    static let exportedSectionBlurb =
+        "These are behind the current design too, but their files have already "
+        + "been exported. " + setAsideReason
 
     /// What one row says about a day.
     ///

@@ -46,7 +46,7 @@ enum DayExportRecord {
 
     /// When this day was last exported, or nil when nothing says it ever was.
     ///
-    /// Nil is "nothing here says so", NOT "this day has not gone out". Every
+    /// Nil is "nothing here says so", NOT "this day was never exported". Every
     /// day folder rendered before this record existed is in that state, and the
     /// surface that reads this has to keep the two apart: a day nobody can
     /// speak for must not be reported as one that never shipped (L98, L214).

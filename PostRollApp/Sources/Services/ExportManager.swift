@@ -533,8 +533,8 @@ final class ExportManager {
                     extra = ExportManifest.writeFailureNotice
                 }
 
-                // Each exported day records, in its own PREVIEW folder, that it
-                // has gone out (#925). That folder is the one the design sweep
+                // Each exported day records, in its own PREVIEW folder, that
+                // it was exported (#925). That folder is the one the design sweep
                 // already walks and the one nothing moves; the manifest above
                 // is a per day fact too, but it lives inside the export folder,
                 // and every export folder on Dan's Mac has since been filed

@@ -174,14 +174,79 @@ final class OutdatedDesignsDisplayTests: XCTestCase {
     /// Exported is not posted, and the sentence may only claim what the record
     /// supports. The app knows the files were written into an export folder; it
     /// does not know they reached Instagram.
-    func testTheSentenceSaysExportedRatherThanPosted() {
-        let text = OutdatedDesignsDisplay.summary(
-            survey(staleNotExported: 1, staleExported: 3, days: 4, recorded: 4),
-            hasPreviewRoot: true).lowercased()
+    /// Every phrase that claims an audience, rather than the two words the
+    /// first version of this check happened to think of.
+    ///
+    /// "gone out" and "anyone has seen" mean exactly what "posted" means, and
+    /// both shipped in the copy while a check banning "posted" and "published"
+    /// stayed green: a test asserting a message does not use a forbidden WORD
+    /// does not assert that it does not make the forbidden CLAIM (L347, L103).
+    private static let claimsAnAudience = [
+        "posted", "publish", "gone out", "goes out", "went out",
+        "anyone has seen", "has seen", "have seen",
+    ]
 
-        XCTAssertTrue(text.contains("export"), text)
-        XCTAssertFalse(text.contains("posted"), text)
-        XCTAssertFalse(text.contains("published"), text)
+    /// What the record actually supports, and what it does not.
+    ///
+    /// #925 set exported days aside and was explicit that the surface must not
+    /// claim more than the record supports. What PostRoll records is that a
+    /// day's files were written into an export folder. Dan files those into
+    /// `1. To Do`, `2. Not in Metricool` and `3. Done:Waiting to post`, so a
+    /// day can be exported and still be waiting, and for one of those
+    /// rebuilding WOULD change what people eventually see.
+    func testNeitherSurfaceClaimsAnExportedDayReachedAnybody() {
+        var said = [OutdatedDesignsDisplay.exportedSectionBlurb]
+        for result in [survey(staleNotExported: 1, staleExported: 3, days: 4, recorded: 4),
+                       survey(staleNotExported: 0, staleExported: 3, days: 3, recorded: 3),
+                       survey(staleNotExported: 0, staleExported: 1, days: 1, recorded: 1)] {
+            said.append(OutdatedDesignsDisplay.summary(result, hasPreviewRoot: true))
+        }
+
+        for text in said.map({ $0.lowercased() }) {
+            XCTAssertTrue(text.contains("export"), text)
+            for claim in Self.claimsAnAudience {
+                XCTAssertFalse(text.contains(claim),
+                               "the copy claims an exported day reached somebody, which "
+                               + "PostRoll has no way of knowing, and for a day sitting "
+                               + "in \"Done:Waiting to post\" it is false: \(text)")
+            }
+        }
+    }
+
+    /// And it still says what a rebuild would take, or the reader is left with
+    /// a set-aside pile and no idea how to act on one (L111, L126).
+    func testTheSetAsideCopySaysARebuildNeedsAnotherExport() {
+        var said = [OutdatedDesignsDisplay.exportedSectionBlurb]
+        said.append(OutdatedDesignsDisplay.summary(
+            survey(staleNotExported: 0, staleExported: 3, days: 3, recorded: 3),
+            hasPreviewRoot: true))
+
+        for text in said.map({ $0.lowercased() }) {
+            XCTAssertTrue(text.contains("export it again")
+                          || text.contains("export them again")
+                          || text.contains("exported again"),
+                          "the copy sets these days aside without saying what reaching "
+                          + "a rebuild would take, so a day still waiting to post has "
+                          + "no route out of the pile: \(text)")
+        }
+    }
+
+    /// The sheet reads the blurb rather than spelling its own.
+    ///
+    /// Two copies of one sentence is two things to keep in step, and the one
+    /// that drifts is the one no test can reach (L41, L263). The view is where
+    /// the wrong claim shipped and stayed, because nothing could assert it.
+    func testTheSheetTakesItsBlurbFromTheTestableSide() {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Views/OutdatedDesignsSheet.swift")
+        let code = SwiftSourceText.withoutComments(
+            try! String(contentsOf: url, encoding: .utf8))
+
+        XCTAssertTrue(code.contains("OutdatedDesignsDisplay.exportedSectionBlurb"),
+                      "the sheet spells its own version of the set-aside blurb, so the "
+                      + "claim it makes is back outside the reach of every check here")
     }
 
     /// With nothing recorded, the list has not shrunk and the sentence has to
