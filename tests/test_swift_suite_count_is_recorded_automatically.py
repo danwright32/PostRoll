@@ -44,6 +44,7 @@ from tools.record_suite_count import (
     NoRunFound, NothingRanTheSuite, count_in_log, newest_counted_run,
     newest_green_swift_run, worth_proposing)
 from tools.suite_counts import FLOOR_TOLERANCE
+from source_text import without_prose
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -185,7 +186,10 @@ def test_the_reader_and_the_writer_of_that_line_cannot_drift_apart() -> None:
     # The line is printed by tools/suite_counts.py and parsed here. Two
     # spellings of one format is how they come apart, and the failure is silent:
     # a reader that matches nothing reports a run with no count (L41, L100).
-    source = (REPO_ROOT / "tools/suite_counts.py").read_text(encoding="utf-8")
+    # As code (#1074): the line this looks for is quoted in the comment
+    # beside it, so a raw read would pass on the quotation after the
+    # print itself had been changed.
+    source = without_prose(REPO_ROOT / "tools/suite_counts.py")
 
     assert 'print(f"{label}: {counted} tests")' in source, (
         "tools/suite_counts.py no longer prints the count in the shape this "

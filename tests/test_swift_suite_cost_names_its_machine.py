@@ -33,6 +33,7 @@ import json
 from pathlib import Path
 
 import pytest
+from source_text import without_prose
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -171,6 +172,10 @@ def test_a_reading_counts_the_tests_it_timed() -> None:
 # ── the workflow points at the record rather than restating it ───────────────
 
 def test_the_workflow_sends_the_reader_to_the_record() -> None:
+    # RAW, and one of the few places that is right (#1074). The claim here is
+    # about the PROSE: a workflow can only cite a record in a comment, so
+    # reading this one as code would look for the citation everywhere except
+    # where it can be.
     text = SWIFT_WORKFLOW.read_text()
     assert "swift_suite_cost.json" in text, (
         "swift.yml does not cite tests/fixtures/swift_suite_cost.json, so the "

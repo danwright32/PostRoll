@@ -30,6 +30,7 @@ from pathlib import Path
 import pytest
 
 from workflow_commands import runs_the_gui_scheme, xcodebuild_commands
+from source_text import without_prose
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -253,7 +254,9 @@ def test_something_actually_runs_the_reviewer(tests_target: str) -> None:
         "what #509 deleted the last UI target for"
     )
     for path in runners:
-        text = path.read_text()
+        # As code (#1074): a workflow that lost its dispatch trigger
+        # still explains it in the comment above where it was.
+        text = without_prose(path)
         assert "workflow_dispatch:" in text, (
             f"{path.name} runs the GUI suite but cannot be run by hand, so "
             "there is no way to ask the question the day it matters"

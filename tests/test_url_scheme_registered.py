@@ -26,6 +26,7 @@ import re
 from pathlib import Path
 
 import pytest
+from source_text import without_prose
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -126,7 +127,10 @@ def test_the_generated_project_carries_the_registration():
     A scheme added to the manifest without running `xcodegen generate` is absent
     from every build, and the manifest reads as done.
     """
-    pbxproj = PBXPROJ.read_text(encoding="utf-8")
+    # Xcode writes `/* Name */` annotations all through this file, so a
+    # raw read finds the key in an annotation as readily as in a real
+    # build setting (#1074).
+    pbxproj = without_prose(PBXPROJ)
     assert "CFBundleURLTypes" in pbxproj, (
         "the URL scheme is in project.yml but not in the generated "
         "PostRoll.xcodeproj. Run `cd PostRollApp && xcodegen generate` and "

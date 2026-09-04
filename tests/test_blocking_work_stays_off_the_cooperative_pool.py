@@ -41,6 +41,8 @@ from pathlib import Path
 
 import pytest
 
+from source_text import without_prose
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCES = REPO_ROOT / "PostRollApp" / "Sources"
 
@@ -262,9 +264,14 @@ def test_the_helper_the_message_names_actually_exists():
     helper = SOURCES / "Services" / "Blocking.swift"
 
     assert helper.is_file(), f"{helper} does not exist"
-    text = helper.read_text(encoding="utf-8")
-    assert "DispatchQueue.global" in text, (
+    # As code (#1074). That file's own doc comment explains the cooperative
+    # pool at length and names both constructions, so a raw read is answered by
+    # the explanation as readily as by the code, and the helper could be gutted
+    # with this still green (L103, L135). Which is the whole subject of the
+    # sweep above.
+    code = without_prose(helper)
+    assert "DispatchQueue.global" in code, (
         "Blocking.run no longer leaves the cooperative pool, so every call site "
         "moved onto it is back where it started")
-    assert "Task.detached" not in text.replace("`Task.detached`", ""), (
+    assert "Task.detached" not in code, (
         "Blocking.run detaches, which is the thing it exists to avoid")

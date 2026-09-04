@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from source_text import without_prose
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SWIFT = REPO_ROOT / "PostRollApp" / "Sources" / "Services" / "RepairJournal.swift"
@@ -24,7 +25,9 @@ PYTHON_READER = REPO_ROOT / "tools" / "read_repair_log.py"
 
 
 def _swift_refused_wording() -> str:
-    source = SWIFT.read_text(encoding="utf-8")
+    # Comments blanked (#1074). String literals are kept: what this reads
+    # IS a literal, and blanking those would make it unsatisfiable (L104).
+    source = without_prose(SWIFT)
     match = re.search(r'static let refusedWording = "([^"]+)"', source)
     assert match, (
         "RepairJournal no longer declares refusedWording where this reads it, "
@@ -64,7 +67,9 @@ def test_the_panel_selects_on_the_event_id_and_has_no_fallback():
     """The keying fix is the reason the panel can be per-post at all. A
     fallback to the name or the venue reintroduces exactly the guess it
     replaced, and would do so silently (L214)."""
-    source = SWIFT.read_text(encoding="utf-8")
+    # Comments blanked (#1074). String literals are kept: what this reads
+    # IS a literal, and blanking those would make it unsatisfiable (L104).
+    source = without_prose(SWIFT)
 
     assert 'record["event_id"]' in source, (
         "the panel's reader no longer selects on the event id")

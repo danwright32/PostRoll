@@ -32,6 +32,7 @@ from pathlib import Path
 import pytest
 
 from tests import mac_build_setup
+from source_text import without_prose
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -306,9 +307,40 @@ def test_the_suite_runs_on_a_mac_as_well_as_linux():
     """Everything but four font-dependent files ran on Linux only, while the app
     that calls this pipeline runs on Dan's Mac. Path handling, the ffmpeg build
     and its codecs, font fallbacks and filesystem case all differ, and every one
-    of those stayed invisible until it was hit locally."""
-    text = TESTS.read_text()
-    assert "macos" in text.lower(), "the Mac leg is gone, so the suite is Linux only again"
+    of those stayed invisible until it was hit locally.
+
+    Asserted as a JOB with a macOS runner, never as the word appearing in the
+    file (#1074). `macos` occurs ten times in tests.yml, at least five of them
+    inside comments, so deleting the entire `macos:` job left the previous
+    version of this green on prose alone: a guard whose whole subject is that a
+    skipped Mac leg reads exactly like a passing one could not tell the
+    difference itself (L103, L135, L98).
+    """
+    on_a_mac = [name for name, runner in _jobs_and_runners(TESTS).items()
+                if runner.startswith("macos")]
+
+    assert on_a_mac, (
+        "no job in tests.yml runs on a macOS runner, so the suite is Linux only "
+        f"again. Its jobs run on: {_jobs_and_runners(TESTS)}")
+
+
+def _jobs_and_runners(workflow: Path) -> dict[str, str]:
+    """Each job in `workflow`, by name, with the runner it asks for.
+
+    Read off the `runs-on:` line at a job's own indentation, so nothing in a
+    comment, a step or a `run:` script body can answer for it.
+    """
+    text = without_prose(workflow)
+    after = text.split("\njobs:\n", 1)
+    if len(after) != 2:
+        return {}
+    found: dict[str, str] = {}
+    for chunk in re.split(r"\n(?=  [a-z][a-z0-9_-]*:\n)", after[1]):
+        name = chunk.strip().split(":", 1)[0]
+        runner = re.search(r"^    runs-on: (.+)$", chunk, re.M)
+        if name and runner:
+            found[name] = runner.group(1).strip()
+    return found
 
 
 # There used to be a test here requiring the two legs to run the IDENTICAL

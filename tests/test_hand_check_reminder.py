@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from source_text import without_prose
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TOOL = REPO_ROOT / "tools" / "hand_check_reminder.py"
@@ -214,7 +215,9 @@ UI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ui.yml"
 
 
 def workflow_text() -> str:
-    text = UI_WORKFLOW.read_text()
+    # Read as code, not as prose (#1074): this workflow explains itself
+    # in comments that name the very step being checked for.
+    text = without_prose(UI_WORKFLOW)
     assert text.strip(), f"{UI_WORKFLOW} is empty, so every assertion below is about nothing"
     return text
 

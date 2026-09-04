@@ -315,3 +315,125 @@ def code_of(path: Path) -> str:
     per test was the other half of the cost.
     """
     return swift_code_only(text_of(path))
+
+
+# ── the other two languages guards read (#1074) ──────────────────────────────
+#
+# The Swift half above was swept in #436. The workflow and Python guards were
+# not, and they have the same defect: `assert "macos" in tests.yml` is answered
+# by any of the ten occurrences of that word, at least five of them inside
+# comments, so deleting the entire `macos:` job left the guard green on prose
+# (L103, L135). The guard whose whole subject is that a skipped Mac leg reads
+# exactly like a passing one (L98) could not tell the difference itself.
+#
+# Not hypothetical: `test_the_confirming_step_still_runs_when_the_job_goes_red`
+# SURVIVED its registry mutation in #990 because it matched `!cancelled()` in a
+# comment rather than in the step's `if:`.
+
+
+def python_without_comments(source: str) -> str:
+    """`source` with comment and docstring text blanked out.
+
+    Through `tokenize` rather than a regex, because a `#` inside a string is not
+    a comment and a regex that treats it as one deletes real code. That fails in
+    the direction nobody notices: the guard goes on passing while reading less
+    than it thinks.
+
+    Docstrings go too, and they are the half that matters here. A module
+    docstring in this repository routinely names the exact call the test below
+    it checks for, which is the same defect one step along.
+
+    Unparseable source RAISES rather than coming back unchanged. A caller would
+    otherwise assert against raw text believing it had been stripped, which is
+    the state this exists to remove (L11, L215).
+
+    Blanked rather than deleted, like the Swift half, so line numbers survive.
+    """
+    import io
+    import tokenize
+
+    try:
+        tokens = list(tokenize.generate_tokens(io.StringIO(source).readline))
+    except (tokenize.TokenError, IndentationError, SyntaxError) as broken:
+        raise ValueError(
+            "could not tokenize this source, so nothing can be said about "
+            "which of it is comment and which is code") from broken
+
+    lines = source.splitlines(keepends=True)
+    spans: list[tuple[int, int, int, int]] = []
+    previous = None
+    for token in tokens:
+        if token.type == tokenize.COMMENT:
+            spans.append((*token.start, *token.end))
+        elif (token.type == tokenize.STRING
+              and previous in (None, tokenize.NEWLINE, tokenize.NL,
+                               tokenize.INDENT, tokenize.DEDENT)):
+            spans.append((*token.start, *token.end))
+        if token.type not in (tokenize.NL, tokenize.COMMENT):
+            previous = token.type
+
+    for start_row, start_col, end_row, end_col in spans:
+        for row in range(start_row, end_row + 1):
+            line = lines[row - 1]
+            begin = start_col if row == start_row else 0
+            finish = end_col if row == end_row else len(line.rstrip("\n"))
+            lines[row - 1] = (
+                line[:begin]
+                + "".join(" " for _ in line[begin:finish])
+                + line[finish:])
+    return "".join(lines)
+
+
+def yaml_without_comments(source: str) -> str:
+    """A workflow with its comment LINES blanked.
+
+    Line based, deliberately. A trailing `# ...` after a value is rare in these
+    files, and stripping one naively would cut a `#` inside a quoted string,
+    which workflows do carry. Blanking whole comment lines covers every case
+    this repository actually has, and the test beside it proves that against the
+    real files rather than against a fixture (L48).
+    """
+    return "".join(
+        "\n" if line.strip().startswith("#") else line
+        for line in source.splitlines(keepends=True))
+
+
+#: Which prose stripper each kind of file needs, by suffix.
+#:
+#: A file whose suffix is not here REFUSES rather than coming back unstripped.
+#: A guard handed raw text believing it was cleaned is exactly the state this
+#: module exists to remove, and a silent passthrough would put it back for
+#: whatever kind of file somebody adds next (L11, L214).
+_PROSE = {
+    ".py": python_without_comments,
+    ".swift": swift_without_comments,
+    ".yml": yaml_without_comments,
+    ".yaml": yaml_without_comments,
+    ".sh": yaml_without_comments,
+    # Xcode writes `/* Name */` annotations into the project file and its first
+    # line is a `//` banner, so it reads like Swift for this purpose.
+    ".pbxproj": swift_without_comments,
+    # A Makefile's comments are `#` lines, the same shape as a workflow's.
+    "": yaml_without_comments,
+}
+
+
+def without_prose(path: Path) -> str:
+    """`path`'s text with its own language's comments blanked (#1074).
+
+    The reading a guard looking for CODE wants, in one call, so a call site
+    changes by one word rather than by importing the right stripper and
+    remembering which one that is. Sixteen guards asserted a literal against raw
+    text; each of them is one of these now.
+
+    String literals are KEPT, unlike `code_of`. Several of these guards assert
+    PROMPT COPY, which lives in a string by definition, and blanking those would
+    turn a working guard into one that can never pass (L104).
+    """
+    stripper = _PROSE.get(path.suffix if path.suffix else "")
+    if stripper is None:
+        raise ValueError(
+            f"nothing here knows how to tell {path.name}'s comments from its "
+            f"code, so it cannot be read as code. Add its suffix to _PROSE "
+            f"with the stripper its language needs, rather than reading it raw")
+    return stripper(text_of(path))

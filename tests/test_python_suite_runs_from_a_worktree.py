@@ -24,6 +24,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from source_text import without_prose
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RESOLVER = REPO_ROOT / "venv-python.sh"
@@ -175,7 +176,10 @@ def test_no_make_recipe_still_spells_the_interpreter_by_hand() -> None:
 def test_the_makefile_resolves_it_through_the_shared_definition() -> None:
     # And the check above is not satisfied by a Makefile that stopped running
     # Python at all (L283).
-    text = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+    # As code (#1074). The Makefile explains this resolution in a comment
+    # that names the script, so a raw read passes on the explanation
+    # alone, which is the defect this very check exists to prevent.
+    text = without_prose(REPO_ROOT / "Makefile")
 
     assert "venv-python.sh" in text, (
         "the Makefile no longer resolves the interpreter through the one shared "
