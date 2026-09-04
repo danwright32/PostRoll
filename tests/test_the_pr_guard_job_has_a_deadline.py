@@ -100,10 +100,17 @@ def test_the_deadline_is_well_under_the_job_s_own_cap():
     assert deadline < cap, (
         f"the deadline is {deadline}s and the job is capped at {cap}s, so the "
         "cap fires first and reports CANCELLED")
-    assert cap - deadline >= 300, (
-        f"only {cap - deadline}s separates the deadline from the cap, which is "
-        "less than this job's setup takes (Xcode, xcodegen, pip, ffmpeg: about "
-        "five minutes), so a slow setup puts the cap first")
+    # Ten times the job's measured setup, not the five minutes this used to
+    # claim. Read off 11 successful runs on 2026-09-04: checkout 4s, Prepare the
+    # Mac build 4s, Set up Python 3s, dependencies 5s, ffmpeg 6s, 24s in total
+    # and 31s at worst. The five minute figure predates the shared
+    # prepare-mac-build action and its caches (#1249), and it is the premise
+    # that made raising the deadline look impossible (L316, #1280).
+    setup_seconds = 31
+    assert cap - deadline >= setup_seconds * 10, (
+        f"only {cap - deadline}s separates the deadline from the cap, and this "
+        f"job's setup has been measured at {setup_seconds}s at worst, so the "
+        "margin is under ten times it and a slow setup could put the cap first")
 
 
 # ── it is sized from the distribution, not picked round (L172) ───────────────
