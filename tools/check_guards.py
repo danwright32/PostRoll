@@ -788,7 +788,8 @@ def changed_registry_names(repo_root: Path, registry_path: Path,
 #
 # `--changed` selected an entry whenever its guard TEST FILE was in the diff.
 # BannerLegibilityTests.swift holds around forty entries, so editing one guard
-# in it re-proved all forty, at the 12 to 22 seconds each that #621 measured.
+# in it re-proved all forty, at the 12 to 22 seconds each that #621 measured on
+# the macos-26 runner this sweep runs on (#1245).
 #
 # The narrowing has an honest half and a dangerous half. A guard's behaviour
 # lives as much in the matcher it calls as in the function that asserts on it,

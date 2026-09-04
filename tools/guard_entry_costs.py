@@ -129,7 +129,8 @@ def costs_for(names_by_kind: Mapping[str, bool],
     for name, value in record["seconds"].items():
         # A reading is only valid for the KIND it was taken as. #1089 moved
         # seven entries from a Swift test to a Python one, and their readings
-        # went on saying 29s for something that now costs 0.2s: an entry that
+        # went on saying 29s for something that now costs 0.2s, both on the
+        # macos-26 runner the sweep records from (#1245): an entry that
         # changes kind changes cost by about 90x, and nothing in a bare
         # name-to-seconds map can tell that from an entry that got slower
         # (L133). Discarded rather than kept, so it is re-estimated from the

@@ -131,7 +131,8 @@ class Verdict:
 #: Read from the log because nothing cheaper carries it: measured on 2026-08-31,
 #: a job's step summary and its annotations both come back EMPTY from the checks
 #: API, so the log is the only place the count reaches. One is 1.15MB and 0.7s
-#: for the Swift job, so a sixteen run window is about twelve seconds and 18MB
+#: to fetch for the Swift job, timed on the 12 core Mac this tool is normally run
+#: from (#1245), so a sixteen run window is about twelve seconds and 18MB
 #: once a day, which is affordable and was the thing #1039 asked to be checked
 #: before building on it.
 #:
@@ -144,8 +145,9 @@ class Verdict:
 #: The guard proof jobs are deliberately ABSENT, and that is a finding rather
 #: than an omission. Their logs do report `N guards checked`, and dividing by it
 #: does not normalise them: measured over ten runs on 2026-08-31 the rate ran
-#: from 1,174ms to 106,500ms per guard, a factor of 90, because a Swift entry
-#: rebuilds the app at about 29s and a Python one is under a second. A count of
+#: from 1,174ms to 106,500ms per guard, a factor of 90, on the macos-26 runner
+#: those runs used (#1245), because a Swift entry rebuilds the app at about 29s
+#: there and a Python one is under a second. A count of
 #: ITEMS is not a measure of WORK when the items differ that much (L63, L296),
 #: and a divisor that wrong would give a bare comparison the confidence of a
 #: normalised one, which is the exact defect #1041 exists to remove.

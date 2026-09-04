@@ -110,7 +110,9 @@ def run_command(args: list[str]) -> tuple[int, str]:
 
 #: The settings worth reporting, and the reason each is here. Named rather than
 #: dumped: `-showBuildSettings` prints hundreds of lines and a reader looking
-#: for the two that explain a 152 second single task will not find them.
+#: for the two that explain a 152 second single task will not find them. That
+#: 152s is a reading off the macos-26 runner's own build log, not a local one
+#: (#1245): the whole point of this tool is that the two differ.
 #:
 #: A setting that is ABSENT is reported as absent rather than as unknown. The
 #: two are different: SWIFT_COMPILATION_MODE is not emitted at all when nothing
