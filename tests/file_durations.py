@@ -64,15 +64,29 @@ RECORD = REPO_ROOT / "tests" / "fixtures" / "test_file_durations.json"
 #: by order, which changes only when two files really do swap, rather than by a
 #: line that moves under everything.
 #:
-#: Five, which is the set the share threshold produced whenever it happened to
-#: land above that file. Those five are 918s of a roughly 1,400s run, and the
-#: sixth is 64s, so this is where the saving is.
+#: FOUR since 2026-09-04, re-chosen from the measurement rather than kept
+#: (#1261). It was five, and the boundary that put the fifth file at 61.9s
+#: against a sixth at 54.5s, a factor of 1.14 where this asks for 1.35. Two
+#: files that close swap on ordinary noise, which is the one thing ranking was
+#: adopted to prevent, so the guard below correctly refused it.
 #:
-#: `test_fast_subset_stays_honest.py` holds the boundary open: the fifth file
-#: has to stay clearly dearer than the sixth, or two files a hair apart would
+#: The distribution it was re-chosen against, measured 2026-09-04 over a 1,272s
+#: run: 280.6, 207.1, 126.4, 114.8, then 61.9, 54.5, 45.1, 30.7. Only two
+#: boundaries in it are real gaps, after four (1.85x) and after seven (1.47x),
+#: and four is taken because it is the wider of the two by a distance that
+#: survives the run to run swing #976 measured, and because it is the
+#: conservative direction: the fast loop covers a file more rather than less.
+#:
+#: Those four are 729s of that run, 57% of it, so the saving is still where it
+#: always was. `test_generate_media_friday_clips.py` moves back into the fast
+#: run, which is the tenth time that one file has decided this, and #976 is
+#: where that recurrence is dealt with rather than absorbed again here.
+#:
+#: `test_fast_subset_stays_honest.py` holds the boundary open: the fourth file
+#: has to stay clearly dearer than the fifth, or two files a hair apart would
 #: swap on ordinary noise and the fast run's contents would change with nobody
 #: choosing it.
-EXPENSIVE_COUNT = 5
+EXPENSIVE_COUNT = 4
 
 #: How much dearer the last skipped file has to be than the first kept one.
 #:
