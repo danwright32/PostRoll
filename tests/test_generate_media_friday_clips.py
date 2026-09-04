@@ -23,25 +23,33 @@ import postroll.media.generate_title_card as card_mod
 # a loud failure, which is what CI needs.
 from conftest import HAVE_FFMPEG, needs_ffmpeg  # noqa: F401
 
-# Marked slow. Every check here runs the whole Friday gate, which renders a real
-# reel and, since #824, really composites a title card onto it, so it is one of
-# the more expensive files in the suite.
+# NOT marked slow, as of #1261, and this file is the reason that decision is
+# worth reading rather than just seeing.
 #
-# This file decided where the old share threshold sat NINE times, on readings of
-# 5.0%, 5.8%, 4.5%, 4.99%, 6.18%, 4.37%, 5.97%, 5.17% and 5.96%, the last three
-# within a few hours of each other on one machine. Nothing about it changed on
-# any of those occasions; the suite around it did, and a share is a ratio.
+# Every check here runs the whole Friday gate, which renders a real reel and,
+# since #824, really composites a title card onto it, so it is genuinely one of
+# the more expensive files in the suite. It is the fifth dearest today at 61.9s.
 #
-# Since #1196 the fast run skips the five DEAREST files rather than everything
-# over a share, and this file has been the fifth dearest in all eight recorded
-# versions of the record. So the marker stops moving: its rank is what decides,
-# and its rank has never changed. CI and `make test-python` run it either way
-# throughout (#826, #840, #932).
+# It decided where the old share threshold sat NINE times, on readings of 5.0%,
+# 5.8%, 4.5%, 4.99%, 6.18%, 4.37%, 5.97%, 5.17% and 5.96%, the last three within
+# a few hours of each other on one machine. Nothing about it changed on any of
+# those occasions; the suite around it did, and a share is a ratio.
 #
-# The marker is not a judgement kept here. It is derived from the recorded
-# distribution in tests/file_durations.py, and tests/test_fast_subset_stays_honest.py
-# fails if this line and that record disagree.
-pytestmark = pytest.mark.slow
+# #1196 replaced the share with a RANK, on the evidence that this file had been
+# the fifth dearest in all eight recorded versions of the record. It still is.
+# What moved was the file BELOW it: measured 2026-09-04 the sixth dearest is
+# 54.5s, a factor of 1.14, and a boundary that close swaps on ordinary noise,
+# which is the one thing ranking was adopted to prevent. So the boundary moved
+# up to four, where the gap is 1.85x, and this file is now the dearest one the
+# fast local loop still pays for.
+#
+# The marker is not a judgement kept here, which is why removing it is a comment
+# and not an argument. It is derived from the recorded distribution in
+# tests/file_durations.py, and tests/test_fast_subset_stays_honest.py fails if
+# this file and that record disagree in either direction. CI and
+# `make test-python` run this file either way throughout (#826, #840, #932).
+#
+# #976 is where the recurrence itself is dealt with, rather than absorbed again.
 
 
 def _make_gradient(path, seconds=3.0):

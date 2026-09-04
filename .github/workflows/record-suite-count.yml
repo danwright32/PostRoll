@@ -1,0 +1,177 @@
+name: Record the Swift suite count
+
+# `tools/suite_counts.py` refuses a Swift leg that ran far fewer tests than the
+# suite is known to hold, deriving the floor from
+# tests/fixtures/swift_suite_count.json with a 2% tolerance. Nothing re-recorded
+# that number (#1261). It said 2,599, measured 2026-08-29, while the suite ran
+# 2,965 on 2026-09-04, so the floor was 2,547 and a run could silently lose 418
+# tests, 14% of the suite, and still be waved through as full.
+#
+# Losing a worker's share is precisely the failure parallel testing adds, and a
+# floor that drifts down as the suite grows away from it reads as an active
+# safeguard while refusing less and less (L182). Re-recording it was one command
+# somebody had to remember to type, which is a rule living in a comment (L27).
+#
+# Same shape as record-guard-costs.yml, which fixed the same drift for the guard
+# cost record in #1099.
+#
+# No pull_request trigger, deliberately. wait_for_checks.py derives the bar from
+# the workflow files, and a new check name can only go green once its recorded
+# reply already holds it, so adding one costs a knowingly red merge (#1074, L48).
+#
+# When the Swift suite FINISHES, never at a clock time. Two scheduled jobs
+# cannot be ordered by arithmetic between their crons, because GitHub delays
+# scheduled work by hours under load (L386, #1262).
+#
+# The workflow is named rather than referenced, because that is all
+# `workflow_run` offers, and the test beside this reads the name out of
+# swift.yml rather than trusting the copy here: a name that matches nothing
+# fires never, and a workflow that never runs looks exactly like one with
+# nothing to do (L100, L98).
+on:
+  workflow_run:
+    workflows: ["macOS"]
+    types: [completed]
+  workflow_dispatch:
+
+jobs:
+  record:
+    # ubuntu, not a Mac. This reads a finished run's log through gh and writes
+    # one small file; nothing here needs Xcode, and a macOS runner bills at ten
+    # times the rate (#1246, L306).
+    runs-on: ubuntu-latest
+    # Only a run that went green. A run that failed may have stopped early, and
+    # a floor pinned to how far a broken run got is refused by nothing forever
+    # after (L182). A dispatched run carries no `workflow_run` context at all,
+    # so it is admitted by its own name, or the manual trigger would be a
+    # control that does nothing (L109).
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || github.event.workflow_run.conclusion == 'success'
+    # A job without a deadline cannot fail, it can only hang (L110, L313). This
+    # reads one log and writes one file.
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: read
+      actions: read
+    # At JOB level rather than on the step that uses it, because a step's own
+    # `env:` is not in scope in that step's own `if:`, and the whole point of
+    # the condition below is to skip cleanly when the secret is absent.
+    env:
+      RECORD_UPDATE_TOKEN: ${{ secrets.RECORD_UPDATE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      # Through the recorder, never by writing the record here. Every refusal
+      # lives in that tool: a run that cannot be looked up, a log with no count,
+      # a log carrying two counts that disagree, a count of zero, and a record
+      # the floor is still perfectly happy with. A step that wrote the record
+      # itself would carry none of them.
+      #
+      # Its three outcomes are three exit codes, and only one of them is red
+      # (L11, L13). Exit 3 is "CI answered and every run it named had skipped
+      # the suite", which is swift-unit working as designed on a push whose
+      # tree a pull request already checked, so it is let through: a workflow
+      # that went red on an ordinary quiet stretch is the noise that teaches
+      # everybody to ignore it (L36). Exit 1 is "CI could not be asked", which
+      # means the recorder is blind and nothing can say whether the floor has
+      # gone slack, and that fails the job rather than being summarised.
+      #
+      # NOT `continue-on-error`, which the guard cost recorder uses. That
+      # swallows both, so a broken token produces a green workflow saying
+      # nothing happened, which is exactly what a working recorder with nothing
+      # to do also produces (L98).
+      - name: Re-record the count if the floor has gone slack
+        id: record
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python tools/record_suite_count.py --from-newest-run || [ $? -eq 3 ]
+
+      - name: Say whether the record moved
+        id: moved
+        run: |
+          if git diff --quiet -- tests/fixtures/swift_suite_count.json; then
+            echo "moved=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "moved=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      # The measurement, kept whatever happens next. A run that computed a new
+      # record and could not propose it must not throw the reading away (L277).
+      - name: Keep the record this run computed
+        if: always() && steps.moved.outputs.moved == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: swift-suite-count
+          path: tests/fixtures/swift_suite_count.json
+          if-no-files-found: error
+
+      # A pull request, not a commit to main, so the number arrives as a
+      # reviewed change.
+      #
+      # RECORD_UPDATE_TOKEN rather than the default token, and this is the one
+      # thing about this job worth knowing. A pull request opened with
+      # GITHUB_TOKEN starts NO workflow runs, so it would carry no checks at
+      # all; wait_for_checks.py refuses an empty answer, correctly, so such a
+      # pull request could never be merged and this job would produce something
+      # nobody can act on.
+      #
+      # Until that secret exists the job still records, still keeps the
+      # artifact, and says so below. Inert is fine; inert and quiet is not
+      # (L543).
+      - name: Propose the new count
+        id: propose
+        if: steps.moved.outputs.moved == 'true' && env.RECORD_UPDATE_TOKEN != ''
+        env:
+          GH_TOKEN: ${{ secrets.RECORD_UPDATE_TOKEN }}
+        run: |
+          set -euo pipefail
+          branch="suite-count/$(date -u +%Y-%m-%d)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${branch}"
+          git add tests/fixtures/swift_suite_count.json
+          git commit -m "Record how many tests the Swift suite holds (#1261)"
+          git push --force-with-lease origin "${branch}"
+          gh pr create \
+            --base main \
+            --head "${branch}" \
+            --title "Record how many tests the Swift suite holds (#1261)" \
+            --body "Read off the newest green run of the Swift suite by tools/record_suite_count.py --from-newest-run. Proposed only because the recorded count had fallen more than the floor's own tolerance below what the suite actually runs, so the floor was refusing less than it was designed to."
+
+      # Four outcomes, said apart. Nothing to look at, a record the floor still
+      # holds up, a record proposed, and a record that moved with no way to
+      # propose it are different events, and only some need anybody to do
+      # anything (L11, L98).
+      - name: Say what happened
+        if: always()
+        run: |
+          {
+            echo "### Swift suite count"
+            if [ "${{ steps.record.outcome }}" != "success" ]; then
+              echo "The recorder could not reach the runs it reads, so nothing"
+              echo "here can say whether the floor has gone slack. Its reason is"
+              echo "in the step above; nothing was written or proposed."
+            elif [ "${{ steps.moved.outputs.moved }}" != "true" ]; then
+              echo "The recorded count still derives a floor within the"
+              echo "tolerance of what the suite runs, so there is nothing to"
+              echo "propose."
+            elif [ -n "${RECORD_UPDATE_TOKEN}" ]; then
+              echo "The suite has grown away from the record and a pull request"
+              echo "was opened."
+            else
+              echo "The record moved, and no RECORD_UPDATE_TOKEN is set, so no"
+              echo "pull request could be opened. A pull request opened with the"
+              echo "default token starts no workflow runs, so it would carry no"
+              echo "checks and could never be merged. The new record is attached"
+              echo "to this run as the swift-suite-count artifact: download it,"
+              echo "commit it and open the pull request by hand, or add the"
+              echo "secret and this job will do it next time."
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"

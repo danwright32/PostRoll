@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from datetime import date
@@ -43,11 +44,213 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from tools.check_guards import EXECUTED  # noqa: E402
 from tools.suite_counts import (  # noqa: E402
-    RECORDED_COUNT, SuiteCountError, swift_tests_run)
+    FLOOR_TOLERANCE, RECORDED_COUNT, SuiteCountError, swift_tests_run)
 
 
 class RecordError(Exception):
     """The transcript does not support writing a floor from it."""
+
+
+class NoRunFound(Exception):
+    """CI could not be ASKED, so nothing is known either way (#1261).
+
+    Its own type rather than an empty answer, because the caller ACTS on the
+    answer: a job reporting "nothing to record" on a broken token would say it
+    every day and read as a record that is up to date (L11, L98).
+    """
+
+
+class NothingRanTheSuite(NoRunFound):
+    """CI answered, and none of the runs it named carries a count.
+
+    Kept apart from its parent because only one of the two is somebody's
+    problem right now. A broken token or a refused API call means the recorder
+    cannot see, and that is an outage of the recorder itself. A run of pushes
+    whose swift-unit all skipped is the suite working exactly as designed, and
+    a workflow that went red for it every time would be the noise that stops a
+    real one being read (L11, L36).
+
+    A subclass rather than a sibling, so every existing `except NoRunFound`
+    still catches it and this cannot become a refusal that escapes.
+    """
+
+
+#: Which workflow the reading comes from, and which job inside it.
+#:
+#: Any successful run of it, whatever triggered it. A pull request run measures
+#: the same tree the merge lands, because `wait_for_checks.py --merge` refuses a
+#: head that does not contain main and squashes it, which produces the head's
+#: tree byte for byte. Scoping to `push` instead would find almost nothing:
+#: swift-unit SKIPS its work on a push whose tree a green pull request already
+#: checked, and a skipped job leaves no count.
+SUITE_WORKFLOW = "swift.yml"
+SUITE_JOB = "swift-unit"
+
+#: The line `tools/suite_counts.py` prints, read back.
+#:
+#: Not anchored to the start of a line: a runner log prefixes every line with
+#: the job name, the step name and a timestamp.
+COUNTED = re.compile(r"Swift: (\d+) tests")
+
+
+def _gh(args: list[str]) -> tuple[int, str]:
+    try:
+        done = subprocess.run(args, capture_output=True, text=True)
+    except FileNotFoundError as missing:
+        raise NoRunFound(
+            "the gh CLI is not on PATH, so no run could be looked up"
+        ) from missing
+    return done.returncode, done.stdout + done.stderr
+
+
+#: How far back to look for a run that actually ran the suite.
+#:
+#: More than one, because the NEWEST green run is usually a push to main whose
+#: swift-unit skipped: the tree had already been checked by the pull request
+#: that produced it. Those leave no count, so a search of one run would refuse
+#: on almost every trigger and a recorder that never records is one nobody can
+#: tell from a recorder that stopped running (L98, L557).
+#:
+#: Ten, which is about a day of merges here and cheap: each candidate past the
+#: first costs one log read, and the walk stops at the first that carries a
+#: count.
+RUNS_TO_LOOK_BACK = 10
+
+
+def green_swift_runs(run=_gh, limit: int = RUNS_TO_LOOK_BACK
+                     ) -> list[tuple[str, str]]:
+    """The newest successful runs of the Swift suite, newest first.
+
+    Green only. A run that failed may have stopped early, and a floor pinned to
+    how far a broken run got is the one kind of wrong nothing downstream ever
+    reports: it only ever refuses runs beneath it, so every later run clears it
+    and the check goes on reading as protection (L182).
+    """
+    code, output = run([
+        "gh", "run", "list",
+        "--workflow", SUITE_WORKFLOW,
+        "--status", "success",
+        "--limit", str(limit),
+        "--json", "databaseId,headSha,conclusion,createdAt",
+    ])
+    if code != 0:
+        raise NoRunFound(
+            f"gh could not list the Swift suite's runs (exit {code}): "
+            f"{output.strip()[:200]}. That is not the same as there being none")
+    try:
+        runs = json.loads(output)
+    except ValueError as error:
+        raise NoRunFound(
+            f"gh printed something that is not JSON: {output.strip()[:200]}"
+        ) from error
+    if not runs:
+        raise NoRunFound(
+            f"no successful run of {SUITE_WORKFLOW} was found, so there is "
+            f"nothing to record from. The suite may have been failing")
+    return [(str(r["databaseId"]), str(r["headSha"])) for r in runs]
+
+
+def newest_green_swift_run(run=_gh) -> tuple[str, str]:
+    """The newest successful run of the Swift suite, as (run id, head commit)."""
+    return green_swift_runs(run=run, limit=1)[0]
+
+
+def newest_counted_run(run=_gh) -> tuple[str, str, int]:
+    """The newest green run that actually ran the suite, and what it counted.
+
+    Walks back rather than taking the first, because a push to main whose tree
+    a green pull request already checked SKIPS swift-unit and leaves no count.
+    That is the ordinary state of the newest run, not an edge case.
+
+    Every candidate refusing is its OWN refusal, naming how many were looked at,
+    rather than the last one's reason: "the newest run skipped" and "nothing in
+    a day of runs ran the suite" are different problems (L11).
+    """
+    candidates = green_swift_runs(run=run)
+    reasons: list[str] = []
+    for run_id, head in candidates:
+        try:
+            return run_id, head, count_in_log(log_of(run_id, run=run))
+        except NoRunFound as refusal:
+            reasons.append(f"{run_id}: {refusal}")
+    raise NothingRanTheSuite(
+        f"none of the {len(candidates)} newest green runs of {SUITE_WORKFLOW} "
+        f"carries a Swift test count, so there is nothing to read. "
+        f"{reasons[0] if reasons else ''}")
+
+
+def count_in_log(log: str) -> int:
+    """How many tests a run's log says the Swift leg executed.
+
+    Three refusals, kept apart because they send you to different places (L11).
+
+    NO count at all is the common one and it is not an empty suite: swift-unit
+    skips its work on a push whose tree a green pull request already checked,
+    and a skipped job's log carries nothing. Reading that as a suite holding
+    nothing would set a floor every run on earth clears (L98, L100).
+
+    Two DIFFERENT counts is refused rather than averaged or taken last. A
+    failure message quotes its subject, so a line naming a count is not
+    necessarily the count (L156), and a record assembled from two readings is a
+    number nobody measured.
+
+    Zero is refused for the reason `count_from_transcript` refuses it: a
+    selection that matched nothing rather than a suite that holds nothing.
+    """
+    found = {int(n) for n in COUNTED.findall(log)}
+    if not found:
+        raise NothingRanTheSuite(
+            "that run's log carries no Swift test count. The job most likely "
+            "SKIPPED, which swift-unit does on a push whose tree a green pull "
+            "request already checked, and a skipped job is not a suite that "
+            "holds nothing")
+    if len(found) > 1:
+        raise NoRunFound(
+            f"that run's log carries {len(found)} different Swift test counts "
+            f"({', '.join(str(n) for n in sorted(found))}), so no single "
+            f"reading can be taken from it. Nothing was written")
+    counted = found.pop()
+    if counted == 0:
+        raise NoRunFound(
+            "that run executed 0 tests, which is a selection that matched "
+            "nothing rather than a suite that holds nothing. Recording it "
+            "would set a floor every run on earth clears")
+    return counted
+
+
+def log_of(run_id: str, run=_gh) -> str:
+    """One run's log for the Swift job, or a refusal naming why not."""
+    code, output = run(["gh", "run", "view", str(run_id), "--log",
+                        "--job", SUITE_JOB])
+    if code != 0:
+        # `--job` takes an id rather than a name on some gh versions, so fall
+        # back to the whole run's log and let `count_in_log` judge it. Named
+        # here rather than silently, because a fallback nobody can see is how
+        # a reading comes from somewhere other than where it was asked for.
+        code, output = run(["gh", "run", "view", str(run_id), "--log"])
+    if code != 0:
+        raise NoRunFound(
+            f"gh could not read run {run_id}'s log (exit {code}): "
+            f"{output.strip()[:200]}")
+    return output
+
+
+def worth_proposing(measured: int, recorded: int) -> bool:
+    """Whether the record has drifted far enough from the suite to re-record.
+
+    Judged against the floor's OWN tolerance rather than a second number
+    written beside it, or the two drift and the proposal fires for a record the
+    floor is perfectly happy with (L41, L70). The floor is
+    `recorded * (1 - FLOOR_TOLERANCE)`, so a record at or above
+    `measured * (1 - FLOOR_TOLERANCE)` is still holding the line it was
+    designed to hold, and a pull request about it is noise (L36).
+
+    Never downward. Lowering the floor is what a deliberate deletion needs, and
+    it is the one direction nothing downstream can report as wrong, so it stays
+    a person's act (L182). A count below the record leaves the floor too high,
+    which fails loudly and names the tool that re-records.
+    """
+    return recorded < int(measured * (1 - FLOOR_TOLERANCE))
 
 
 def count_from_transcript(log: str) -> int:
@@ -127,6 +330,72 @@ def _commit() -> str:
     return found.stdout.strip()
 
 
+def _record_from_newest_run(record: Path, commit: str | None) -> int:
+    """Record from CI, and only when the floor has actually gone slack (#1261).
+
+    Three outcomes, exit codes apart, because the caller acts differently on
+    each (L11): 0 looked and either wrote or had no reason to, 1 could not look
+    at all, 3 looked and nothing had run the suite. Only 1 means something is
+    wrong with the recorder itself, and only 1 is worth going red for.
+
+    Every one of them PRINTS. A recorder that says nothing whether it looked or
+    not is one nobody can tell from a recorder that stopped running (L98).
+    """
+    try:
+        run_id, head, measured = newest_counted_run()
+    except NothingRanTheSuite as nothing:
+        # Exit 3, not 1. CI answered and every run it named had skipped the
+        # suite, which is swift-unit working as designed on a push whose tree a
+        # pull request already checked. The caller reports this rather than
+        # failing on it, or the workflow goes red on an ordinary quiet stretch
+        # and teaches everybody to ignore it (L36).
+        print(f"nothing to record: {nothing}")
+        return 3
+    except NoRunFound as refusal:
+        # Exit 1. CI could not be ASKED, so the recorder is blind and nothing
+        # here can say whether the floor has gone slack. That is the recorder's
+        # own outage and it has to be loud (L13, L98).
+        print(f"not recorded: {refusal}", file=sys.stderr)
+        return 1
+
+    try:
+        recorded = int(json.loads(record.read_text(encoding="utf-8"))["count"])
+    except (OSError, ValueError, KeyError, TypeError):
+        # A record that cannot be read is not a record the suite has grown away
+        # from, and the two need telling apart (L11). Writing is right here:
+        # there is no floor at all until something does.
+        recorded = 0
+
+    if not worth_proposing(measured=measured, recorded=recorded):
+        print(f"nothing to record: run {run_id} executed {measured} tests and "
+              f"the record holds {recorded}, which still derives a floor within "
+              f"{FLOOR_TOLERANCE:.0%} of what the suite runs")
+        return 0
+
+    _write(record, counted=measured, commit=commit or head,
+           source=f"run {run_id} of {SUITE_WORKFLOW}, job {SUITE_JOB}")
+    print(f"recorded {measured} Swift tests in {record}, up from {recorded}")
+    return 0
+
+
+def _write(record: Path, counted: int, commit: str, source: str) -> None:
+    """The record itself, written in ONE place.
+
+    Both paths into this tool land here, so the fields a reader trusts cannot
+    come to say different things depending on which one wrote them (L41).
+    """
+    record.write_text(
+        json.dumps({
+            "count": counted,
+            "measured_on": date.today().isoformat(),
+            "measured_at_commit": commit,
+            "measured_from": f"{counted} tests, no failures, read from {source}",
+            "re_measure_with": "venv/bin/python tools/record_suite_count.py "
+                               "--from-newest-run",
+        }, indent=2) + "\n",
+        encoding="utf-8")
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("log", type=Path, nargs="?",
@@ -144,7 +413,18 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--commit", default=None,
                         help="the commit the run happened at, when the "
                              "transcript did not come from this checkout")
+    parser.add_argument("--from-newest-run", action="store_true",
+                        help="read the count off the newest green run of the "
+                             "Swift suite in CI, and write it only when the "
+                             "record has gone slack (#1261)")
     args = parser.parse_args(argv)
+
+    if args.from_newest_run:
+        if args.log is not None or args.result_bundle is not None:
+            print("--from-newest-run names its own source, so it takes neither "
+                  "a transcript nor --result-bundle", file=sys.stderr)
+            return 2
+        return _record_from_newest_run(args.record, args.commit)
 
     # Exactly one source, named by the caller. Neither is guessed at and
     # neither falls back to the other: a parallel transcript is PRESENT and
@@ -184,16 +464,8 @@ def main(argv: list[str]) -> int:
             print(f"not recorded: {refusal}", file=sys.stderr)
             return 1
 
-    args.record.write_text(
-        json.dumps({
-            "count": counted,
-            "measured_on": date.today().isoformat(),
-            "measured_at_commit": args.commit or _commit(),
-            "measured_from": f"{counted} tests, no failures, "
-                             f"read from {source}",
-            "re_measure_with": "venv/bin/python tools/record_suite_count.py",
-        }, indent=2) + "\n",
-        encoding="utf-8")
+    _write(args.record, counted=counted, commit=args.commit or _commit(),
+           source=source)
 
     print(f"recorded {counted} Swift tests in {args.record}")
     return 0

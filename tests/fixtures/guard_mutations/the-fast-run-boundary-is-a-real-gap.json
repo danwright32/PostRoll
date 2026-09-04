@@ -1,8 +1,8 @@
 {
   "name": "the-fast-run-boundary-is-a-real-gap",
   "file": "tests/file_durations.py",
-  "find": "EXPENSIVE_COUNT = 5",
-  "replace": "EXPENSIVE_COUNT = 6",
+  "find": "EXPENSIVE_COUNT = 4",
+  "replace": "EXPENSIVE_COUNT = 5",
   "test": "tests/test_fast_subset_stays_honest.py::test_the_boundary_between_expensive_and_ordinary_is_a_real_gap",
-  "breaks": "the fast run's boundary falls between two files close enough to swap order on ordinary noise, so which tests the fast loop skips changes between recordings with nobody choosing it (#1196, L172)"
+  "breaks": "the fast run's boundary falls between two files close enough to swap order on ordinary noise, so which tests the fast loop skips changes between recordings with nobody choosing it (#1196, #1261, L172)"
 }
