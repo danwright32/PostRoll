@@ -332,4 +332,96 @@ final class ExportFolderStatusTests: XCTestCase {
         XCTAssertTrue(message.contains("4 files in the folder."), message)
         XCTAssertFalse(message.lowercased().contains("could not be read"), message)
     }
+
+    // MARK: - Which folder a re-export may use without asking (#1048)
+
+    /// The export folder was one app-wide preference, so a brand new show
+    /// arrived at the export screen already offering the PREVIOUS show's folder
+    /// as a one-click button, and the per-day re-export used it with no picker
+    /// at all. Exporting a show into another show's folder overwrites the day
+    /// folders already sitting there.
+    ///
+    /// Dan's requirement, stated on the issue: the export folder starts empty
+    /// on every new project and choosing one is a required step, because it is
+    /// always a new folder.
+
+    private func event(exportedTo path: URL?) -> Event {
+        var e = Event(name: "Show", org: "Org", venue: "Hall",
+                      date: Date(timeIntervalSince1970: 1_800_000_000),
+                      shootType: .fullShow)
+        e.exportPath = path
+        return e
+    }
+
+    func testANewEventOffersNoFolderAtAll() {
+        XCTAssertNil(ExportFolderStatus.rememberedFolder(for: event(exportedTo: nil)),
+                     "a show nothing has exported offers a folder, so the fastest "
+                     + "button on the screen writes it into somewhere it has never "
+                     + "been")
+    }
+
+    func testAnEventOffersTheFolderItWasActuallyExportedTo() throws {
+        // The positive control (L159). Without it "offers nothing" is satisfied
+        // by a fixture where nothing could ever be offered, and the picker
+        // would be forced even on the one case where remembering is right:
+        // re-exporting the same show into the same place.
+        try makeDay("1. Sunday", files: ["story.png"])
+        writeManifest()
+
+        XCTAssertEqual(ExportFolderStatus.rememberedFolder(for: event(exportedTo: folder)),
+                       folder)
+    }
+
+    func testAFolderThatHasBeenFiledAwayIsNotOfferedAgain() {
+        // Measured against the live store on 2026-09-02: 9 of 21 events record
+        // an export path and 0 of those 9 folders are still at it, because Dan
+        // files every finished export into one of his own Finder buckets. So
+        // this is the ordinary case rather than the exotic one, and offering a
+        // path nothing is at would create the folder on export rather than
+        // reuse it.
+        let gone = folder.appendingPathComponent("filed-away-somewhere-else")
+
+        XCTAssertNil(ExportFolderStatus.rememberedFolder(for: event(exportedTo: gone)),
+                     "a recorded folder nothing is at is still offered, so the "
+                     + "one-click export makes a new empty folder at a path Dan "
+                     + "moved away from")
+    }
+
+    func testAnUnfinishedExportIsStillTheSameShowsFolder() throws {
+        // No manifest, so the run did not finish. That is a reason to export
+        // again and not a reason to export somewhere else, and this is the one
+        // path where re-exporting into the same folder is exactly right.
+        try makeDay("1. Sunday", files: ["story.png"])
+
+        XCTAssertEqual(ExportFolderStatus.rememberedFolder(for: event(exportedTo: folder)),
+                       folder)
+    }
+
+    func testNothingReadsOneExportFolderForEveryShow() {
+        // The defect was not the wording, it was the SCOPE, and the scope lives
+        // in a shared preference key rather than in any value a test can hold.
+        // So this asserts the key is gone from both halves that used it (L46):
+        // one writer and one reader, and either left behind puts the previous
+        // show's folder back on a new show's screen.
+        func source(_ file: String) -> String {
+            let url = URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Sources/\(file)")
+            return try! String(contentsOf: url, encoding: .utf8)
+        }
+
+        for file in ["Views/ExportView.swift", "Services/ExportManager.swift"] {
+            XCTAssertFalse(source(file).contains("\"lastExportFolder\""),
+                           "\(file) still keys the export folder app wide, so a new "
+                           + "show arrives offering the previous show's folder")
+        }
+
+        // And the screen asks the per event question instead, or the check
+        // above is satisfied by a screen that simply lost the feature (L283).
+        XCTAssertTrue(source("Views/ExportView.swift").contains("rememberedFolder"),
+                      "the export screen no longer asks which folder THIS event may "
+                      + "reuse, so re-exporting the same show into the same place "
+                      + "went with the shared key rather than being scoped to it")
+    }
 }

@@ -69,6 +69,45 @@ enum ExportFolderStatus: Equatable {
         return of(folder: folder, fileManager: fileManager)
     }
 
+    /// The folder a re-export of THIS event may go to without asking (#1048).
+    ///
+    /// The export folder used to be one app-wide preference, so a brand new
+    /// show arrived at the export screen already offering the PREVIOUS show's
+    /// folder as the fastest button on it, and the per-day re-export took that
+    /// folder with no picker at all. The button names only the last path
+    /// component, so a folder called `Export` or `Post` reads identically for
+    /// every show, and exporting into the wrong one overwrites the day folders
+    /// already sitting there.
+    ///
+    /// Dan's requirement: the folder starts empty on every new project and
+    /// choosing one is a required step, because it is always a new folder. So
+    /// this answers from the EVENT's own record and never from a value another
+    /// event wrote, which makes the empty start a property of the data rather
+    /// than something the screen has to remember to do (L15).
+    ///
+    /// The one case where remembering is genuinely right survives: re-exporting
+    /// the same show into the same place, whether the last run finished or not.
+    ///
+    /// A folder that is no longer there is not offered. That is the ORDINARY
+    /// case rather than the exotic one: measured against the live store on
+    /// 2026-09-02, 9 of 21 events record an export path and 0 of those 9
+    /// folders are still at it, because Dan files each finished export into one
+    /// of his own Finder buckets. Offering the path anyway would silently
+    /// create an empty folder where one used to be.
+    ///
+    /// Switched over exhaustively rather than tested for one case, so a state
+    /// added later has to decide rather than falling into whichever branch the
+    /// default happened to be (L113).
+    static func rememberedFolder(for event: Event,
+                                 fileManager: FileManager = .default) -> URL? {
+        switch of(event, fileManager: fileManager) {
+        case .neverExported, .lostTrack:
+            return nil
+        case .finished, .unfinished, .unreadable:
+            return event.exportPath
+        }
+    }
+
     static func of(folder: URL, fileManager: FileManager = .default) -> ExportFolderStatus {
         var isDir: ObjCBool = false
         guard fileManager.fileExists(atPath: folder.path, isDirectory: &isDir), isDir.boolValue

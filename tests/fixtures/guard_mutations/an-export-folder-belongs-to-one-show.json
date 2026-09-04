@@ -1,0 +1,8 @@
+{
+  "name": "an-export-folder-belongs-to-one-show",
+  "file": "PostRollApp/Sources/Services/ExportFolderStatus.swift",
+  "find": "        case .neverExported, .lostTrack:\n            return nil\n        case .finished, .unfinished, .unreadable:\n            return event.exportPath",
+  "replace": "        case .neverExported:\n            return nil\n        case .lostTrack, .finished, .unfinished, .unreadable:\n            return event.exportPath",
+  "test": "PostRollTests/ExportFolderStatusTests/testAFolderThatHasBeenFiledAwayIsNotOfferedAgain",
+  "breaks": "the export screen offers a one-click button pointing at a folder nothing is at, so pressing it creates a new empty folder where Dan moved one away from. That is the ordinary case rather than the exotic one: measured on the live store 2026-09-02, 9 of 21 events record an export path and 0 of those 9 folders are still at it (#1048, #1110)"
+}
