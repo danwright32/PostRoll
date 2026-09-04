@@ -31,7 +31,7 @@ struct CollageLayoutGallery: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Choose a layout — \(day.displayName)")
+                Text("Choose a layout: \(day.displayName)")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(PaintedSurfaces.bodyText)
                 Spacer()

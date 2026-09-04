@@ -35,7 +35,7 @@ struct ProgramUploadView: View {
                 // Reminder banner — brand-toned, not generic orange
                 BrandBanner(
                     icon: "arrow.down.circle",
-                    message: "Download the program from your browser first. Salesforce ticketing sites block direct downloads. For faster OCR, remove bio pages and ads — cast list and program pages only."
+                    message: "Download the program from your browser first. Salesforce ticketing sites block direct downloads. For faster OCR, remove bio pages and ads. Cast list and program pages only."
                 )
 
                 // Optional event page URL — used by caption + blog generators

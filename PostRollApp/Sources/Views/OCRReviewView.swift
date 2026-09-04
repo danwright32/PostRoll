@@ -1635,7 +1635,7 @@ private struct FlagRow: View {
                     .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
                 .buttonStyle(.plain)
-                .help("Type a plain-English correction. Claude will update one or more fields on this item — useful when the right fix doesn't fit a single field.")
+                .help("Type a plain-English correction. Claude will update one or more fields on this item, which helps when the right fix doesn't fit a single field.")
             }
         }
     }

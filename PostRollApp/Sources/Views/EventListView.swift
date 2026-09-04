@@ -458,7 +458,7 @@ struct StagePill: View {
         .foregroundStyle(isSelected ? PaintedSurfaces.selectedPillLabel : pill.ink)
         .clipShape(Capsule())
         .help(tooltipText)
-        // Announce as "Stage, Photos Assigned" — not the "3 ·" prefix
+        // Announce as "Stage, Photos Assigned", not the "3 ·" prefix
         .accessibilityLabel("Stage")
         .accessibilityValue(state.label)
         .onChange(of: state.isBusy) { _, busy in

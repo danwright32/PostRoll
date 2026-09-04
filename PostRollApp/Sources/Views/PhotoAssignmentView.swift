@@ -2090,7 +2090,7 @@ private struct FridayBeforeAfterSection: View {
                         .font(.system(size: 10, weight: .medium))
                         .tracking(1.2)
                         .foregroundStyle(hasPhotos ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)
-                    Text("Before/after story — reuses Tuesday's RAW + edited photos")
+                    Text("Before/after story, reusing Tuesday's RAW and edited photos")
                         .font(.light(11))
                         .foregroundStyle(PaintedSurfaces.secondaryText)
                 }

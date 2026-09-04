@@ -225,6 +225,7 @@
     "test_stitch_notes.py": 0.0,
     "test_stored_types_round_trip.py": 1.2600000000000007,
     "test_story_title_clamp.py": 10.58,
+    "test_style_backlog_is_measured.py": 1.9,
     "test_subscription_transport.py": 0.0,
     "test_suite_hygiene.py": 0.66,
     "test_swap_blog_photos.py": 0.0,
@@ -1160,6 +1161,10 @@
     "test_story_title_clamp.py": {
       "run": "full-2026-09-04T03:02Z",
       "scale": 1.0
+    },
+    "test_style_backlog_is_measured.py": {
+      "run": "partial-2026-09-04T05:57Z",
+      "scale": 1.143
     },
     "test_subscription_transport.py": {
       "run": "full-2026-09-04T03:02Z",

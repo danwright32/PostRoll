@@ -1,0 +1,16 @@
+{
+  "copyInTheApp": 0,
+  "copyElsewhere": 124,
+  "prose": 337,
+  "measured_on": "2026-09-04",
+  "_what": [
+    "How many lines break the writing style rule, by kind (#948).",
+    "copyInTheApp is words on Dan's screen and is held to ZERO",
+    "  (#944 cleared it).",
+    "copyElsewhere is a prompt or tool string. Held to not growing:",
+    "  rewriting a prompt changes what a model is SHOWN and wants",
+    "  reading sentence by sentence, which #959 did for three files.",
+    "prose is a comment. Held to not growing, for the same reason.",
+    "Re-record with: venv/bin/python tools/style_backlog.py --record"
+  ]
+}
