@@ -46,19 +46,31 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
+from tools.check_guard_sweep_due import UNCONDITIONAL_AFTER  # noqa: E402
 from tools.guard_sweep_history import (  # noqa: E402
     HistoryUnreadable, Sweep, recent_sweeps)
 
-#: Twice the cadence the sweep is guaranteed at, so one missed or delayed run is
-#: not an alarm and two in a row is. An alert with a window shorter than what it
-#: measures fires on ordinary variation and gets ignored (L36).
+#: The longest silence that is not a fault, plus room for one missed run.
 #:
-#: The cadence used to be the weekly cron this was written against. Since #989
-#: the sweep runs daily on any day main moved, and `tools/check_guard_sweep_due`
-#: forces one anyway once the newest proof passes its own seven day window, so
-#: seven days is still the longest gap between proofs that is not a fault and
-#: fourteen is still twice it. Both numbers move together or neither does.
-DEFAULT_WINDOW = timedelta(days=14)
+#: DERIVED from the staleness window rather than written out beside it. Both
+#: numbers used to be their own literal, with a comment here saying "Both
+#: numbers move together or neither does", which is a rule living in prose and
+#: reaching nothing (L27, L41). Drifting apart is silent in both directions: a
+#: window inside the staleness window accuses a repository that is merely
+#: quiet, and there is no action that clears it because running the sweep makes
+#: the gate decline again (L144); a window past the 60 days GitHub disables a
+#: schedule at can only ever report a schedule that is already off (#554).
+#:
+#: The margin is fifteen days rather than a doubling. Doubling was right at a
+#: seven day cadence and reaches past that 60 day cliff at thirty, so what the
+#: watchdog actually needs is enough room for one delayed or lost run, not a
+#: multiple. GitHub delays scheduled work by hours under load and a run can be
+#: lost outright (L386).
+#:
+#: tests/test_the_two_sweep_windows_are_one_rule.py asserts every one of those
+#: bounds, so a change to either number that breaks the relationship is red
+#: rather than quiet.
+DEFAULT_WINDOW = UNCONDITIONAL_AFTER + timedelta(days=15)
 
 #: Named in every message, because a notice that does not say what to look at
 #: leaves the reader knowing something is wrong and with nowhere to go (L80).

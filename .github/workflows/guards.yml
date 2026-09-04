@@ -320,8 +320,12 @@ jobs:
       # any one shard, which is why each carried `matrix.shard == 1` before.
       #
       # Asking BEFORE the sweep rather than after it is safe for the freshness
-      # check: its window is 14 days and the staleness rule forces a sweep every
-      # 7, so it cannot accuse a healthy schedule of having stopped.
+      # check: its window is DERIVED from the staleness window and is always
+      # longer, so it cannot accuse a healthy schedule of having stopped by
+      # being asked one sweep early. The two numbers and every bound between
+      # them live in tests/test_the_two_sweep_windows_are_one_rule.py, which is
+      # where to read them rather than here: a number copied into a comment is
+      # one nothing updates (L210, L316).
       # Whether the SCHEDULED sweep is still happening at all (#554). The weekly
       # trigger's failure mode is silence: GitHub disables a repository's
       # schedules after 60 days with no push and reports that nowhere, so
