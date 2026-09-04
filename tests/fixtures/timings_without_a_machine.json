@@ -1,0 +1,7 @@
+{
+  "# for at all, and to staying well under the job's own 45 minutes: an": "A configured cap, not a reading. `timeout-minutes: 45` is a number this file SETS, and it means the same 45 minutes on every machine, so there is no measurement here for a machine to have produced.",
+  "# assumed 300 seconds a call and concluded the round cap would have to": "A figure the PLAN assumed and this tool refutes, and the sentence says so. It is also an Anthropic API round trip rather than local work, so the machine is not what decides it (the network and the model are).",
+  "# on, which is a different design from the one the 0.6s frame records (#341).": "A timestamp INSIDE a video, not a duration of work: 0.6s is where in the reel the reference frame is taken from. It is the same instant of the same clip whatever machine renders it.",
+  "# anything under 5ms, so without it a file made entirely of quick tests is": "A threshold in pytest's own `--durations` reporting, not a reading. It is the number below which pytest declines to print, and it is the same on every machine.",
+  "#: The tail of a pytest summary line: `in 3.93s`, or `in 130.02s (0:02:10)`": "Two examples of the TEXT this regular expression parses, quoted so the shape can be read. They are illustrations of a format, not measurements of anything."
+}

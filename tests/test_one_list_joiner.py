@@ -39,7 +39,21 @@ HOME = SOURCES / "Models" / "SentenceList.swift"
 #: last appended after an "and". Matched on the CONSTRUCTION rather than on a
 #: list of file names, so the eleventh is caught wherever somebody writes it
 #: (L96, L247).
-BY_HAND = re.compile(r"dropLast\(\)\s*\.?\s*joined\(separator: \", \"\)")
+#:
+#: The connector is part of the shape, and that is the half this used to be
+#: missing. `SentenceList` holds a rule about ENGLISH: a comma before "and",
+#: and "and" alone at two items. A joiner that appends its last item after a
+#: symbol is building a LABEL, "Story + Collage", and putting it on the shared
+#: joiner would replace the plus with "and" and change what a button says.
+#:
+#: That was exempted by FILE NAME, with a comment claiming the exemption was
+#: the reason rather than the name, which it was not: a second label joiner
+#: anywhere else fired, and a genuine sentence joiner added to the same file
+#: would have been waved through (#1165, L362, L562). The reason is derivable,
+#: so it is derived.
+BY_HAND = re.compile(
+    r"dropLast\(\)\s*\.?\s*joined\(separator: \", \"\)"
+    r"(?s:.{0,160}?)\b(?:and|or)\b")
 
 
 def _code(path: Path) -> str:
@@ -60,16 +74,21 @@ def swift_files() -> list[Path]:
     return found
 
 
-#: A joiner that is deliberately NOT this rule, and why (L233).
+#: A file whose joiner is deliberately NOT this rule, and why (L233).
 #:
-#: `GenerationRunPlan.joined` builds a LABEL, "Story + Collage", not an English
-#: sentence, so putting it on `SentenceList` would replace the plus with "and"
-#: and change what the button says. The exemption is the reason rather than the
-#: name, so a second label joiner is covered without an edit.
-NOT_A_SENTENCE = {
-    "PostRollApp/Sources/Services/GenerationRunPlan.swift":
-        "joins with a plus to build a label (Story + Collage), not a sentence",
-}
+#: Empty, and that is the current truth rather than a placeholder. The one entry
+#: it used to hold, `GenerationRunPlan.swift`, is now covered by the matcher
+#: itself: that joiner appends its last item after a plus, so it is a label and
+#: not a sentence, and `BY_HAND` no longer matches it.
+#:
+#: The entry is gone rather than kept because it was the defect #1165 is about.
+#: It named ONE case while the comment beside it claimed to name the reason, so
+#: a second label joiner written anywhere else fired, and a real sentence joiner
+#: added to that same file would have been waved through by a whole-file skip
+#: (L362, L135).
+#:
+#: A file added here now has to carry a reason no predicate can express.
+NOT_A_SENTENCE: dict[str, str] = {}
 
 
 def test_nothing_but_the_shared_joiner_writes_one():
@@ -128,13 +147,59 @@ def test_each_of_the_ten_now_asks_the_shared_one(file: str):
         f"list or it went back to punctuating one its own way")
 
 
-@pytest.mark.parametrize("path,why", sorted(NOT_A_SENTENCE.items()))
-def test_every_exemption_still_names_a_file_that_joins_by_hand(path: str, why: str):
+def test_every_exemption_still_names_a_file_that_joins_by_hand():
     """A stale exemption excuses a real failure silently, which is the one way
-    an exemption list can be worse than no list at all (L233, L217)."""
-    source = REPO_ROOT / path
+    an exemption list can be worse than no list at all (L233, L217).
 
-    assert source.is_file(), f"{path} is gone, so this exemption excuses nothing"
-    assert BY_HAND.search(_code(source)), (
-        f"{path} no longer joins a list by hand, so the exemption is stale and "
-        f"would quietly excuse it if it started again. Its reason was: {why}")
+    One assertion rather than one per entry, so the EMPTY case is a pass. As a
+    parametrised test it reported "got empty parameter set" and pytest printed
+    it as a skip, which is indistinguishable from a check that stopped running
+    (L98)."""
+    stale = []
+    for path, why in sorted(NOT_A_SENTENCE.items()):
+        source = REPO_ROOT / path
+        if not source.is_file():
+            stale.append(f"{path} is gone, so this excuses nothing")
+        elif not BY_HAND.search(_code(source)):
+            stale.append(f"{path} no longer joins a list by hand. Its reason "
+                         f"was: {why}")
+
+    assert not stale, (
+        "these exemptions name no file that still joins a list by hand, so "
+        "each would quietly excuse it if it started again:\n" + "\n".join(stale))
+
+
+def test_the_matcher_tells_a_sentence_from_a_label():
+    """Both directions, and this is the pair the exemption used to stand in for.
+
+    A matcher that fired on both would send somebody to replace a plus with an
+    "and" and change what a button says; one that fired on neither would pass
+    an eleventh hand written sentence joiner (L159)."""
+    sentence = ('let head = names.dropLast().joined(separator: ", ")\n'
+                'return "\\(head) and \\(names.last!)"')
+    label = ('let head = names.dropLast().joined(separator: ", ")\n'
+             'return "\\(head) + \\(names.last!)"')
+
+    assert BY_HAND.search(sentence), (
+        "the matcher no longer sees the shape all ten of #933's joiners had, "
+        "so this whole file guards nothing")
+    assert not BY_HAND.search(label), (
+        "a joiner that appends its last item after a symbol is building a "
+        "label (Story + Collage), not an English sentence, and SentenceList "
+        "would replace the plus with an and")
+
+
+def test_the_label_joiner_is_still_the_shape_that_exempts_it():
+    """The exemption above is now DERIVED, so it is only correct while the code
+    it covers still has the property it is derived from. If GenerationRunPlan
+    starts joining with an "and" it is a sentence and belongs on the shared
+    rule, and this says so rather than letting the sweep pass in silence
+    (L217)."""
+    plan = _code(SOURCES / "Services" / "GenerationRunPlan.swift")
+
+    assert "dropLast()" in plan, (
+        "GenerationRunPlan no longer joins a list at all, so the reasoning "
+        "that made it exempt no longer describes anything here")
+    assert not BY_HAND.search(plan), (
+        "GenerationRunPlan now joins with a sentence connector, so it is "
+        "writing English and belongs on SentenceList like the other ten")

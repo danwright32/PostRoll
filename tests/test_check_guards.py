@@ -1514,6 +1514,21 @@ def test_every_anchor_still_matches(entry):
     assert entry.find in entry.file
 '''
 
+#: A third state reader, appended to a COPY of the lock module so the
+#: derivation can be asked whether it would find one (#1165).
+#:
+#: Written as source rather than as a name in a list, because the question is
+#: whether the rule reads a real function definition the way it reads the two
+#: that exist.
+THIRD_READER = '''
+
+
+def blocked(repo_root: Path) -> bool:
+    """Whether anything at all holds the lock. Added after the tuple was written."""
+    return current(repo_root) is not None
+'''
+
+
 #: The same module reached one step further away, which is how a real test file
 #: grows: the guard is called by a shared setup rather than by the test itself.
 INDIRECTLY_SILENCED_MODULE = SILENCED_TEST_MODULE + '''
@@ -1657,6 +1672,63 @@ def test_a_swift_entry_is_not_examined_for_this(tmp_path):
     _register(repo)  # the default entry is a PostRollTests spec
 
     assert len(load_registry(_registry_dir(repo), repo_root=repo)) == 1
+
+
+def test_the_lock_state_readers_are_read_off_the_lock_module():
+    """#1165: the list named two instances of the reason, not the reason.
+
+    `LOCK_STATE_READERS` was `("verdict", "current")`. A RENAME was covered by
+    the test below; an ADDITION was not. A third function reporting the lock's
+    state would have been absent from the tuple, so a test standing down through
+    it was invisible to the check written to find exactly that (L96, L362).
+
+    It is derived now, and this is the pair of claims that derivation rests on:
+    the two real readers are found, and the two functions that are not readers
+    are not. Both directions, because a rule matching everything would treat
+    `lock_path(tmp_path)` as a stand-down and refuse the very file this refusal
+    recommends as the alternative (L104, L159).
+    """
+    from tools.check_guards import LOCK_STATE_READERS
+
+    assert set(LOCK_STATE_READERS) == {"current", "verdict"}, (
+        f"the derivation now finds {LOCK_STATE_READERS}. If a real state "
+        f"reader was added to perturbation_lock, say so here. If this went "
+        f"EMPTY, the derivation has stopped describing the module and every "
+        f"stand-down is invisible while the scan reports a clean tree")
+    assert "lock_path" not in LOCK_STATE_READERS, (
+        "lock_path hands back a Path, which says WHERE the lock is rather than "
+        "what it says, and reading it as a stand-down is the over-match this "
+        "was narrowed to avoid")
+    assert "held_for" not in LOCK_STATE_READERS, (
+        "held_for ACQUIRES the lock. A test inside one is holding it, not "
+        "standing down because of it")
+
+
+def test_a_new_lock_state_reader_is_picked_up_without_an_edit(tmp_path):
+    """The point of deriving it.
+
+    A hand written tuple passes the test above forever while being blind to
+    whatever was added after it, and that blindness is exactly what #1165 is
+    about (L96). This asks the real derivation about a lock module that has
+    grown a third reader, rather than reimplementing the rule beside it, which
+    would only prove this test agrees with itself (L70, L107).
+    """
+    from tools.check_guards import _lock_state_readers
+
+    real = (Path(__file__).resolve().parent.parent / "tools"
+            / "perturbation_lock.py").read_text(encoding="utf-8")
+    grown = tmp_path / "perturbation_lock.py"
+    grown.write_text(real + THIRD_READER, encoding="utf-8")
+
+    found = _lock_state_readers(grown)
+
+    assert "blocked" in found, (
+        "a function added to the lock module that reports its state is not "
+        "picked up, so a test standing down through it would be invisible to "
+        "the refusal written to catch exactly that")
+    assert {"current", "verdict"} <= set(found), (
+        "and the two that were there before must still be found, or this "
+        "passes by having broken the thing it is checking")
 
 
 def test_the_real_stand_down_helper_is_recognised():

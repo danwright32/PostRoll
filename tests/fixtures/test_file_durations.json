@@ -195,6 +195,7 @@
     "test_record_guard_costs.py": 0.0,
     "test_record_suite_count.py": 0.33999999999999997,
     "test_record_test_durations.py": 2.0300000000000002,
+    "test_recorded_timings_name_their_machine.py": 0.05,
     "test_reel_alt_text_describes_the_reel.py": 1.870000000000001,
     "test_reel_audio_failure.py": 3.05,
     "test_reel_audio_fallback.py": 2.5,
@@ -1045,6 +1046,10 @@
     "test_record_test_durations.py": {
       "run": "full-2026-09-04T03:02Z",
       "scale": 1.0
+    },
+    "test_recorded_timings_name_their_machine.py": {
+      "run": "partial-2026-09-04T08:46Z",
+      "scale": 1.278
     },
     "test_reel_alt_text_describes_the_reel.py": {
       "run": "full-2026-09-04T03:02Z",

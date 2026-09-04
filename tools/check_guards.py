@@ -299,14 +299,62 @@ def _functions(tree: ast.Module) -> list[ast.FunctionDef | ast.AsyncFunctionDef]
 #: The two calls in the lock module that report its STATE, as opposed to the
 #: ones that merely name a path or take it.
 #:
-#: Narrowed to these deliberately. Deriving from any lock function at all read
+#: Narrowed deliberately. Deriving from any lock function at all read
 #: `path = lock_path(tmp_path)` as a stand-down decision, which made the
 #: read-only case in `tests/test_perturbation_lock.py` look like a helper that
 #: silences itself, and that file is the alternative this whole refusal
-#: recommends. A rename here would weaken the detection silently, so
-#: `test_the_real_stand_down_helper_is_recognised` holds these names to the
-#: helper that actually exists (L96).
-LOCK_STATE_READERS = ("verdict", "current")
+#: recommends.
+#:
+#: DERIVED from the lock module rather than listed, which is the fix for #1165.
+#: It was `("verdict", "current")`, two names, and a rename was covered by
+#: `test_the_real_stand_down_helper_is_recognised` while an ADDITION was not: a
+#: third function reporting the lock's state would be absent from the tuple, so
+#: a test standing down through it was invisible to the very check written to
+#: find that (L96, L362). The list named two instances of the reason instead of
+#: the reason.
+#:
+#: The reason, stated: a PUBLIC function of the lock module that reports the
+#: lock's state. Told apart from the other two kinds by what they are, not by
+#: their names. `lock_path` hands back a `Path`, which merely says WHERE the
+#: lock is and is the exact call that caused the over-matching above.
+#: `held_for` is a context manager: it ACQUIRES the lock rather than reporting
+#: on it, and a test inside one is holding the lock, not standing down.
+def _lock_state_readers(source: Path | None = None) -> tuple[str, ...]:
+    """The lock module's own state-reporting functions, read off the module.
+
+    `source` is a parameter so a test can ask this about a lock module that has
+    grown a third reader, rather than reimplementing the rule beside it: a check
+    whose expectation and answer come from two derivations can only prove they
+    agree with each other (L70).
+    """
+    source = source or Path(__file__).resolve().parent / "perturbation_lock.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    found = []
+    for node in tree.body:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if node.name.startswith("_"):
+            continue
+        if any("contextmanager" in ast.unparse(d) for d in node.decorator_list):
+            continue
+        if node.returns is not None and "Path" in ast.unparse(node.returns):
+            continue
+        found.append(node.name)
+    if not found:
+        # RuntimeError rather than SystemExit: a SystemExit raised while a
+        # module is being imported reaches pytest as an INTERNALERROR, which
+        # reads as the harness being broken rather than as this finding
+        # something (L11). Raised rather than returning empty, because an empty
+        # tuple makes every stand-down undetectable while the scan reports a
+        # clean tree (L98).
+        raise RuntimeError(
+            f"no state reading function was found in {source.name}, so no "
+            f"stand-down through the lock could be detected and this scan "
+            f"would report a clean tree over a suite that silences itself")
+    return tuple(sorted(found))
+
+
+LOCK_STATE_READERS = _lock_state_readers()
 
 
 def _lock_derived(node: ast.AST, lock: set[str]) -> set[str]:
@@ -788,7 +836,8 @@ def changed_registry_names(repo_root: Path, registry_path: Path,
 #
 # `--changed` selected an entry whenever its guard TEST FILE was in the diff.
 # BannerLegibilityTests.swift holds around forty entries, so editing one guard
-# in it re-proved all forty, at the 12 to 22 seconds each that #621 measured.
+# in it re-proved all forty, at the 12 to 22 seconds each that #621 measured on
+# the macos-26 runner this sweep runs on (#1245).
 #
 # The narrowing has an honest half and a dangerous half. A guard's behaviour
 # lives as much in the matcher it calls as in the function that asserts on it,

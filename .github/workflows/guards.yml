@@ -87,7 +87,9 @@ jobs:
   # fixture. That is correct, and it is why a screen change costs what it does.
   #
   # Of the three ways #742 proposed to cut it, two are measured dead ends and
-  # are recorded here so nobody derives them again:
+  # are recorded here so nobody derives them again. Every second below was read
+  # off this sweep's own runs on the macos-26 runner, not off the 12 core Mac
+  # this repo is written on, and those two differ by 4x in cores (#1245):
   #
   # * Reducing what a perturbation rebuilds. #741 split CaptionReviewView.swift
   #   from 5,999 lines into fourteen, and the per-entry time did not move: 18 to
@@ -160,6 +162,8 @@ jobs:
       # superseded run reports too (L11).
       #
       # 900s, chosen from the distribution rather than picked round (L172).
+      # Every duration below is this job's OWN, on the macos-26 runner it asks
+      # for, not a reading from the 12 core Mac this repo is written on (#1245).
       # Measured over 28 runs: 165s median, 393s at p90, 1,511s at worst. So it
       # is 2.3x p90 and fires only on the wide diffs that were actually the
       # problem: over 2026-08-30 and 31 this job was the SOLE thing holding five
@@ -249,7 +253,8 @@ jobs:
       matrix:
         # Six since #989's second half. Four shards ran at 98% and 99% of the
         # 1800s deadline on the first sweep after the cadence changed, over 469
-        # entries, and the registry has grown to 495 since: the projection at
+        # entries, on the macos-26 runner this job asks for (#1245), and the
+        # registry has grown to 495 since: the projection at
         # four is 1,882s, past the deadline, so the next sweep would have
         # reported entries UNPROVEN while going green (L98).
         #
@@ -332,8 +337,9 @@ jobs:
         # `shard_of` deals by and what
         # tests/test_guard_sweep_fits_its_deadline.py projects the largest shard
         # from, and until #1090 nothing measured it: the number that sized the
-        # deadline had to be reversed out of one sweep as 14.4s averaged over
-        # 469 entries, which hides a spread of 90x.
+        # deadline had to be reversed out of one sweep, on the macos-26
+        # runner, as 14.4s averaged over 469 entries, which hides a spread of
+        # 90x (#1245).
         run: |
           python tools/check_guards.py --shard ${{ matrix.shard }}/7 --deadline-seconds 1800 \
             --timings guard-timings-${{ matrix.shard }}.json
