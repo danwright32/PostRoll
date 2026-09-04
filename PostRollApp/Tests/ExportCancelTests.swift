@@ -120,13 +120,11 @@ final class ExportCancelTests: XCTestCase {
         // no button at all, because the machine stays busy and the next run
         // competes with it.
         let (manager, id) = generating()
-        let reachedTheEnd = expectation(description: "the work ran to completion")
-        reachedTheEnd.isInverted = true
-
-        let task = Task {
+        let work = Work()
+        let task = Task { @MainActor in
             do {
                 try await Task.sleep(for: .seconds(30))
-                reachedTheEnd.fulfill()
+                work.ranToCompletion = true
             } catch {
                 // Cancelled, which is the pass.
             }
@@ -135,9 +133,27 @@ final class ExportCancelTests: XCTestCase {
 
         manager.cancel(eventID: id)
 
-        await fulfillment(of: [reachedTheEnd], timeout: 1.0)
+        // Awaited rather than slept past. An inverted expectation with a
+        // timeout would pay that timeout on every single run and would be
+        // asserting about the machine's load rather than about the cancel;
+        // this returns the instant the sleep throws (L290).
+        await task.value
+
         XCTAssertTrue(task.isCancelled,
                       "cancel changed the phase without reaching the work")
+        XCTAssertFalse(work.ranToCompletion,
+                       "and the work must not have run to the end anyway, or "
+                       + "the cancelled flag above is satisfied by a task that "
+                       + "finished before anybody looked (L159)")
+    }
+
+    /// Whether the stand-in work reached its own end.
+    ///
+    /// A reference box because a `Task` closure cannot capture a mutable local,
+    /// and main-actor isolated because that is where both the writer and the
+    /// reader are.
+    @MainActor private final class Work {
+        var ranToCompletion = false
     }
 
     // MARK: - Pressing twice, and pressing too late
