@@ -126,6 +126,7 @@
     "test_generate_cover.py": 0.22,
     "test_generate_media_cover.py": 54.54,
     "test_generate_media_friday_clips.py": 61.910000000000004,
+    "test_generate_splices_its_markers_back.py": 0.02,
     "test_generate_story.py": 7.059999999999999,
     "test_generate_title_card.py": 19.919999999999995,
     "test_generate_week_friday_clips.py": 1.7400000000000002,
@@ -786,6 +787,10 @@
     },
     "test_generate_media_friday_clips.py": {
       "run": "full-2026-09-04T03:02Z",
+      "scale": 1.0
+    },
+    "test_generate_splices_its_markers_back.py": {
+      "run": "partial-2026-09-04T23:37Z",
       "scale": 1.0
     },
     "test_generate_story.py": {
