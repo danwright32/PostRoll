@@ -61,6 +61,16 @@ from .claude_client import ClaudeError, run_json_prompt
 #: that a dead call is noticed later, and the deadline below protects the
 #: process regardless.
 #:
+#: Pinned to the recorded readings rather than retyped (#1188). The measurement
+#: writes `tests/fixtures/alt_text_call_timing.json` and computes a
+#: `recommended_timeout` from it, and this used to be a hand written number with
+#: the reading quoted beside it, so re-running the measurement moved the file
+#: and left the constant alone while the comment went on asserting a reading it
+#: might no longer reflect (L41, L316).
+#:
+#: `tests/test_blog_repair_budget.py` holds the two together, the same way it
+#: holds the process ceiling to the one Swift enforces.
+#:
 #: Re-measure rather than argue:
 #:     venv/bin/python tools/measure_alt_text_call.py --photo <a photograph>
 CALL_TIMEOUT = 120

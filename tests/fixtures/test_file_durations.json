@@ -254,6 +254,7 @@
     "test_url_scheme_registered.py": 0.0,
     "test_url_scheme_registrations.py": 0.22,
     "test_usage_log.py": 0.02,
+    "test_usage_log_stays_off_the_live_file.py": 0.0,
     "test_usage_log_timestamps.py": 0.01,
     "test_usage_recorded_on_sdk_calls.py": 0.0,
     "test_view_file_manager_isolation.py": 0.03,
@@ -1278,6 +1279,10 @@
     "test_usage_log.py": {
       "run": "full-2026-09-04T03:02Z",
       "scale": 1.0
+    },
+    "test_usage_log_stays_off_the_live_file.py": {
+      "run": "partial-2026-09-04T06:29Z",
+      "scale": 1.278
     },
     "test_usage_log_timestamps.py": {
       "run": "full-2026-09-04T03:02Z",

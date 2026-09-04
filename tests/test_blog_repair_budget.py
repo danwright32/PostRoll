@@ -364,3 +364,59 @@ def test_a_derived_deadline_sits_inside_the_ceiling_rather_than_on_it():
     deadline = deadline_from(started_at=0.0, now=lambda: 0.0)
     assert deadline == PROCESS_CEILING - CEILING_HEADROOM
     assert deadline < PROCESS_CEILING
+
+
+# ── the per-call timeout is the recorded reading, not a retyped one (#1188) ──
+
+def test_the_call_timeout_is_the_number_the_measurement_recommends():
+    """`tools/measure_alt_text_call.py` writes its readings to
+    `tests/fixtures/alt_text_call_timing.json` and already computes a
+    `recommended_timeout` from them. `CALL_TIMEOUT` was a hand written 120 with
+    the reading quoted in a comment beside it, and nothing in that module read
+    the fixture.
+
+    So re-running the measurement updated the file and left the constant
+    untouched, while the comment went on asserting a reading the constant might
+    no longer reflect. A number spelled in two places is a number the two can
+    disagree about (L41), and a dated number in a comment reads as MORE
+    trustworthy rather than less (L316).
+
+    Same shape as `test_the_process_ceiling_matches_the_one_swift_actually_enforces`
+    above, and as #1164 did for the Swift side.
+    """
+    import json
+    from pathlib import Path
+
+    from postroll.ai.blog_repair import CALL_TIMEOUT
+    from tools.measure_alt_text_call import summarise
+
+    fixture = (Path(__file__).resolve().parent
+               / "fixtures" / "alt_text_call_timing.json")
+    readings = json.loads(fixture.read_text(encoding="utf-8"))["readings"]
+    summary = summarise(readings)
+
+    assert summary.get("recommended_timeout"), (
+        "the fixture holds no readings the summary can recommend from, so this "
+        "check is comparing against nothing (L98)")
+    assert CALL_TIMEOUT == summary["recommended_timeout"], (
+        f"CALL_TIMEOUT is {CALL_TIMEOUT} and the recorded readings recommend "
+        f"{summary['recommended_timeout']}. Re-running the measurement moves "
+        f"the fixture and not the constant, so one of them is describing a "
+        f"call speed that no longer holds. Re-measure with "
+        f"`venv/bin/python tools/measure_alt_text_call.py --photo <a photograph>` "
+        f"and bring the constant with it.")
+
+
+def test_the_recommendation_would_actually_move_if_the_readings_did():
+    """The positive control (L159). Pinning to a number that can never change
+    is the same as not pinning at all: the floor is 120 and today's readings
+    are far under it, so the check above passes for a reason that has nothing
+    to do with the readings unless this shows the pair really are coupled."""
+    from tools.measure_alt_text_call import summarise
+
+    slow = summarise([{"seconds": s, "answered": True}
+                      for s in (300.0, 310.0, 320.0)])
+
+    assert slow["recommended_timeout"] > 120, (
+        "a call ten times slower than today recommends the same timeout, so "
+        "the constant is pinned to a floor rather than to a measurement")
