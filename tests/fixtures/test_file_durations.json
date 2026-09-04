@@ -156,6 +156,7 @@
     "test_make_test_runs_both_suites.py": 0.6900000000000002,
     "test_manifest_contract.py": 0.08,
     "test_manifest_read_keys.py": 0.0,
+    "test_measure_blog_calls.py": 0.0,
     "test_measure_clip_reel_encodes.py": 0.0,
     "test_media_design_fingerprint.py": 4.239999999999999,
     "test_media_design_version.py": 1.51,
@@ -894,6 +895,10 @@
     "test_manifest_read_keys.py": {
       "run": "full-2026-09-04T03:02Z",
       "scale": 1.0
+    },
+    "test_measure_blog_calls.py": {
+      "run": "partial-2026-09-04T11:54Z",
+      "scale": 1.232
     },
     "test_measure_clip_reel_encodes.py": {
       "run": "full-2026-09-04T03:02Z",
