@@ -1,5 +1,5 @@
 """
-PostRoll — Humanizer Loader and Review Prompt Builder
+PostRoll: Humanizer Loader and Review Prompt Builder
 
 Loads the humanizer skill (https://github.com/blader/humanizer) installed
 globally at ~/.claude/skills/humanizer/SKILL.md and uses it as the rule
@@ -9,7 +9,7 @@ same Wikipedia "Signs of AI writing" patterns we used to fetch directly,
 plus voice-calibration and a draft → audit → revise loop.
 
 Earlier versions of this module fetched Wikipedia directly per project
-and cached the result. That mechanism is superseded — humanizer is the
+and cached the result. That mechanism is superseded. Humanizer is the
 single source of truth for AI tells going forward, and PostRoll uses
 Dan's `brand-voice.md` as humanizer's voice calibration sample.
 
@@ -31,14 +31,25 @@ from pathlib import Path
 # scan: a review pass that reintroduces an em dash or drops a [PHOTO:] marker
 # would otherwise ship silently.
 
-_DASH_RANGE_RE = re.compile(r"(?<=\d)\s*[—–]\s*(?=\d)")
-_DASH_RE = re.compile(r"\s*[—–]\s*")
+#: The two characters the rule is about, as escapes rather than as
+#: themselves (#959).
+#:
+#: Everything else in this file is prose that reaches a model, and a prompt
+#: banning a character while demonstrating it teaches the demonstration
+#: (L270). These four places genuinely need the character at RUNTIME, so they
+#: are written as escapes: the string is identical and the file holds none,
+#: which also leaves the pre-push style hook nothing to catch.
+_EM_DASH = "\u2014"
+_EN_DASH = "\u2013"
+
+_DASH_RANGE_RE = re.compile(rf"(?<=\d)\s*[{_EM_DASH}{_EN_DASH}]\s*(?=\d)")
+_DASH_RE = re.compile(rf"\s*[{_EM_DASH}{_EN_DASH}]\s*")
 
 
 def strip_em_dashes(text: str) -> str:
     """Deterministically remove em and en dashes from output text: digit
-    ranges ("7–9pm") become a hyphen, everything else becomes a comma join."""
-    if not text or ("—" not in text and "–" not in text):
+    ranges (7 to 9pm) become a hyphen, everything else becomes a comma join."""
+    if not text or (_EM_DASH not in text and _EN_DASH not in text):
         return text
     text = _DASH_RANGE_RE.sub("-", text)
     return _DASH_RE.sub(", ", text)
@@ -261,7 +272,7 @@ def build_review_prompt(
     Args:
         draft_json: The first-pass output as a JSON string.
         humanizer_rules: The humanizer SKILL.md content.
-        brand_voice: The brand voice doc text — used as the voice
+        brand_voice: The brand voice doc text, used as the voice
             calibration sample so the rewrite matches Dan's voice rather
             than humanizer's default.
         output_shape_description: One-line description of what shape the
@@ -291,7 +302,7 @@ calibration sample provided.
 ## VOICE CALIBRATION SAMPLE (match this voice in your rewrite)
 
 This is Dan Wright Photography's brand voice. When you rewrite the
-draft below, do not just remove AI tells — match this voice:
+draft below, do not just remove AI tells. Match this voice:
 
 {brand_voice}
 
@@ -306,12 +317,12 @@ draft below, do not just remove AI tells — match this voice:
 ## HARD BANS (Dan Wright-specific, non-negotiable)
 
 These are failure modes we keep seeing get past the general humanizer
-rules. They are not "guidelines" — they are hard bans. If the draft
+rules. They are not "guidelines". They are hard bans. If the draft
 contains any of these, you MUST rewrite. Do not leave them in.
 
-1. **NO em dashes (—) anywhere.** Ever. If the draft has an em dash,
+1. **NO em dashes ({_EM_DASH}) anywhere.** Ever. If the draft has an em dash,
    replace it with a comma, a period, or parentheses. Even "punchy"
-   em dashes that feel stylistically justified — those are the ones
+   em dashes that feel stylistically justified are the ones
    that read most AI. This is humanizer rule #14 applied as a hard
    ban. Zero tolerance.
 
@@ -319,15 +330,15 @@ contains any of these, you MUST rewrite. Do not leave them in.
    X, B did Y, C did Z" or "opened with / middle / closed on" or
    "first / then / finally" applied to crediting multiple conductors,
    sets, or pieces is BANNED. It is a rule-of-three (rule #10)
-   combined with a press-release cadence. Rewrite with uneven weight —
+   combined with a press-release cadence. Rewrite with uneven weight:
    name one person in the body and put the other credits in a
    trailing stack, OR name them in different sentences with different
    grammatical shapes. Never in a matched parallel rhythm.
 
 3. **NO comma-list openers.** A caption must not open with two or
    more noun phrases joined by commas as a sentence. "Twenty singers
-   around the piano, blue light on the back wall." — BANNED. "A
-   table, two bowls, one Heineken." — BANNED. This is the AI list
+   around the piano, blue light on the back wall." BANNED. "A
+   table, two bowls, one Heineken." BANNED. This is the AI list
    cadence. Rewrite with a real verb-bearing sentence.
 
 4. **NO copula avoidance for credit verbs.** Do not write "took the
@@ -338,7 +349,7 @@ contains any of these, you MUST rewrite. Do not leave them in.
 5. **NO photo-description body.** The body of a caption must NOT be
    a description of what is visible in the photo (set, lighting,
    gestures, costumes, props, facial expressions). That belongs in
-   alt text. The body is about the MOMENT, the piece, the people —
+   alt text. The body is about the MOMENT, the piece, the people,
    not the pixels. If you see the body reading like "X standing
    next to Y with Z behind them," rewrite it as a moment label.
 
@@ -376,7 +387,7 @@ returning.
 - For lists like hashtags, keep them unchanged unless one of the
   hashtags itself contains an AI tell.
 - For lists of strings (alt_texts, scene_labels), preserve count and
-  order — clean each item in place.
+  order, cleaning each item in place.
 - Do NOT return the original draft. Return the revised version.
 - If the draft is already clean, return it unchanged.
 """
@@ -397,8 +408,8 @@ def build_voice_review_prompt(
 
     Why a dedicated pass: the humanizer prompt is busy juggling AI-tell
     removal and voice calibration, and voice-match loses. A prompt that
-    asks only one question — does this match Dan's voice in the sample
-    below — produces a cleaner voice match than tacking it onto the
+    asks only one question, does this match Dan's voice in the sample
+    below, produces a cleaner voice match than tacking it onto the
     humanizer.
 
     Args:
@@ -419,7 +430,7 @@ def build_voice_review_prompt(
 You are Dan Wright's voice editor. Your ONLY job on this pass is to
 make the draft below sound like Dan actually wrote it, according to
 the brand voice doc that follows. You do not need to hunt for generic
-AI tells — a previous pass already handled that. You are doing one
+AI tells. A previous pass already handled that. You are doing one
 thing: voice match.
 
 ---
@@ -475,7 +486,7 @@ Read the draft with the brand voice doc in mind and ask, per caption:
 - Factual content from the program/enrichment data.
 - The hashtags list (unless a hashtag itself is awkward).
 - The alt_texts unless they violate the voice.
-- The list of @ handles and plain names — everyone who was named
+- The list of @ handles and plain names, everyone who was named
   before must still be named. You can MOVE them (body → trailing
   stack) but not drop them.
 

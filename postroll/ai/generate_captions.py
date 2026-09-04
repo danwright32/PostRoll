@@ -1,5 +1,5 @@
 """
-PostRoll — Caption Generator
+PostRoll: Caption Generator
 
 Generates one caption + per-photo alt text for a post, in Dan Wright's
 brand voice. The same caption is used across Instagram, Facebook,
@@ -81,7 +81,7 @@ post containing {post_size_line}. The same caption is used
 across Instagram, Facebook, TikTok, Pinterest, and Bluesky.
 
 If there are multiple photos (a carousel, or a reel built from many
-source frames), the caption stays GENERAL — it doesn't reference any
+source frames), the caption stays GENERAL: it doesn't reference any
 individual frame. {alt_shape_line}
 
 Event details:
@@ -110,14 +110,14 @@ Scenes / sections in this production (from program OCR / enrichment):
 {scenes}
 
 Required @-mentions for this post (must appear in the caption text
-somewhere — body or trailing credit line). Each becomes a #-tag too:
+somewhere, body or trailing credit line). Each becomes a #-tag too:
 {tag_handles}
 
 Required plain-name credits for this post (people without Instagram
-handles — appear as plain text in the caption, NOT as #-tags):
+handles, appear as plain text in the caption, NOT as #-tags):
 {name_mentions}
 
-{shooter_notes_section}**SCOPE RULE — read this before writing anything.**
+{shooter_notes_section}**SCOPE RULE. Read this before writing anything.**
 {scope_rule}
 
 {existing_captions_section}{photo_list_heading}
@@ -125,21 +125,21 @@ handles — appear as plain text in the caption, NOT as #-tags):
 
 You will work in four explicit ordered stages. Do them IN ORDER.
 
-**Stage 1 — alt text.** {alt_text_instruction}
+**Stage 1, alt text.** {alt_text_instruction}
 
-**Stage 2 — scene match.** For EACH entry you just wrote in
+**Stage 2, scene match.** For EACH entry you just wrote in
 `alt_texts` (so one total for most post types, one per photo only for
 carousels), use the structured scenes list above to decide which
 scene/section it shows. Match by comparing the alt text against each
-scene's `visual_cues`. Be DECISIVE — if the visual evidence points
+scene's `visual_cues`. Be DECISIVE: if the visual evidence points
 clearly to one scene, pick it.
 
 Write a short phrase like "[Scene name]" or null if no scene from the
 list matches. Put the labels into `scene_labels` IN THE SAME ORDER
 and at the SAME LENGTH as `alt_texts`.
 
-**Stage 3 — unified caption.** Now write ONE caption for the whole
-post. You are NOT allowed to look back at the photos for this stage —
+**Stage 3, unified caption.** Now write ONE caption for the whole
+post. You are NOT allowed to look back at the photos for this stage.
 work from the alt texts, the scene labels, and the event metadata.
 
 How to write it depends on `scene_labels`:
@@ -149,7 +149,7 @@ How to write it depends on `scene_labels`:
   label as the differentiating context when it is non-null, or fall
   back to a generic event-level frame when it is null.
 - If `scene_labels` has MULTIPLE entries that span different scenes
-  (carousels with mixed scenes), DO NOT pick one — write a more
+  (carousels with mixed scenes), DO NOT pick one. Write a more
   general caption about the event/show as a whole. Don't try to
   mention every scene; pick a unifying frame ("highlights from",
   "selected moments from", "scenes from", etc.) and stay general.
@@ -164,26 +164,26 @@ handle and EVERY name MUST appear somewhere in the final caption text.
 "body sentence + 'with @x @y' trailing line" pattern for every post.
 Rotate through these shapes based on what reads most naturally:
 
-1. **Inline-woven credits** — work 2-3 handles/names directly into a
+1. **Inline-woven credits.** Work 2-3 handles/names directly into a
    body sentence. Example: "@dciny's Vocal Colors at @lincolncenter,
    Sorenson Requiem conducted by @stephenmartintenor."
-2. **Body + trailing stack, no "with" prefix** — body sentence, then
+2. **Body + trailing stack, no "with" prefix.** Body sentence, then
    a bare line with all remaining handles/names. Example:
    "[body]\n\n@dciny @lincolncenter @kylepedersonmusic"
-3. **Body + "with" line** (the previous default) — use sparingly, not
+3. **Body + "with" line** (the previous default). Use sparingly, not
    every time. Example: "[body]\n\nwith @dciny @lincolncenter"
-4. **Body + "conducted by / featuring / with" phrase** — a semantic
+4. **Body + "conducted by / featuring / with" phrase.** A semantic
    prefix that matches what the handle-people actually do. Example:
    "[body]\n\nConducted by @jennayarobison. With @dciny @lincolncenter
    @kylepedersonmusic."
-5. **Split credit by role** — short stanza for conductors, another
+5. **Split credit by role.** Short stanza for conductors, another
    for composer, another for org/venue. Example:
    "[body]\n\nConducted by @stephenmartintenor and Jordan Langworthy.\n
    Featuring @kylepedersonmusic.\n@dciny at @lincolncenter."
 
 Pick a different shape than what the last caption used if you can.
 When name_mentions (plain-text names like "Jordan Langworthy") appear
-in the credits, they fit naturally alongside @ handles — do NOT add an
+in the credits, they fit naturally alongside @ handles. Do NOT add an
 "@" to them, do NOT put them in the hashtag list.
 
 The caption must follow the brand voice rules: short, structural, no
@@ -194,16 +194,16 @@ position and shape of any scene reference. See the "Acceptable shapes"
 list in the brand voice doc above.
 
 **Body length targets:**
-- Single-photo feed posts: 80–180 characters for the body
-- Carousels and scroll reels (multi-photo general captions): 120–280
-  characters — use the extra room to be specific about the scope
+- Single-photo feed posts: 80-180 characters for the body
+- Carousels and scroll reels (multi-photo general captions): 120-280
+  characters. Use the extra room to be specific about the scope
   (multiple scenes, three conductors by name, run times, etc.)
-- Before/after reels: 80–180 characters — keep it about the edit
+- Before/after reels: 80-180 characters. Keep it about the edit
   reveal
 
 These are targets for the BODY only, excluding the credit stanza.
 
-**Stage 4 — hashtags.** 6–12 hashtags. Required: #dwphotony, venue,
+**Stage 4, hashtags.** 6-12 hashtags. Required: #dwphotony, venue,
 show, composer/playwright/band, genre. Do NOT add a hashtag for a
 performer, cast member, conductor or choreographer unless that person
 is genuinely famous (a household name or a major figure in their
@@ -247,7 +247,7 @@ Hashtag rules (re-stated for emphasis):
 
 Caption rules (re-stated, with hard defaults):
 
-DEFAULT FORMAT — short and structural. The system does NOT have a
+DEFAULT FORMAT, short and structural. The system does NOT have a
 `dan_notes` field with Dan's actual observations from the shoot, so you
 must NOT write a "voice-y" caption with a behind-the-camera hook.
 Write a short caption that:
@@ -257,23 +257,23 @@ Write a short caption that:
    shows.** This is mandatory whenever the program/enrichment data
    above lists distinct scenes/sections AND the photo visibly shows
    one of them. Do NOT skip the label and write a generic "photo call"
-   caption when a scene label is available — that produces identical
+   caption when a scene label is available. That produces identical
    captions for every post in the event, which is a failure mode.
 
    How to find the label:
    a. Scan the program/enrichment data above for any list of scenes,
       sets, movements, acts, pieces, or sections.
    b. Read the photo and identify which one of those it shows. Use
-      visible cues — set design (kitchen vs spa, podium vs stage,
+      visible cues: set design (kitchen vs spa, podium vs stage,
       indoor vs outdoor), costumes, props, location.
    c. Write the label as a short phrase: "From the [scene name]" or
-      "[Scene name]." Use only labels that exist in the data — do not
+      "[Scene name]." Use only labels that exist in the data. Do not
       invent scene names.
    d. Put ONLY the label in the caption. The visible cues you used to
       pick it stay in alt text.
 
-   Example logic: if the program says the play has two scenes — a
-   spa and a restaurant — and you see a kitchen table with bowls in
+   Example logic: if the program says the play has two scenes, a
+   spa and a restaurant, and you see a kitchen table with bowls in
    the photo, the label is "From the restaurant scene." If you see a
    massage table or screens in a wellness room, the label is "From
    the spa scene." Pick decisively based on visible evidence; don't
@@ -290,30 +290,30 @@ Write a short caption that:
 
 3. Stops.
 
-Target length: 80–180 characters for the caption itself. Shorter is
-fine. Longer needs to earn it with real material — and you don't have
+Target length: 80-180 characters for the caption itself. Shorter is
+fine. Longer needs to earn it with real material, and you don't have
 real material here.
 
 ABSOLUTELY NEVER:
-- Describe the photo's literal contents — costumes, props, gestures,
-  facial expressions, lighting, framing — as the caption body. That's
+- Describe the photo's literal contents (costumes, props, gestures,
+  facial expressions, lighting, framing) as the caption body. That's
   alt text's job. Use those cues to IDENTIFY which scene/section the
   photo shows, then write the LABEL, not the description.
 - Open with a comma-separated list of objects ("A table, two bowls,
-  one Heineken...") — that's the AI list cadence and it's banned.
+  one Heineken..."). That is the AI list cadence and it is banned.
 - Use rule-of-three patterns ("X, Y, and Z").
 - Fabricate observations, durations, counts, activities, audience
   reactions, what the cast was doing before/after the photo, what
   characters were thinking, or anything not in the inputs.
 - Fabricate or guess @ handles. ONLY use handles from the tag_handles
   list above. If tag_handles is "(none)", do NOT invent any @ mentions.
-  A wrong handle tags the wrong account — this is a hard rule.
+  A wrong handle tags the wrong account. This is a hard rule.
 - Pull handles from anywhere except `tag_handles`. The shared
   Performers block lists names + roles only and contains NO handles by
   design. If a performer's handle is not in tag_handles, that performer
   must NOT be tagged in this post (not in the body, not in a trailing
   stack, nowhere). Mention them by plain name only if they appear in
-  `name_mentions` — otherwise omit them entirely.
+  `name_mentions`, otherwise omit them entirely.
 - Copy any specific phrase, person, venue, or detail from the
   example captions in the brand voice doc. Those are STRUCTURAL
   patterns from other events.
@@ -324,7 +324,7 @@ ABSOLUTELY NEVER:
   scroll-pattern engagement bait.
 - End with a generic "what do you think?" question.
 
-Lowercase or sentence case is fine — match Dan's natural register.
+Lowercase or sentence case is fine. Match Dan's natural register.
 """
 
 
@@ -334,7 +334,7 @@ def _format_performers(performers: list[dict[str, Any]]) -> str:
     Intentionally omits @handles. Each post's `tag_handles` list (passed
     separately, per post) is the authoritative source for which handles to
     tag in that post's caption. Showing handles in this shared block leaks
-    them across posts — Claude sees all 13 handles and dumps them into a
+    them across posts: Claude sees all 13 handles and dumps them into a
     single-subject post's trailing stack instead of obeying tag_handles.
     """
     if not performers:
@@ -360,14 +360,14 @@ def _format_pieces(pieces: list[dict[str, Any]]) -> str:
     for p in pieces:
         composer = p.get("composer", "?")
         title = p.get("title", "?")
-        lines.append(f"- {composer} — {title}")
+        lines.append(f"- {composer}: {title}")
     return "\n".join(lines)
 
 
 def _format_scenes(scenes: list[dict[str, Any]]) -> str:
     """Format the structured scenes list for the prompt."""
     if not scenes:
-        return "(none listed in program data — fall back to generic event-level context)"
+        return "(none listed in program data, fall back to generic event-level context)"
     lines = []
     for i, s in enumerate(scenes):
         name = s.get("name", "?")
@@ -388,14 +388,14 @@ def _format_scenes(scenes: list[dict[str, Any]]) -> str:
 def _format_tag_handles(tag_handles: list[str] | None) -> str:
     """Format the list of @ handles for the prompt."""
     if not tag_handles:
-        return "(none — generate the caption without forced @ mentions)"
+        return "(none: generate the caption without forced @ mentions)"
     return "\n".join(f"- {h}" for h in tag_handles)
 
 
 def _format_name_mentions(name_mentions: list[str] | None) -> str:
     """Format the list of plain-text names for the prompt."""
     if not name_mentions:
-        return "(none — no forced plain-name credits)"
+        return "(none: no forced plain-name credits)"
     return "\n".join(f"- {n}" for n in name_mentions)
 
 
@@ -427,7 +427,7 @@ SINGLE_SUBJECT_POST_TYPES = {
     "performance",
 }
 
-# Post types where the subject IS the whole event — a carousel of
+# Post types where the subject IS the whole event, a carousel of
 # different scenes, or a scroll reel covering many photos. For these,
 # the body can legitimately weave all credits in and cover the full
 # scope of the show.
@@ -439,7 +439,7 @@ EVENT_LEVEL_POST_TYPES = {
 
 
 SCOPE_RULE_SINGLE_SUBJECT = """\
-This is a SINGLE-SUBJECT post — one photo, or one edit of one photo.
+This is a SINGLE-SUBJECT post: one photo, or one edit of one photo.
 The BODY of the caption must stay locked to what is actually in this
 frame: the one scene / set / conductor / cast grouping visible. Do NOT
 recap the whole event. Do NOT list every conductor, every set, every
@@ -448,11 +448,11 @@ about THIS moment, not the three-hour arc of the night.
 
 Handle the required @ mentions and name credits like this:
 
-1. Body (1–2 short sentences): name ONLY the people, pieces, and
+1. Body (1-2 short sentences): name ONLY the people, pieces, and
    context relevant to THIS frame. If only one conductor is visibly
    leading in the photo, only that conductor belongs in the body. The
    piece being performed, the section being staged, the actor in the
-   shot — those go in the body. Everyone else does NOT.
+   shot. Those go in the body. Everyone else does NOT.
 
 2. Trailing credit stack (separated by ONE blank line): on a new line
    after the body, put the @ handles and name_mentions that did NOT
@@ -464,7 +464,7 @@ Handle the required @ mentions and name credits like this:
 
        @org @venue @conductor_not_in_frame Name Without Handle
 
-   Every handle and every name_mention must appear SOMEWHERE — body OR
+   Every handle and every name_mention must appear SOMEWHERE, body OR
    trailing stack. But credits for people not in the frame belong in
    the stack, not woven into prose about moments they weren't part of.
 
@@ -482,9 +482,9 @@ Handle the required @ mentions and name credits like this:
    the trailing stack. The stack is for what's left over.
 
 Violations to avoid:
-- "Opened with [A], [B] had the middle set, [C] closed on [D]" — that
+- "Opened with [A], [B] had the middle set, [C] closed on [D]"
   is a concert recap, not a caption about this photo. Banned.
-- "Earlier in the night [other conductor] did [other thing]" — banned.
+- "Earlier in the night [other conductor] did [other thing]" is banned.
   You are not the program notes.
 - Naming a performer who is not visibly in this frame in the body.
 - **Backhanded compliments / faint praise.** Phrasings like "held his
@@ -492,25 +492,25 @@ Violations to avoid:
   "tried hard", "respectable showing", or any descriptive stand-in for
   a performer's name (e.g. "a pianist who…", "the accompanist who…")
   are BANNED. They sound condescending. If a performer is in the frame
-  with a tag handle or name_mention, name them by that handle / name —
+  with a tag handle or name_mention, name them by that handle or name,
   never by a generic role noun followed by faint praise.
 - **Reducing a tagged performer to a description.** If `@filam_pianist`
   is in the required tag_handles list and they are visibly in this
-  frame, the caption must use `@filam_pianist` (in body or stack) — not
+  frame, the caption must use `@filam_pianist` (in body or stack), not
   "a pianist". The same rule applies to name_mentions: use the actual
   name, not "a pianist named such-and-such" or any role-noun substitute.
 """
 
 SCOPE_RULE_EVENT_LEVEL = """\
-This is an EVENT-LEVEL post — a carousel or scroll reel that really
+This is an EVENT-LEVEL post: a carousel or scroll reel that really
 does cover the whole event. The body legitimately spans everything.
 Credits can weave through the body naturally, or land in a trailing
-stack — pick whichever shape reads best and varies from the other
+stack. Pick whichever shape reads best and varies from the other
 captions in the week.
 
 Every required handle and every name_mention must appear somewhere in
 the caption. Because this post covers the whole event, it's fine to
-name multiple conductors / sets / pieces in the body — that matches
+name multiple conductors / sets / pieces in the body, which matches
 what the post actually shows.
 """
 
@@ -530,29 +530,29 @@ POST_TYPE_FRAMING = {
     ),
     "carousel": (
         "A multi-photo carousel feed post. The caption covers the whole event or a "
-        "broad arc, NOT any single photo. If photos span multiple scenes, stay general — "
+        "broad arc, NOT any single photo. If photos span multiple scenes, stay general. "
         "don't try to label a single scene. If photos are all from one scene, label it."
     ),
     "slider_reel": (
-        "A before/after slider reel — a short video that wipes between the RAW image "
+        "A before/after slider reel, a short video that wipes between the RAW image "
         "and the edited image of the SAME photo. The caption should honestly reference "
         "the edit reveal (RAW → final, editing process, the invisible work behind a "
         "single frame) as the reason this post exists. Do NOT describe it as just "
-        "another photo from the show — that misses the point of the post."
+        "another photo from the show, which misses the point of the post."
     ),
     "morph_reel": (
-        "A before/after split-compare reel — a short video showing the RAW and edited "
+        "A before/after split-compare reel, a short video showing the RAW and edited "
         "versions side by side or morphing between them. Same framing as slider_reel: "
         "the post is about the edit, not just the moment."
     ),
     "screen_reel": (
-        "A sped-up Lightroom screen recording reel — a short video of Dan editing a "
+        "A sped-up Lightroom screen recording reel, a short video of Dan editing a "
         "single photo, compressed into ~15-20 seconds. The caption should reference "
-        "the editing process itself. Do NOT pretend the post shows the performance — "
+        "the editing process itself. Do NOT pretend the post shows the performance. "
         "it shows Dan working."
     ),
     "scroll_reel": (
-        "A photo scroll reel — a short video built from many photos of the event "
+        "A photo scroll reel, a short video built from many photos of the event "
         "scrolling or transitioning past. The caption should be general-event-level, "
         "not photo-specific. Reference the scope (a night, a week, a whole show) "
         "rather than any individual frame."
@@ -567,7 +567,7 @@ POST_TYPE_FRAMING = {
     "before_after_story": (
         "A static before/after story image (not a reel). A single 1080x1920 image "
         "showing the RAW and edited photos stacked. No caption needed for Instagram "
-        "stories — but if one is generated, frame it as the edit reveal."
+        "stories, but if one is generated, frame it as the edit reveal."
     ),
     "performance": (
         "Generic single-photo feed post framing. Use this as a default."
@@ -578,21 +578,21 @@ POST_TYPE_FRAMING = {
 # Per-post-type Stage 1 (alt text) instructions. Wed carousels get one
 # alt per photo; everything else gets ONE alt text in the list.
 # Instagram only attaches one alt text to a single feed post, story,
-# or reel — per-photo alt texts on scroll reels never get used.
+# or reel: per-photo alt texts on scroll reels never get used.
 ALT_TEXT_INSTRUCTION = {
     "carousel": (
-        "Write ONE alt text per photo in the `alt_texts` list — 15-35 "
-        "words each — IN THE SAME ORDER as the photos listed above. "
+        "Write ONE alt text per photo in the `alt_texts` list, 15-35 "
+        "words each, IN THE SAME ORDER as the photos listed above. "
         "Describe what is actually visible in each frame: who, what, "
         "where, lighting, gestures, set design, props."
     ),
     "scroll_reel": (
         "Write ONE alt text for the reel AS A WHOLE. Put it as a SINGLE "
-        "entry in the `alt_texts` list — the list must have exactly 1 entry. "
+        "entry in the `alt_texts` list. The list must have exactly 1 entry. "
         "Write a UNIFIED NARRATIVE summary: what is this reel about, who "
         "appears, what is the setting. Do NOT list what individual photos "
         "show. Do NOT use semicolons or 'and' to chain descriptions of "
-        "separate frames — that is just per-frame alt text in disguise. "
+        "separate frames, which is just per-frame alt text in disguise. "
         "Think of it as one sentence describing the reel the way a human "
         "would describe a video: 'A photo scroll through [event] at [venue], "
         "covering [subject].' 25-50 words."
@@ -985,7 +985,7 @@ def generate_caption(
         scope_rule = _scope_rule_for(post_type)
         shooter_notes_section = (
             f"Shooter's observations for this post (first-hand detail from Dan"
-            f" — use these to write a more specific, voice-y caption):\n{notes.strip()}\n\n"
+            f", use these to write a more specific, voice-y caption):\n{notes.strip()}\n\n"
         ) if notes.strip() else ""
 
         event_url_line = (
@@ -993,9 +993,9 @@ def generate_caption(
             if event_url else ""
         )
         # Specific room inside the venue (e.g. Weill Recital Hall inside Carnegie Hall)
-        # — used only for prose context. Graphics still show the top-level venue.
+        # Used only for prose context. Graphics still show the top-level venue.
         venue_context_line = (
-            f" — performed in {venue_context.strip()}"
+            f", performed in {venue_context.strip()}"
             if venue_context and venue_context.strip() else ""
         )
 
@@ -1063,7 +1063,7 @@ def generate_caption(
         )
 
         # === Pass 2: brand-voice review (does this actually sound like Dan?) ===
-        # Narrower than humanizer — asks only "voice match?"
+        # Narrower than humanizer: asks only "voice match?"
         if not skip_voice_pass:
             voice_prompt = build_voice_review_prompt(
                 draft_json=json.dumps(data, ensure_ascii=False, indent=2),
@@ -1072,10 +1072,10 @@ def generate_caption(
             )
             data = run_review_pass(voice_prompt, data, label="voice", timeout=300, runner=run_json_prompt)
 
-        # === Pass 3 (FINAL): humanizer — always runs last, non-negotiable ===
+        # === Pass 3 (FINAL): humanizer, always runs last, non-negotiable ===
         # Humanizer is the final word on AI tells. It MUST be the last pass
         # so nothing downstream can re-introduce tells. skip_humanizer exists
-        # only for tests — production runs should never skip this.
+        # only for tests. Production runs should never skip this.
         if not skip_humanizer and is_humanizer_available(humanizer_path):
             humanizer_rules = load_humanizer_rules(humanizer_path)
             review_prompt = build_review_prompt(
