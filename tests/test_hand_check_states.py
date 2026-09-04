@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -537,6 +538,12 @@ def _fake_app(tmp_path: Path) -> Path:
     return binary
 
 
+@pytest.mark.skipif(
+    sys.platform != "darwin",
+    reason="drives the real launch path: it starts a process and asks the OS "
+           "what it started, and the script it drives launches a macOS app "
+           "bundle. The macos leg runs the same suite, so this is covered "
+           "rather than exempt (L129)")
 def test_the_scripts_own_output_arrives_before_the_app_exits(tmp_path):
     """Its four lines say which process to watch and where the world is, and
     they are the whole point of running it. A caller that pipes or captures the
@@ -571,6 +578,12 @@ def test_the_scripts_own_output_arrives_before_the_app_exits(tmp_path):
         f"captured run learns nothing: {done.stdout!r} {done.stderr!r}")
 
 
+@pytest.mark.skipif(
+    sys.platform != "darwin",
+    reason="drives the real launch path: it starts a process and asks the OS "
+           "what it started, and the script it drives launches a macOS app "
+           "bundle. The macos leg runs the same suite, so this is covered "
+           "rather than exempt (L129)")
 def test_the_launched_app_does_not_hold_the_callers_output_open(tmp_path):
     """The control, and the actual mechanism: capturing IS a pipe, so a script
     that returns at all here is one whose child let go of it."""
