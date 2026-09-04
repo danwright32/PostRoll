@@ -52,13 +52,10 @@ enum ExportReadiness {
             .filter { regeneratingDays.contains($0) }
             .map(\.displayName)
         guard !names.isEmpty else { return nil }
-        switch names.count {
-        case 1:  return "Waiting for the \(names[0]) rebuild"
-        case 2:  return "Waiting for the \(names[0]) and \(names[1]) rebuilds"
-        default:
-            let head = names.dropLast().joined(separator: ", ")
-            return "Waiting for the \(head) and \(names.last!) rebuilds"
-        }
+        // Through the one joiner (#933); the verb comes from the same place,
+        // so a list of one cannot end up with a plural noun beside it.
+        let rebuild = SentenceList.verb(names, singular: "rebuild", plural: "rebuilds")
+        return "Waiting for the \(SentenceList.of(names)) \(rebuild)"
     }
 
     /// A day whose images belong to the layout this event has moved away from

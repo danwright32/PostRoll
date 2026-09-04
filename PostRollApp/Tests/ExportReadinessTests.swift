@@ -38,7 +38,11 @@ final class ExportReadinessTests: XCTestCase {
         let reason = ExportReadiness.blockedReason(
             for: settled(), preset: .balanced,
             regeneratingDays: [.sunday, .wednesday, .thursday])
-        XCTAssertEqual(reason, "Waiting for the Sunday, Wednesday and Thursday rebuilds")
+        // The comma before "and" is the settled convention (#933): it stays,
+        // and it appears only from three items. This sentence used to be one of
+        // ten hand written joiners, four of which punctuated it the other way.
+        XCTAssertEqual(reason,
+                       "Waiting for the Sunday, Wednesday, and Thursday rebuilds")
     }
 
     func testTheDaysAreNamedInWeekOrderNotSetOrder() {

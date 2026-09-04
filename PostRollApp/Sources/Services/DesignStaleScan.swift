@@ -22,13 +22,7 @@ struct StaleDay: Identifiable, Hashable {
 
     /// What the row says: "scroll reel and scroll reel preview".
     var listedTemplates: String {
-        let names = templates.map(DesignStamp.label(for:))
-        switch names.count {
-        case 0:  return ""
-        case 1:  return names[0]
-        case 2:  return "\(names[0]) and \(names[1])"
-        default: return names.dropLast().joined(separator: ", ") + ", and " + names[names.count - 1]
-        }
+        return SentenceList.of(templates.map(DesignStamp.label(for:)))
     }
 }
 

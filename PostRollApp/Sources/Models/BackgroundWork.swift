@@ -94,11 +94,10 @@ enum QuitGuard {
 /// two lists drift, and they drift into disagreeing about whether it is safe to
 /// quit, which is the single thing both exist to say (L144).
 enum WorkPhrases {
-    /// "a and b", "a, b and c". Written out because these sentences read badly
-    /// with a bare comma.
-    static func list(_ items: [String]) -> String {
-        guard let last = items.last else { return "" }
-        guard items.count > 1 else { return last }
-        return items.dropLast().joined(separator: ", ") + " and " + last
-    }
+    /// "a and b", "a, b, and c", through the one joiner (#933).
+    ///
+    /// This was one of ten hand written copies, and they disagreed: five wrote
+    /// the comma before "and" and five did not, so two sentences on one screen
+    /// could punctuate the same list differently. Dan settled it on 2026-08-28.
+    static func list(_ items: [String]) -> String { SentenceList.of(items) }
 }

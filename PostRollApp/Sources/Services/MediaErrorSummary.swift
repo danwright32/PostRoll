@@ -44,9 +44,10 @@ enum MediaErrorSummary {
         let named = orderedKeys(errors).map(displayName)
         guard !named.isEmpty else { return nil }
 
-        let list = named.count == 1
-            ? named[0]
-            : named.dropLast().joined(separator: ", ") + " and " + named[named.count - 1]
+        // Through the one joiner (#933). This was an eleventh hand written copy
+        // the issue had not found, and it punctuated a three item list without
+        // the comma while five of its neighbours used one.
+        let list = SentenceList.of(named)
         let subject = named.count == 1 ? "day's graphics" : "days' graphics"
         return "\(list): the \(subject) could not be generated, so the export "
              + "folder is missing them. Check the log for why, then regenerate."

@@ -117,13 +117,6 @@ enum GenerationFailureText {
     /// Takes the labels rather than recomputing them, so the button can never
     /// name a different set from the cards above it (L16).
     static func summarySentence(_ labels: [String]) -> String {
-        switch labels.count {
-        case 0: return ""
-        case 1: return labels[0]
-        case 2: return "\(labels[0]) and \(labels[1])"
-        default:
-            let allButLast = labels.dropLast().joined(separator: ", ")
-            return "\(allButLast), and \(labels.last!)"
-        }
+        return SentenceList.of(labels)
     }
 }

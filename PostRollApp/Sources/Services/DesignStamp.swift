@@ -253,12 +253,7 @@ enum DesignStamp {
         guard !stale.isEmpty else { return nil }
         let names = stale.map(label(for:))
         let one = names.count == 1
-        let listed: String
-        switch names.count {
-        case 1:  listed = names[0]
-        case 2:  listed = "\(names[0]) and \(names[1])"
-        default: listed = names.dropLast().joined(separator: ", ") + ", and " + names[names.count - 1]
-        }
+        let listed = SentenceList.of(names)
         return "The \(listed) here \(one ? "was" : "were") made with an older "
              + "version of the design, so \(one ? "it does" : "they do") not match "
              + "the current one. Regenerate the day to rebuild \(one ? "it" : "them")."

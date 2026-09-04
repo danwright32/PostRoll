@@ -14,13 +14,11 @@ enum MissingMediaBannerText {
         return "\(subject) can't be found: the file\(plural ? "s were" : " was") moved or deleted off disk."
     }
 
+    /// Through the one joiner (#933). The empty case keeps its own wording:
+    /// `SentenceList` answers with nothing, which is right for a sentence that
+    /// names things and wrong for one that has to say something regardless.
     private static func list(_ items: [String]) -> String {
-        switch items.count {
-        case 0:  return "Some files"
-        case 1:  return items[0]
-        case 2:  return "\(items[0]) and \(items[1])"
-        default: return items.dropLast().joined(separator: ", ") + ", and \(items[items.count - 1])"
-        }
+        items.isEmpty ? "Some files" : SentenceList.of(items)
     }
 }
 
