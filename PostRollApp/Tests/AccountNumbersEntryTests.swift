@@ -155,6 +155,69 @@ final class AccountNumbersEntryTests: XCTestCase {
                           + "cannot be completed at all")
     }
 
+    // MARK: - The buttons stay reachable however tall it gets (#1279)
+
+    func testTheFieldsScrollAndTheButtonsDoNot() throws {
+        // The form grew from three fields to seven controls across #982, #1271
+        // and #986, and was measured at 668pt against a 760pt window on
+        // 2026-09-03: about one more control's worth of room. The guard above
+        // fires at the point the form is already unusable; this is what stops
+        // it getting there.
+        //
+        // A row pinned over the edge of a scrolling region is what keeps the
+        // last thing in it reachable (L189).
+        let code = SwiftSourceText.withoutComments(
+            try Self.source("Views/CollaboratorPanel.swift"))
+        let sheet = try XCTUnwrap(code.range(of: "struct AccountNumbersSheet"))
+        let body = String(code[sheet.lowerBound...])
+
+        XCTAssertTrue(body.contains("ScrollView {"),
+                      "the numbers form has no scroll region, so the next "
+                      + "control added puts Save below the bottom of the window")
+        let scroll = try XCTUnwrap(body.range(of: "ScrollView {"))
+        let buttons = try XCTUnwrap(body.range(of: "private var buttons"))
+        XCTAssertLessThan(scroll.lowerBound, buttons.lowerBound,
+                          "the buttons are inside the scroll region, so they "
+                          + "scroll away with the fields and the form is no "
+                          + "more reachable than it was")
+    }
+
+    func testTheScrollRegionIsBoundedByTheWindowItLivesIn() throws {
+        // Derived rather than typed, for the reason WindowMetrics exists at all:
+        // two copies of one number is a number the two can disagree about, and
+        // the form would go on scrolling against a window size the app no
+        // longer opens at (L41).
+        XCTAssertLessThan(WindowMetrics.numbersFormMaxHeight,
+                          WindowMetrics.defaultHeight,
+                          "the scroll region is allowed to be taller than the "
+                          + "window, which is the state it exists to prevent")
+        XCTAssertGreaterThan(WindowMetrics.numbersFormMaxHeight, 400,
+                             "the scroll region is so short the form is a "
+                             + "letterbox, which is its own kind of unusable")
+    }
+
+    @MainActor
+    func testTodaysFormIsStillDrawnWithoutScrolling() throws {
+        // The cap is chosen against the measurement, not by feel. The form
+        // rendered 668pt on 2026-09-03, of which about 620 is the fields, so a
+        // tighter cap would put TODAY's form into a scroll region it does not
+        // need and every account with nothing recorded would open scrolling
+        // (L10). What this pins is that the margin left for the chrome is
+        // enough for the chrome and no more.
+        let sheet = AccountNumbersSheet(handle: "janecellist", stats: nil,
+                                        onSave: { _, _, _, _, _, _, _ in },
+                                        onCancel: { })
+        let rendered = try WordFootprint.imageRendered(sheet, wordless: false)
+        let height = CGFloat(rendered.pixelsHigh) / 2
+        let chrome = WindowMetrics.defaultHeight - WindowMetrics.numbersFormMaxHeight
+
+        XCTAssertLessThan(height - chrome, WindowMetrics.numbersFormMaxHeight,
+                          "the fields alone are \(Int(height - chrome))pt against "
+                          + "a \(Int(WindowMetrics.numbersFormMaxHeight))pt cap, "
+                          + "so this form scrolls today rather than only once it "
+                          + "grows")
+    }
+
     private static func source(_ path: String) throws -> String {
         try String(
             contentsOf: URL(fileURLWithPath: #filePath)
