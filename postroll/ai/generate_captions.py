@@ -1056,6 +1056,13 @@ def generate_caption(
         # are not asked to touch alt text at all (L27). Putting the draft's alt
         # text back is structural, costs nothing, and cannot be talked out of.
         draft_alt_texts = data.get("alt_texts")
+        # Held out of the rewrite for the same reason, and restored with it
+        # below (#1220). The two are parallel lists: the prompt asks for the
+        # labels in the same order and at the same length, and the
+        # normalisation trims and re-holes both together. Restoring one and
+        # leaving the other is how they come to disagree about which
+        # photograph is which.
+        draft_scene_labels = data.get("scene_labels")
 
         single_shape = (
             "{alt_texts: list of strings, scene_labels: list of strings or "
@@ -1125,6 +1132,26 @@ def generate_caption(
     # a panel that gets skimmed (L36).
     produced = data.get("alt_texts")
     shape_fault = _alt_shape_fault(post_type, draft_alt_texts, produced)
+    # The labels are judged by the SAME rule, because the fault is the same
+    # fault: a count change or a reorder is wrong about the whole list's
+    # alignment to the photographs (#1220).
+    label_fault = _alt_shape_fault(post_type, draft_scene_labels,
+                                   data.get("scene_labels"))
+    if shape_fault is None and label_fault is not None:
+        # The alt texts survived and the labels did not. Reported under the
+        # code that already exists rather than a second one: two codes for one
+        # pass ignoring one instruction is two headings for one fault.
+        per_frame_findings.append(Finding(
+            code="alt_text_rewritten_by_review",
+            message=("A review pass changed this post's scene labels in a way "
+                     "it was not asked to. The draft's own labels are what "
+                     "shipped."),
+            detail=(f"The pass {label_fault.replace('alt texts', 'scene labels')}. "
+                    "Scene labels run parallel to the alt texts, so a change "
+                    "to their order or length puts every later one against a "
+                    "different photograph."),
+        ))
+        data = dict(data, scene_labels=draft_scene_labels)
     if shape_fault is not None:
         per_frame_findings.append(Finding(
             code="alt_text_rewritten_by_review",
@@ -1134,7 +1161,10 @@ def generate_caption(
             detail=(f"The pass {shape_fault}. "
                     + _rewritten_alt_detail(draft_alt_texts, produced)),
         ))
-        data = dict(data, alt_texts=draft_alt_texts)
+        # Both, always. A pass that broke the alt texts' shape says nothing
+        # about whether it also moved the labels, and the draft is known good.
+        data = dict(data, alt_texts=draft_alt_texts,
+                    scene_labels=draft_scene_labels)
     else:
         cut = _alt_entries_below_floor(post_type, draft_alt_texts, produced)
         if cut:
