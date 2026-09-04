@@ -70,6 +70,104 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from tools import guard_entry_costs, perturbation_lock  # noqa: E402
 
 REQUIRED_FIELDS = ("name", "file", "find", "replace", "test", "breaks")
+
+
+class StaleAnchor(Exception):
+    """An anchor that no longer names exactly one place."""
+
+
+def _elastic(find: str) -> "re.Pattern[str]":
+    """`find` as a pattern whose LEADING whitespace is elastic (#1040).
+
+    Several entries anchor on exact indented text from a workflow, so ordinary
+    reformatting broke them and the resulting error named the guard rather than
+    the edit that caused it. Hit twice on 2026-08-30 in one change: nesting an
+    xcodebuild call under a wrapper shifted its arguments two spaces, and an
+    anchor matched 0 places instead of 1, needing a hand re-anchor with no
+    behaviour change.
+
+    A guard that breaks on whitespace teaches people that a red guard means a
+    stale registry rather than a real regression, which is the reading that
+    eventually waves a genuine one through.
+
+    Only the leading run is elastic. Everything after the first non-space
+    character is matched literally, so this cannot start matching a different
+    place: two steps that differ only in indentation are the same step.
+    """
+    lines = []
+    for line in find.split("\n"):
+        body = line.lstrip(" \t")
+        lines.append(("[ \t]*" if body else "") + re.escape(body))
+    return re.compile("\n".join(lines))
+
+
+def anchor_span(text: str, find: str) -> tuple[int, int]:
+    """Where `find` sits in `text`, surviving a change in how far it is indented.
+
+    The EXACT match is tried first and wins whenever it names one place. The
+    elastic one is reached only when the exact match finds NOTHING, which is
+    precisely the reformatting case, and it is a fallback rather than the rule
+    because elasticity costs uniqueness: three anchors in this registry are
+    unique only by their indentation, and matching loosely first made all three
+    ambiguous. A fallback for an ABSENT match must not fire on one that is
+    present and merely different (L214).
+
+    An exact match that names SEVERAL places is stale as it always was, and is
+    not retried loosely: loosening a pattern that already matches too much can
+    only match more.
+
+    Raises rather than answering with a best guess: an anchor that names two
+    places or none is a stale registry, and the caller has to say which (L11).
+    """
+    exact = text.count(find)
+    if exact == 1:
+        start = text.index(find)
+        return start, start + len(find)
+    if exact > 1:
+        raise StaleAnchor(f"matches {exact} places instead of exactly one")
+
+    found = list(_elastic(find).finditer(text))
+    if len(found) != 1:
+        raise StaleAnchor(
+            f"matches no place exactly and {len(found)} allowing for a change "
+            f"in indentation, instead of exactly one")
+    return found[0].span()
+
+
+def reindented(replace: str, matched: str, find: str) -> str:
+    """`replace`, shifted by however far the real text is from the recorded one.
+
+    Without this the elastic match above would fix the FINDING and break the
+    writing: a replacement pasted at the recorded indentation into a file that
+    has since been reindented produces YAML that does not parse, and the guard
+    would then fail for a reason that has nothing to do with what it checks.
+
+    Falls back to `replace` unchanged when either side indents with tabs, since
+    the shift is a count of characters and mixing the two makes that arithmetic
+    meaningless. Every file in this registry indents with spaces, so the
+    fallback is a refusal to guess rather than a path anybody takes.
+    """
+    def leading(text: str) -> str | None:
+        for line in text.split("\n"):
+            if line.strip():
+                return line[:len(line) - len(line.lstrip(" \t"))]
+        return None
+
+    was, now = leading(find), leading(matched)
+    if was is None or now is None or "\t" in was or "\t" in now:
+        return replace
+    shift = len(now) - len(was)
+    if shift == 0:
+        return replace
+    out = []
+    for line in replace.split("\n"):
+        if not line.strip():
+            out.append(line)
+        elif shift > 0:
+            out.append(" " * shift + line)
+        else:
+            out.append(line[min(-shift, len(line) - len(line.lstrip(" "))):])
+    return "\n".join(out)
 DEFAULT_REGISTRY = Path("tests/fixtures/guard_mutations")
 # The one non-entry file the registry directory is allowed to hold: the prose
 # explaining the mechanism and which guards are deliberately unregistered.
@@ -982,12 +1080,14 @@ def run_entry(entry: Entry, repo_root: Path, runner, log=say) -> Result:
 
     original = target.read_bytes()
     text = original.decode("utf-8")
-    matches = text.count(entry.find)
-    if matches != 1:
+    try:
+        where = anchor_span(text, entry.find)
+    except StaleAnchor as stale:
         return Result(entry, Outcome.ERROR,
-                      f"the anchor for {entry.name} matches {matches} places "
-                      f"in {entry.file} instead of exactly one; the registry "
-                      f"is stale. Anchor: {entry.find!r}")
+                      f"the anchor for {entry.name} {stale} in {entry.file}; "
+                      f"the registry is stale. Anchor: {entry.find!r}")
+    broken = text[:where[0]] + reindented(entry.replace, text[where[0]:where[1]],
+                                          entry.find) + text[where[1]:]
 
     # Recorded BEFORE the write, so a signal landing between the two finds the
     # original bytes to put back rather than nothing (#547).
@@ -999,7 +1099,7 @@ def run_entry(entry: Entry, repo_root: Path, runner, log=say) -> Result:
     began = time.monotonic()
     with perturbation_lock.held_for(entry.name, repo_root):
         _PENDING[target] = original
-        target.write_bytes(text.replace(entry.find, entry.replace).encode("utf-8"))
+        target.write_bytes(broken.encode("utf-8"))
         try:
             # Swift entries build; Python ones do not, so only the former
             # contend for the shared cache.

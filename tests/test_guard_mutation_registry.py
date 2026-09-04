@@ -88,11 +88,19 @@ def test_every_anchor_still_matches_its_file_exactly_once(entry: Entry):
     refuse_if_a_prover_is_working()
     target = REPO_ROOT / entry.file
     assert target.is_file(), f"{entry.file} has moved; update the registry"
-    count = text_of(target).count(entry.find)
-    assert count == 1, (
-        f"the anchor for {entry.name} matches {count} places in {entry.file} "
-        f"instead of exactly one, so the recorded perturbation no longer "
-        f"names one real place. Anchor: {entry.find!r}")
+    # Through the prover's OWN matcher, never a second count beside it. Since
+    # #1040 an anchor's leading whitespace is elastic, so a `str.count` here
+    # would report a stale registry for entries the prover applies perfectly
+    # well: a check whose expected value and actual value come from different
+    # lookups can only prove they disagree (L70).
+    from tools.check_guards import StaleAnchor, anchor_span
+    try:
+        anchor_span(text_of(target), entry.find)
+    except StaleAnchor as stale:
+        raise AssertionError(
+            f"the anchor for {entry.name} {stale} in {entry.file}, so the "
+            f"recorded perturbation no longer names one real place. "
+            f"Anchor: {entry.find!r}") from stale
 
 
 #: Which file declares each Swift test class, taken once instead of once per

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import pytest
 
+from source_text import swift_without_string_literals
 from swift_target_hygiene import (
     MANIFEST,
     PBXPROJ,
@@ -230,6 +231,22 @@ def test_the_suite_scanner_leaves_a_plain_class_alone():
     assert suite_names("final class Helper: NSObject {}\nenum Thing {}\n") == []
 
 
+def test_a_suite_inside_a_string_literal_is_not_a_suite():
+    """A test that keeps a Swift snippet as another guard's FIXTURE declares
+    no suite. Counting one there reports a file as holding two when it holds
+    one, and sends the reader to split a file that is already fine (L104)."""
+    source = "\n".join([
+        "func testTheScannerIgnoresThis() {",
+        "    let fixture = " + '"""',
+        "    final class SomeTests: XCTestCase {}",
+        "    " + '"""',
+        "}",
+        "final class RealTests: XCTestCase {}",
+    ])
+
+    assert suite_names(swift_without_string_literals(source)) == ["RealTests"]
+
+
 def test_each_test_file_holds_exactly_one_suite(registered: set[str]):
     doubled: list[str] = []
     suites_seen = 0
@@ -237,7 +254,12 @@ def test_each_test_file_holds_exactly_one_suite(registered: set[str]):
         path = TESTS_DIR / name
         if not path.exists():
             continue
-        found = suite_names(path.read_text(encoding="utf-8"))
+        # String literals blanked as well as comments (#1230's shape one step
+        # along). A test that keeps a Swift snippet in a multiline literal as
+        # another guard's fixture declares no suite, and counting one there
+        # reports a file as holding two when it holds one (L104).
+        found = suite_names(swift_without_string_literals(
+            path.read_text(encoding="utf-8")))
         suites_seen += len(found)
         if len(found) > 1:
             doubled.append(f"{name}: {', '.join(found)}")
