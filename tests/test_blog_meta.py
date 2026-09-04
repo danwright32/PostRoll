@@ -30,7 +30,9 @@ from postroll.blog_meta import (
     DescriptionOutOfBand,
     check_description,
     details_block,
+    format_date,
     seo_description,
+    shoot_type_label,
 )
 
 
@@ -207,3 +209,53 @@ def test_neither_string_can_reach_the_ai_round_trip():
     ]
     assert not offenders, (
         f"these modules pull post metadata into the AI round trip: {offenders}")
+
+def _dates() -> list[dict]:
+    dates = _fixture()["dates"]
+    assert len(dates) >= 5, "a gutted fixture would let both suites pass vacuously"
+    return dates
+
+
+@pytest.mark.parametrize("case", _dates(), ids=lambda c: c["iso"])
+def test_python_renders_every_shared_date(case):
+    """#1106: `format_date` and `BlogMeta.formatDate` are twins, found by name
+    rather than by anybody declaring them.
+
+    They were covered only THROUGH the details block, so a disagreement about
+    one date surfaced as a whole block mismatch and read as a details bug."""
+    assert format_date(case["iso"]) == case["formatted"]
+
+
+@pytest.mark.parametrize("iso", _fixture()["unreadable_dates"])
+def test_python_refuses_a_date_it_cannot_read(iso):
+    """Where the two halves deliberately DIFFER, and the difference is the
+    point (L542). Python generates the post, and a malformed date reaching the
+    description would be published as the summary, so it raises. Swift renders
+    a screen, where a trap takes the app down, so it returns an empty string.
+
+    Recorded rather than reconciled: making them agree would either publish a
+    bad date or crash the app."""
+    with pytest.raises(ValueError):
+        format_date(iso)
+
+
+def test_python_labels_every_shared_shoot_type():
+    """The same map written twice, and nothing compared the two. A shoot type
+    added to one and not the other puts a raw `rehearsal_and_performance` on a
+    published page (L113)."""
+    labels = _fixture()["shoot_types"]
+    assert len(labels) >= 4, "a gutted fixture would pass vacuously"
+
+    for value, label in labels.items():
+        assert shoot_type_label(value) == label
+
+
+def test_the_shared_shoot_types_are_every_one_python_knows():
+    """Both directions. A fixture naming a subset would let a type be added to
+    Python alone and go unchecked, which is the drift this exists to catch
+    (L96)."""
+    from postroll.blog_meta import SHOOT_TYPE_LABELS
+
+    assert set(_fixture()["shoot_types"]) == set(SHOOT_TYPE_LABELS), (
+        "the shared list and Python's own map name different shoot types, so "
+        "one of them is checking a set nobody uses")

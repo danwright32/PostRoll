@@ -1,0 +1,4 @@
+{
+  "apply_cover_pick": "Two different jobs wearing one name. Python's validates Claude's raw JSON reply against the candidate list it was given, refusing a non-integer or an out of range index; Swift's stores an already-chosen pick on a day of the event. Neither could disagree with the other, because neither answers the question the other asks.",
+  "running_under_test": "Each answers the question about its OWN process, and the two processes are never the same one: Python reads PYTEST_CURRENT_TEST during a pytest run, Swift asks whether the app is running under XCTest. A pytest run and an xcodebuild run are separate programs, so there is no shared answer for the two to drift apart about, and pinning them to one fixture would assert something neither is claiming."
+}
