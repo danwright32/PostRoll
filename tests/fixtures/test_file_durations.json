@@ -234,6 +234,7 @@
     "test_scroll_reel_timing_parity.py": 0.0,
     "test_select_cover_photo.py": 0.01,
     "test_select_reel_clips.py": 0.27,
+    "test_sibling_payloads_agree.py": 0.01,
     "test_side_crop_readings.py": 0.0,
     "test_slider_program_plate.py": 28.9,
     "test_source_reads_happen_once.py": 0.0,
@@ -1217,6 +1218,10 @@
     "test_select_reel_clips.py": {
       "run": "full-2026-09-04T03:02Z",
       "scale": 1.0
+    },
+    "test_sibling_payloads_agree.py": {
+      "run": "partial-2026-09-04T22:37Z",
+      "scale": 0.917
     },
     "test_side_crop_readings.py": {
       "run": "full-2026-09-04T03:02Z",
