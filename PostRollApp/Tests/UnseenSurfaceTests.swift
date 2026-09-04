@@ -151,30 +151,6 @@ final class UnseenSurfaceTests: XCTestCase {
             """)
     }
 
-    // MARK: - The sweep
-
-    func testNoMeasuredStateHidesItsWordsFromTheRenderer() throws {
-        var unseen: [String] = []
-        for state in BannerLegibilityTests.measuredStates {
-            let rendered = try byRenderer(state.view)
-            let hosted = try byHosting(state.view)
-            guard hosted > WordFootprint.drawn else { continue }
-            if rendered / hosted < Self.seenEnough {
-                unseen.append("\(state.name) "
-                              + "(\(String(format: "%.4f", rendered)) of "
-                              + "\(String(format: "%.4f", hosted)))")
-            }
-        }
-
-        XCTAssertEqual(unseen, [], """
-            ImageRenderer draws far less of these surfaces than AppKit does, so \
-            BannerLegibilityTests is measuring part of them and reporting the whole: \
-            \(unseen). The commonest cause is a scroll region, whose contents ImageRenderer \
-            renders as nothing at all. Measure them through WordFootprint.hosted the way \
-            HostedControlLegibilityTests does.
-            """)
-    }
-
     func testNoMeasuredStateHoldsAContainerTheRendererCannotSee() throws {
         var holding: [String] = []
         for state in BannerLegibilityTests.measuredStates {

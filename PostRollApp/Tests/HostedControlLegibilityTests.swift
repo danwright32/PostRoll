@@ -880,7 +880,11 @@ final class HostedControlLegibilityTests: XCTestCase {
         let code = SwiftSourceText.withoutComments(
             try String(contentsOf: url, encoding: .utf8))
 
-        let start = try XCTUnwrap(code.range(of: "private func render("),
+        // `static func`, not `private func`: #1257 took two sweeps out of that
+        // class into sliced ones, and they call this helper rather than
+        // carrying a copy, so it had to stop being private. The check is about
+        // the helper's BODY either way.
+        let start = try XCTUnwrap(code.range(of: "static func render("),
                                   "BannerLegibilityTests no longer has a render helper, "
                                   + "so this check is reading a file that has moved on")
         let body = code[start.lowerBound...]

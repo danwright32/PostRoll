@@ -41,8 +41,12 @@ final class BannerLegibilityTests: XCTestCase {
     /// image is itself a colour that differs from the fill, and at these sizes
     /// it measures as several percent of the page, which is enough to make a
     /// blank render look like a drawn one.
-    private func render(_ view: some View, width: CGFloat = 520,
-                        wordless: Bool = false) throws -> NSBitmapImageRep {
+    /// Static and visible to the sliced sweeps in `BannerSweepTests` (#1257),
+    /// which took two of this class's tests out. One implementation and one
+    /// memo, because sharing the DATA while copying the code that applies it is
+    /// not consolidation (L370).
+    static func render(_ view: some View, width: CGFloat = 520,
+                       wordless: Bool = false) throws -> NSBitmapImageRep {
         // On Color.cream, because that is the surface every one of these sits
         // on in the app. A banner fill is translucent, so rendered against
         // nothing it is mostly transparent and every measurement below would be
@@ -446,8 +450,8 @@ final class BannerLegibilityTests: XCTestCase {
 
     private static var measuredShares: [ShareKey: Double] = [:]
 
-    private func wordShare(of state: (name: String, view: AnyView),
-                           width: CGFloat = 520) throws -> Double {
+    static func wordShare(of state: (name: String, view: AnyView),
+                          width: CGFloat = 520) throws -> Double {
         let key = ShareKey(state: state.name, width: width)
         if let already = Self.measuredShares[key] { return already }
         let share = WordFootprint.share(
@@ -560,27 +564,6 @@ final class BannerLegibilityTests: XCTestCase {
     /// in the suite, which is what #614 was about: three thresholds had grown
     /// here, 0.01 for a notice and 0.005 twice for a sparser screen, each
     /// honestly measured against its own surface and each lower than the last.
-    func testEveryBannerActuallyDrawsItsMessage() throws {
-        // A sweep that reads nothing objects to nothing (L98).
-        XCTAssertGreaterThan(states.count, 30,
-                             "the sweep found \(states.count) states, so it is proving "
-                             + "nothing about the ones it did not draw")
-
-        for state in states {
-            let share = try wordShare(of: state)
-            XCTAssertGreaterThan(share, WordFootprint.drawn, """
-                Switching every word off the "\(state.name)" banner changed \
-                \(String(format: "%.4f", share)) of the render, which is nothing. Its \
-                message is in the view tree and not on the screen, and the fill, the \
-                border and the buttons this surface paints for itself would keep a flat \
-                ink threshold happy without it (L141). Either the words are drawn in the \
-                colour of what is behind them, or ImageRenderer is not drawing them at \
-                all, in which case the state belongs in HostedControlLegibilityTests \
-                where AppKit hosts it.
-                """)
-        }
-    }
-
     /// What each surface's words are actually worth, so the floor stays a
     /// measured number rather than one carried forward on faith (#396).
     ///
@@ -592,7 +575,7 @@ final class BannerLegibilityTests: XCTestCase {
     func testTheThinnestRealSurfaceStillClearsTheThresholdWithRoom() throws {
         var measured: [(String, Double)] = []
         for state in states {
-            measured.append((state.name, try wordShare(of: state)))
+            measured.append((state.name, try Self.wordShare(of: state)))
         }
         let sorted = measured.sorted { $0.1 < $1.1 }
         for (name, share) in sorted {
@@ -619,9 +602,9 @@ final class BannerLegibilityTests: XCTestCase {
         let state = try XCTUnwrap(states.first)
         for width in [CGFloat(520), CGFloat(300)] {
             let fresh = WordFootprint.share(
-                try render(state.view, width: width),
-                try render(state.view, width: width, wordless: true))
-            XCTAssertEqual(try wordShare(of: state, width: width), fresh,
+                try Self.render(state.view, width: width),
+                try Self.render(state.view, width: width, wordless: true))
+            XCTAssertEqual(try Self.wordShare(of: state, width: width), fresh,
                            accuracy: 0.0001, """
                 the memo and a fresh measurement of "\(state.name)" at \(width)pt \
                 disagree, so the three sweeps in this file are no longer measuring \
@@ -639,8 +622,8 @@ final class BannerLegibilityTests: XCTestCase {
     /// measure the same and a check that assumed otherwise would be flaky.
     func testTheShareMemoIsKeyedByWidthAsWellAsByState() throws {
         let state = try XCTUnwrap(states.first)
-        _ = try wordShare(of: state, width: 520)
-        _ = try wordShare(of: state, width: 300)
+        _ = try Self.wordShare(of: state, width: 520)
+        _ = try Self.wordShare(of: state, width: 300)
 
         let kept = Self.measuredShares.keys.filter { $0.state == state.name }
         XCTAssertEqual(kept.count, 2, """
@@ -652,14 +635,6 @@ final class BannerLegibilityTests: XCTestCase {
 
     /// A banner is worth nothing if the words run past the edge of it. Rendering
     /// at a narrow width is where a long message with a two button row breaks.
-    func testEveryBannerStillDrawsItsMessageWhenNarrow() throws {
-        for state in states {
-            let share = try wordShare(of: state, width: 300)
-            XCTAssertGreaterThan(share, WordFootprint.drawn,
-                                 "the \"\(state.name)\" banner lost its message at 300pt wide")
-        }
-    }
-
     /// Two controls this harness cannot draw, named here rather than left to be
     /// rediscovered (#396).
     ///
@@ -696,8 +671,8 @@ final class BannerLegibilityTests: XCTestCase {
         }
 
         func share(_ colour: Color) throws -> Double {
-            WordFootprint.share(try render(button(colour)),
-                                try render(button(colour), wordless: true))
+            WordFootprint.share(try Self.render(button(colour)),
+                                try Self.render(button(colour), wordless: true))
         }
         let invisible = try share(.cream)
         let legible = try share(.warmDark)
@@ -1124,7 +1099,7 @@ final class BannerLegibilityTests: XCTestCase {
     /// words at all still measures as a respectable amount of ink, which is why
     /// ink was the wrong quantity to ask any of these surfaces about.
     func testTheUnrenderableControlsAreNamedRatherThanMeasured() throws {
-        let spinnerOnly = WordFootprint.ink(try render(ProgressView().frame(height: 40)))
+        let spinnerOnly = WordFootprint.ink(try Self.render(ProgressView().frame(height: 40)))
         XCTAssertGreaterThan(spinnerOnly, Self.legibleInk, """
             A bare ProgressView measured \(String(format: "%.4f", spinnerOnly)), which \
             clears the legibility threshold while drawing no words at all. If this \
@@ -1132,8 +1107,8 @@ final class BannerLegibilityTests: XCTestCase {
             states above can carry their menus again.
             """)
 
-        let words = WordFootprint.share(try render(ProgressView().frame(height: 40)),
-                                        try render(ProgressView().frame(height: 40),
+        let words = WordFootprint.share(try Self.render(ProgressView().frame(height: 40)),
+                                        try Self.render(ProgressView().frame(height: 40),
                                                    wordless: true))
         XCTAssertLessThan(words, WordFootprint.drawn, """
             A bare ProgressView has a word footprint of \(String(format: "%.4f", words)), \
@@ -1164,8 +1139,8 @@ final class BannerLegibilityTests: XCTestCase {
         }
 
         func share(_ colour: Color) throws -> Double {
-            WordFootprint.share(try render(card(colour)),
-                                try render(card(colour), wordless: true))
+            WordFootprint.share(try Self.render(card(colour)),
+                                try Self.render(card(colour), wordless: true))
         }
         let invisible = try share(.cream)
         let legible = try share(.warmDark)
@@ -1190,8 +1165,8 @@ final class BannerLegibilityTests: XCTestCase {
     /// actually being measured.
     func testTheFootprintOfNothingIsNothing() throws {
         let state = try XCTUnwrap(states.first)
-        XCTAssertEqual(WordFootprint.share(try render(state.view),
-                                           try render(state.view)),
+        XCTAssertEqual(WordFootprint.share(try Self.render(state.view),
+                                           try Self.render(state.view)),
                        0, accuracy: 0.00001, """
             two renders of "\(state.name)" differ, so the footprint measurement is \
             reading the renderer rather than the words and the floor it is judged \
@@ -1220,7 +1195,7 @@ extension BannerLegibilityTests {
         try ReviewSheet.begin(group: Self.reviewGroup)
 
         for state in states {
-            try ReviewSheet.write(try render(state.view),
+            try ReviewSheet.write(try Self.render(state.view),
                                   group: Self.reviewGroup, name: state.name)
         }
 
