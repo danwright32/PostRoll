@@ -412,9 +412,24 @@ def _add(paths: list[str]) -> int:
     return 0
 
 
+#: What every duration in the record was measured over, written by the tool
+#: that measures it rather than added to the file afterwards (#1328).
+#:
+#: A hand edit here does not survive the next run: this function rewrites the
+#: whole record, so the sample size has to come from the writer or it is lost
+#: the first time anybody adds a test file (L379).
+SAMPLE_NOTE = ("Each duration is the MEDIAN of {passes} measured passes, which "
+               "is what --add takes (ADD_PASSES). Recorded so a reader can tell "
+               "it from a single reading, because a figure whose sample size is "
+               "not stated gets read as whichever the reader assumes (#1328).")
+
+
 def _write(record: dict) -> None:
     RECORD.parent.mkdir(parents=True, exist_ok=True)
-    RECORD.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    stated = {**record,
+              "passes": ADD_PASSES,
+              "_sample": SAMPLE_NOTE.format(passes=ADD_PASSES)}
+    RECORD.write_text(json.dumps(stated, indent=2) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

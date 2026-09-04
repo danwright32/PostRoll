@@ -346,7 +346,7 @@ def test_the_run_to_run_spread_is_recorded():
     assert spread, (
         "no run to run spread is recorded, so any wall clock difference "
         "measured on this runner can be read as a result when it is noise")
-    for field in ("machine", "cores", "measured_on", "wall_seconds",
+    for field in ("machine", "cores", "measured_on", "same_code_pairs",
                   "spread_seconds_at_least", "runs", "measured_from",
                   "re_measure_with"):
         assert field in spread, (
@@ -355,28 +355,66 @@ def test_the_run_to_run_spread_is_recorded():
             f"(L316)")
 
 
-def test_the_spread_is_taken_from_more_than_one_run():
-    """A spread from a single reading is not a spread. It needs at least two
-    runs of the same code, or it is measuring nothing (L98)."""
-    spread = _record()["run_to_run_spread"]
+def test_the_spread_is_taken_from_more_than_one_run_of_ONE_commit():
+    """A spread needs two runs of the SAME code, or it is measuring the code.
 
-    assert len(spread["wall_seconds"]) >= 2, (
-        "the spread is built from fewer than two runs, so there is nothing for "
-        "it to be a spread between")
+    Grouping by commit is the whole point: main moved between the dispatches
+    that produced these readings, so a pair taken across that move would be
+    reporting the change as noise (L48, L375).
+    """
+    spread = _record()["run_to_run_spread"]
+    pairs = spread["same_code_pairs"]
+
+    usable = [pair for pair in pairs if len(pair["wall_seconds"]) >= 2]
+    assert usable, (
+        "no commit here has two readings, so nothing in this record is a "
+        "spread between two runs of the same code")
     assert spread["spread_seconds_at_least"] > 0, (
         "the spread is zero, which is not a reading off a real runner")
 
 
-def test_the_spread_matches_the_readings_it_was_taken_from():
-    """Derived rather than asserted beside them, so the two cannot drift and a
-    typo in either is caught (L41, L70)."""
-    spread = _record()["run_to_run_spread"]
-    readings = spread["wall_seconds"]
+def test_every_pair_is_readings_of_one_commit():
+    """A pair is named by its commit, and its run count must match its readings."""
+    for pair in _record()["run_to_run_spread"]["same_code_pairs"]:
+        assert pair["commit"], "a pair with no commit cannot be same-code"
+        assert pair["runs"] == len(pair["wall_seconds"]), (
+            f"{pair['commit']} says {pair['runs']} runs but carries "
+            f"{len(pair['wall_seconds'])} readings, so one of the two is wrong")
+        assert pair["runs"] == len(pair["from_runs"]), (
+            f"{pair['commit']} does not name one run id per reading, so a "
+            f"reading cannot be traced back and taken again (L316)")
 
-    assert abs((max(readings) - min(readings)) - spread["spread_seconds_at_least"]) < 0.5, (
-        f"the recorded spread {spread['spread_seconds_at_least']} is not the "
-        f"difference "
-        f"between {max(readings)} and {min(readings)}")
+
+def test_the_floor_is_the_widest_SAME_COMMIT_spread_and_not_the_whole_range():
+    """Derived rather than asserted beside them (L41, L70), and derived from
+    within a commit rather than across all of them.
+
+    Taking the range over every reading would fold the code changes between
+    commits into a figure that claims to be about the runner. Here that would
+    have read 49.4s instead of 47.6s: close enough to look right and measuring
+    something else.
+    """
+    spread = _record()["run_to_run_spread"]
+    pairs = spread["same_code_pairs"]
+
+    within = [max(p["wall_seconds"]) - min(p["wall_seconds"])
+              for p in pairs if len(p["wall_seconds"]) >= 2]
+    assert abs(max(within) - spread["spread_seconds_at_least"]) < 0.5, (
+        f"the recorded floor {spread['spread_seconds_at_least']} is not the "
+        f"widest same-commit spread {max(within):.1f}")
+
+    every = [x for p in pairs for x in p["wall_seconds"]]
+    across = max(every) - min(every)
+    assert spread["spread_seconds_at_least"] <= across + 0.5, (
+        "the floor is wider than the whole sample, which cannot be")
+
+    for pair in pairs:
+        if len(pair["wall_seconds"]) < 2:
+            continue
+        own = max(pair["wall_seconds"]) - min(pair["wall_seconds"])
+        assert abs(own - pair["spread_seconds"]) < 0.5, (
+            f"{pair['commit']} records a spread of {pair['spread_seconds']} "
+            f"which is not the difference between its own readings")
 
 
 def test_the_spread_says_what_it_means_for_a_comparison():

@@ -13,7 +13,9 @@
    "tests": 2895,
    "measured_on": "2026-09-03",
    "measured_from": "workflow_dispatch run 33760431737 at commit 72e1574a315a3f085680048a2bfa91fc27c65fb8: the step's own `Swift suite on 3 workers, 3 cores` notice, xcodebuild's IDETestOperationsObserverDebug reporting `212.162 elapsed`, `Swift: 2895 tests` from tools/suite_counts.py, and the serial total summed off the per-test seconds in the same transcript",
-   "re_measure_with": "gh run view <newest swift.yml run> --log > run.log, then: grep -oE '[0-9.]+ elapsed' run.log for the wall, and sum the '(N seconds)' on every 'Test case ... passed on' line for the serial total"
+   "re_measure_with": "gh run view <newest swift.yml run> --log > run.log, then: grep -oE '[0-9.]+ elapsed' run.log for the wall, and sum the '(N seconds)' on every 'Test case ... passed on' line for the serial total",
+   "runs": 1,
+   "one_reading_because": "This is a single dispatch, and the runner moves between runs by more than many of the differences anybody would read off it. run_to_run_spread below holds the multi run sample that says by how much (#1328, #1329)."
   },
   {
    "machine": "Daniels-MacBook-Pro-2, macOS 26.5.1, Xcode 26.6",
@@ -27,7 +29,8 @@
    "counts_three_fewer_because": "make test-swift skips the three REVIEW_TESTS dumps, which CI runs. That is the 2,892 against the runner's 2,895, not a lost worker's share.",
    "measured_on": "2026-09-03",
    "measured_from": "`make test-swift`, read out of the result bundle it writes rather than off the scroll",
-   "re_measure_with": "make test-swift, then `xcrun xcresulttool get test-results summary --path \"$(. PostRollApp/derived-data-path.sh; printf %s \"$POSTROLL_DERIVED_DATA\")/swift-suite.xcresult\" --format json` for the wall (finishTime minus startTime) and the count, and the same tool's `tests` subcommand for the per-class seconds"
+   "re_measure_with": "make test-swift, then `xcrun xcresulttool get test-results summary --path \"$(. PostRollApp/derived-data-path.sh; printf %s \"$POSTROLL_DERIVED_DATA\")/swift-suite.xcresult\" --format json` for the wall (finishTime minus startTime) and the count, and the same tool's `tests` subcommand for the per-class seconds",
+   "runs": 1
   }
  ],
  "what_the_pair_says": "The two machines run the same amount of test work (475.8s against 475.1s of bodies) and differ almost entirely in how many workers they can pack it onto. The runner loses to packing (212.2s against a perfect 158.6s), this Mac loses to one class (123.4s against a heaviest class of 98.0s). Neither is anywhere near the 'near perfect up to four workers' this record replaces.",
@@ -40,7 +43,8 @@
    "running": 212.2,
    "measured_on": "2026-09-03",
    "measured_from": "dispatch run 33760431737 on the macos-26 runner: the step's own start and end, and xcodebuild's `212.162 elapsed`. The compiling figure is what is left of the step, so it also carries whatever else the step does.",
-   "note": "Compile and run are measured by two different instruments here. .github/workflows/ci-profile.yml passes -showBuildTimingSummary to the test invocation as well (#1247), so a dispatch of it reports the compile side from the invocation's own attribution rather than as a remainder."
+   "note": "Compile and run are measured by two different instruments here. .github/workflows/ci-profile.yml passes -showBuildTimingSummary to the test invocation as well (#1247), so a dispatch of it reports the compile side from the invocation's own attribution rather than as a remainder.",
+   "runs": 1
   },
   "compile": {
    "machine": "Daniels-MacBook-Pro-2, 12 cores, macOS 26.5.1, Xcode 26.6",
@@ -50,7 +54,8 @@
     "batches": 22,
     "frontend_cpu_seconds": 280.8,
     "emit_module_cpu_seconds": 16.1,
-    "note": "what the step actually pays. The Swift driver batches the 541 files into 22 frontend jobs, and batching is why this is cheaper than the per-file total below."
+    "note": "what the step actually pays. The Swift driver batches the 541 files into 22 frontend jobs, and batching is why this is cheaper than the per-file total below.",
+    "runs": 1
    },
    "split": {
     "method": "a second cold build with SWIFT_ENABLE_BATCH_MODE=NO, so there is one frontend job per file and each file's wall clock is its own",
@@ -58,14 +63,17 @@
     "sources": {
      "files": 228,
      "cpu_seconds": 143.0,
-     "seconds_per_file": 0.627
+     "seconds_per_file": 0.627,
+     "runs": 1
     },
     "tests": {
      "files": 313,
      "cpu_seconds": 139.9,
-     "seconds_per_file": 0.447
+     "seconds_per_file": 0.447,
+     "runs": 1
     },
-    "sources_cost_ratio": 1.4
+    "sources_cost_ratio": 1.4,
+    "runs": 1
    },
    "what_it_says": "The app's own source is HALF the test bundle's compile cost (51%) while being 42% of the files, because a Sources file costs 1.4x what a Tests file does. The dearest files are all SwiftUI views: CaptionReviewView 5.89s, PhotoAssignmentView 5.66s, OCRReviewView 5.09s. So the lever is the Sources side, and it is about which files are compiled rather than how many.",
    "superseded_reading": "The first attempt apportioned each BATCH's time across its own files and reported Sources 120.5s at 0.53s a file against Tests 160.3s at 0.51s, concluding that neither half dominates. That was the METHOD, not the code: all 22 batches were mixed at a nearly constant ratio, so apportioning by file count could only ever return a near identical cost per file whatever the truth was (L107, L63). Both the shares and the finding were wrong.",
@@ -83,7 +91,8 @@
    "measured_from": "the suite run with -enableCodeCoverage YES read through `xcrun xccov view --report --json`, joined to the per-file frontend times from the batch-mode-off build",
    "re_measure_with": "xcodebuild ... -enableCodeCoverage YES -resultBundlePath <path> test, then xcrun xccov view --report --json <path>",
    "cpu_seconds": 19.4,
-   "share_of_the_compile": "7%"
+   "share_of_the_compile": "7%",
+   "runs": 1
   },
   "packing": {
    "what": "Whether the 212s run is bounded by one heavy class or by how the classes are dealt.",
@@ -104,42 +113,100 @@
    "measured_runner_wall_seconds": 212.2,
    "what_it_says": "On three workers a cost-aware deal reaches the perfect 158.6s, because the heaviest class is well under it, so the 212.2s the runner takes is about 53s of scheduling loss rather than a class that cannot be split. On twelve workers it inverts: perfect would be 39.7s and the heaviest class alone is the floor. So the one lever that helps both machines is splitting the three classes that hold 44% of the suite's seconds.",
    "measured_from": "the per-test seconds in run 33760431737's transcript, summed per class, dealt longest-first onto N workers",
-   "re_measure_with": "sum the '(N seconds)' on every 'Test case ... passed on' line of a swift-unit log, group by the class before the dot, then deal longest-first"
+   "re_measure_with": "sum the '(N seconds)' on every 'Test case ... passed on' line of a swift-unit log, group by the class before the dot, then deal longest-first",
+   "runs": 1,
+   "computed_not_measured": "These are arithmetic over the single reading above rather than a second measurement, so runs is 1: the makespan is what a perfect packing of those class times would have cost, not something anybody timed."
   }
  },
  "run_to_run_spread": {
-  "what": "How much the SAME code varies between two runs on the runner. It is the bar any before and after comparison here has to clear (L224), and it is a FLOOR rather than a characterisation: two runs prove the spread is at least this wide, never that it is only this wide.",
+  "what": "How much the SAME code varies between runs on the runner. It is the bar any before and after comparison here has to clear (L224), and it is a FLOOR rather than a characterisation: a pair of runs proves the spread is at least this wide, never that it is only this wide.",
   "machine": "GitHub macos-26 runner",
   "cores": 3,
   "measured_on": "2026-09-04",
-  "wall_seconds": [
-   183.4,
-   157.5
+  "runs": 7,
+  "same_code_pairs": [
+   {
+    "commit": "d6fbca354005",
+    "runs": 2,
+    "wall_seconds": [
+     183.4,
+     157.5
+    ],
+    "spread_seconds": 25.9,
+    "spread_percent": 16.4,
+    "from_runs": [
+     33880346541,
+     33880353129
+    ]
+   },
+   {
+    "commit": "2a91c4e8528f",
+    "runs": 2,
+    "wall_seconds": [
+     188.588,
+     184.536
+    ],
+    "spread_seconds": 4.1,
+    "spread_percent": 2.2,
+    "from_runs": [
+     33883238909,
+     33884272900
+    ]
+   },
+   {
+    "commit": "8ea7b53448cf",
+    "runs": 2,
+    "wall_seconds": [
+     156.092,
+     203.669
+    ],
+    "spread_seconds": 47.6,
+    "spread_percent": 30.5,
+    "from_runs": [
+     33885254523,
+     33885978257
+    ]
+   },
+   {
+    "commit": "ad95c20216c8",
+    "runs": 1,
+    "wall_seconds": [
+     205.472
+    ],
+    "spread_seconds": null,
+    "spread_percent": null,
+    "from_runs": [
+     33886987126
+    ],
+    "note": "one reading, so it says nothing about spread and is kept only so the sample is complete"
+   }
   ],
-  "measured_from": "two workflow_dispatch runs of swift.yml on the same commit of main, 33880346541 and 33880353129, each read off xcodebuild's own IDETestOperationsObserverDebug elapsed line",
+  "spread_seconds_at_least": 47.6,
+  "spread_percent_at_least": 30.5,
+  "measured_from": "seven workflow_dispatch runs of swift.yml on main, each read off xcodebuild's own IDETestOperationsObserverDebug elapsed line. Grouped by COMMIT, because only two runs of identical code measure noise: main moved between dispatches and a pair across that move would be measuring the change as well.",
   "what_it_means": [
-   "Two runs of identical code differed by 25.9 seconds, 16.5%. That is a",
-   "FLOOR on the noise, not a measurement of it: the true spread could be",
-   "wider, and nothing here says it is not.",
+   "Two runs of IDENTICAL code, at 8ea7b53448cf, came out at 156.1s and",
+   "203.7s. That is 47.6 seconds apart, 30.5%, on the same commit and the",
+   "same runner image, and it needs no statistics to read.",
    "",
-   "It is enough to disqualify a claim, which is the direction it is used in.",
-   "#1257 was reported as a 10.8% improvement (188.99s against 168.67s, a",
-   "20.3s gap) off one run per arm, and a gap smaller than an observed",
-   "same-code difference cannot be told from noise. That claim is withdrawn.",
+   "The pair at 2a91c4e8528f differed by 2.2%. That is the part worth",
+   "understanding: two runs can agree closely AND the spread can still be",
+   "30%, so a two run sample that happens to land close licenses exactly the",
+   "false confidence it should prevent. This is why the figure above is a",
+   "floor and why no pair, however tight, can raise it.",
    "",
-   "It is NOT enough to support a claim. To say an improvement is real, take",
-   "several runs per arm and compare the medians, the way",
-   "tools/record_test_durations.py takes three readings for the same reason",
-   "(#976). Two runs cannot do that and this record does not pretend to.",
+   "Taking a median does not rescue it at this sample size. Resampling the",
+   "seven readings, the median of three ranges over 157.5s to 203.7s, 29.3%,",
+   "which is barely narrower than the single readings. The resample crosses",
+   "commits and is only seven points, but it needs no defending: the widest",
+   "SAME CODE pair already spans almost the whole observed range, so the code",
+   "changes are not what produced the width.",
    "",
-   "What still stands for #1257 is the structural bound rather than the wall",
-   "clock: the heaviest class went from 55.2s to under 30s, which is",
-   "arithmetic over the per class sums and not a timing comparison, and at 12",
-   "workers the heaviest class IS the floor."
+   "What this disqualifies. #1257 was reported as a 10.8% improvement off one",
+   "run per arm, and that claim is withdrawn. tools/check_job_durations.py",
+   "reported swift-unit 11% faster on 2026-09-04, and that reading cannot be",
+   "told from noise either, which is what #1329 was asking."
   ],
-  "re_measure_with": "gh workflow run swift.yml --ref main, twice, then read the elapsed line from each: gh run view <id> --log --job <swift-unit id> | grep -oE 'IDETestOperationsObserverDebug: [0-9.]+ elapsed'",
-  "spread_seconds_at_least": 25.9,
-  "spread_percent_at_least": 16.5,
-  "runs": 2
+  "re_measure_with": "gh workflow run swift.yml --ref main, several times, ONE AT A TIME because the concurrency group is keyed on the SHA and parallel dispatches all but the newest are cancelled. Then read each: gh run view <id> --log --job <swift-unit id> | grep -oE 'IDETestOperationsObserverDebug: [0-9.]+ elapsed', and group the readings by the run's headSha before comparing any two of them."
  }
 }

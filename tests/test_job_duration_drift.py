@@ -33,8 +33,10 @@ from pathlib import Path
 
 import pytest
 
+from tools import check_job_durations
 from tools.check_job_durations import (
     Drift,
+    MATERIAL_SHIFT,
     drift_of,
     job_durations,
 )
@@ -55,12 +57,12 @@ def test_a_job_that_got_materially_slower_is_reported():
     costs more PER UNIT of work, so a fixture without one would be asserting
     about a reading the tool no longer makes.
     """
-    verdict = drift_of("swift-unit", _series([470, 476, 480, 478],
+    verdict = drift_of("python", _series([470, 476, 480, 478],
                                              [525, 530, 535, 532]),
                        work=[2600] * 8)
 
     assert verdict.state is Drift.SLOWER
-    assert "swift-unit" in verdict.message, (
+    assert "python" in verdict.message, (
         "a notice that does not name the job leaves the reader with nowhere "
         "to go (L80)")
 
@@ -78,11 +80,15 @@ def test_a_steady_job_is_not_reported():
 
 
 def test_ordinary_run_to_run_noise_does_not_fire():
-    """One slow run among steady ones is the runner, not a regression.
+    """Judged on a job whose bar is the shared default. swift-unit has its own
+    MEASURED spread now, and a reading inside that is a different verdict
+    (INSIDE_THE_NOISE) rather than a steady one (#1329).
+
+    One slow run among steady ones is the runner, not a regression.
 
     This is the case that decides whether anyone keeps reading the warnings.
     """
-    verdict = drift_of("swift-unit", _series([470, 476, 480, 478],
+    verdict = drift_of("python", _series([470, 476, 480, 478],
                                              [475, 610, 477, 479]))
 
     assert verdict.state is Drift.STEADY, (
@@ -96,7 +102,7 @@ def test_a_job_that_got_faster_is_named_as_that():
     for the two issues it exists to serve, which are both changes whose whole
     purpose is to move this number (L11).
     """
-    verdict = drift_of("swift-unit", _series([520, 530, 525, 528],
+    verdict = drift_of("python", _series([520, 530, 525, 528],
                                              [410, 405, 415, 408]),
                        work=[2600] * 8)
 
@@ -771,3 +777,73 @@ def test_a_log_that_could_not_be_read_adds_no_run_to_the_flake_window():
     assert counts == {"swift-unit": [None]}
     assert failures == {}, (
         "a run nobody could read was counted as a run in which nothing failed")
+
+
+# --- judged against the runner's OWN measured noise (#1329) ------------------
+
+
+def test_a_job_with_a_measured_spread_is_judged_against_it():
+    """The 8% default was derived from two week-long shifts, which is a way of
+    picking a bar rather than a measurement of what the runner does."""
+    floor = check_job_durations.noise_floor("swift-unit")
+
+    assert floor is not None, "swift-unit's measured spread is not being read"
+    percent, where = floor
+    assert percent > MATERIAL_SHIFT, (
+        "the measured spread is inside the shared default, so reading it "
+        "changes nothing and this wiring is decoration")
+    assert "swift_suite_cost.json" in where
+
+
+def test_a_job_with_no_measured_spread_keeps_the_shared_default():
+    """A job with nothing recorded is not exempt, it falls back (L96)."""
+    assert check_job_durations.noise_floor("python") is None
+
+
+def test_the_reading_that_prompted_this_now_reads_as_noise():
+    """`swift-unit: faster, -11%` was reported on 2026-09-04, the same day two
+    runs of identical code came out 30.5% apart."""
+    verdict = drift_of("swift-unit", [182.0] * 3 + [203.0] * 3, work=[1] * 6)
+
+    assert verdict.state is Drift.INSIDE_THE_NOISE, verdict.message
+    assert "30%" in verdict.message, verdict.message
+    assert "nothing can be said about it either way" in verdict.message, (
+        "the verdict reads as a finding rather than as a refusal to make one")
+    assert "swift_suite_cost.json" in verdict.message, (
+        "the verdict does not say where its bar came from, so a reader cannot "
+        "check it (L316)")
+
+
+def test_the_same_reading_on_a_job_with_no_floor_still_fires():
+    """A control: without the measured floor this shift IS material, so the
+    test above is about the floor rather than about the numbers (L159)."""
+    verdict = drift_of("python", [182.0] * 3 + [203.0] * 3, work=[1] * 6)
+
+    assert verdict.state is Drift.FASTER, verdict.message
+    assert "8% bar" in verdict.message, verdict.message
+
+
+def test_a_shift_past_the_measured_floor_still_fires():
+    """Raising the bar must not switch the detector off."""
+    verdict = drift_of("swift-unit", [100.0] * 3 + [300.0] * 3, work=[1] * 6)
+
+    assert verdict.state is Drift.FASTER, verdict.message
+    assert "past the 30% bar" in verdict.message, verdict.message
+
+
+def test_an_unreadable_record_falls_back_rather_than_to_zero(tmp_path):
+    """A floor of zero would make every reading material, which is the opposite
+    of what a missing measurement should do (L42, L215)."""
+    (tmp_path / "tests" / "fixtures").mkdir(parents=True)
+    (tmp_path / "tests" / "fixtures" / "swift_suite_cost.json").write_text("{}")
+
+    assert check_job_durations.noise_floor("swift-unit", root=tmp_path) is None
+
+
+def test_a_record_naming_a_zero_spread_is_refused(tmp_path):
+    """Zero is not a reading off a real runner, it is an empty record."""
+    (tmp_path / "tests" / "fixtures").mkdir(parents=True)
+    (tmp_path / "tests" / "fixtures" / "swift_suite_cost.json").write_text(
+        '{"run_to_run_spread": {"spread_percent_at_least": 0}}')
+
+    assert check_job_durations.noise_floor("swift-unit", root=tmp_path) is None

@@ -3,37 +3,44 @@
     {
       "entry": "the shared app build (#1096)",
       "seconds": 83.65,
-      "shard": "1/7"
+      "shard": "1/7",
+      "runs": 1
     },
     {
       "entry": "the shared app build (#1096)",
       "seconds": 102.01,
-      "shard": "2/7"
+      "shard": "2/7",
+      "runs": 1
     },
     {
       "entry": "the shared app build (#1096)",
       "seconds": 89.15,
-      "shard": "3/7"
+      "shard": "3/7",
+      "runs": 1
     },
     {
       "entry": "the shared app build (#1096)",
       "seconds": 138.08,
-      "shard": "4/7"
+      "shard": "4/7",
+      "runs": 1
     },
     {
       "entry": "the shared app build (#1096)",
       "seconds": 100.31,
-      "shard": "5/7"
+      "shard": "5/7",
+      "runs": 1
     },
     {
       "entry": "the shared app build (#1096)",
       "seconds": 104.26,
-      "shard": "6/7"
+      "shard": "6/7",
+      "runs": 1
     },
     {
       "entry": "the shared app build (#1096)",
       "seconds": 160.92,
-      "shard": "7/7"
+      "shard": "7/7",
+      "runs": 1
     }
   ],
   "kinds": {
@@ -3872,5 +3879,7 @@
     "watching-checkout-readings-twice-leaves-one-subscription": 22.06,
     "web-performer-failure-is-not-an-empty-page": 26.54,
     "wordmark-required-cover": 0.99
-  }
+  },
+  "_sample": "Every figure here comes from ONE sweep, run 33870420536, so runs is 1. The shard field on each cold entry says which shard it ran on, not how many times it was measured (#1328).",
+  "runs": 1
 }

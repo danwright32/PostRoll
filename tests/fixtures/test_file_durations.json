@@ -116,6 +116,7 @@
     "test_failure_needles_have_producers.py": 0.0,
     "test_fast_subset_stays_honest.py": 0.18999999999999997,
     "test_ffmpeg_prerequisite.py": 0.07999999999999999,
+    "test_figures_say_their_sample.py": 0.05,
     "test_font_loading.py": 0.0,
     "test_frame_legibility.py": 114.83999999999999,
     "test_frame_names_its_show.py": 18.85,
@@ -738,6 +739,10 @@
     "test_ffmpeg_prerequisite.py": {
       "run": "full-2026-09-04T03:02Z",
       "scale": 1.0
+    },
+    "test_figures_say_their_sample.py": {
+      "run": "partial-2026-09-04T15:22Z",
+      "scale": 0.889
     },
     "test_font_loading.py": {
       "run": "full-2026-09-04T03:02Z",
@@ -1367,5 +1372,7 @@
       "run": "full-2026-09-04T03:02Z",
       "scale": 1.0
     }
-  }
+  },
+  "passes": 3,
+  "_sample": "Each duration is the MEDIAN of 3 measured passes, which is what --add takes (ADD_PASSES). Recorded so a reader can tell it from a single reading, because a figure whose sample size is not stated gets read as whichever the reader assumes (#1328)."
 }

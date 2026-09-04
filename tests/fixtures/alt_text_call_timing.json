@@ -6,21 +6,25 @@
       "seconds": 3.1,
       "photo_bytes": 2080017,
       "answered": true,
-      "words": 23
+      "words": 23,
+      "runs": 1
     },
     {
       "measured_on": "2026-09-01",
       "seconds": 3.1,
       "photo_bytes": 1495211,
       "answered": true,
-      "words": 19
+      "words": 19,
+      "runs": 1
     },
     {
       "measured_on": "2026-09-01",
       "seconds": 2.8,
       "photo_bytes": 3647303,
       "answered": true,
-      "words": 25
+      "words": 25,
+      "runs": 1
     }
-  ]
+  ],
+  "_sample": "Each reading is one call, so runs is 1 on every one of them. The three are three different photographs rather than three readings of one, so their count is not a sample size (#1328)."
 }
