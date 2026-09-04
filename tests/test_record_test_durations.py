@@ -48,10 +48,12 @@ from pathlib import Path
 import pytest
 
 from tools.record_test_durations import (
+    ADD_PASSES,
     OWN_GUARD_CLASSNAME,
     blocking_failures,
     failed_cases,
     measure,
+    measure_repeatedly,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -607,3 +609,133 @@ def test_the_exemption_names_every_guard_that_reads_the_record():
             f"{name} is exempted from the refusal and no such test file "
             f"exists, so the exemption covers nothing and a real failure in a "
             f"file of that name would be recorded past")
+
+# --- #976: one reading under an unknown load decided the whole boundary -------
+
+def test_the_median_of_three_passes_is_what_lands():
+    """The fix #976 asked for.
+
+    A single reading is what the expensive/ordinary boundary rested on, and it
+    moves: two consecutive full re-timings on this Mac with the same tests came
+    out at 1071s and 1737s, a 62% swing. The middle pass here is a burst of
+    load, and the median has to ignore it rather than average it in."""
+    passes = iter([
+        {"a.py": 10.0, "b.py": 20.0},
+        {"a.py": 90.0, "b.py": 180.0},   # the machine was busy
+        {"a.py": 11.0, "b.py": 21.0},
+    ])
+
+    got = measure_repeatedly(["a.py", "b.py"], passes=3,
+                             run=lambda paths: next(passes))
+
+    assert got == {"a.py": 11.0, "b.py": 21.0}
+
+
+def test_the_median_is_taken_per_file_rather_than_per_pass():
+    """A pass is not a unit anybody cares about; a file's cost is. Taking the
+    best PASS would let one file having a bad moment drag every other reading
+    in it (L296)."""
+    passes = iter([
+        {"a.py": 10.0, "b.py": 99.0},
+        {"a.py": 99.0, "b.py": 20.0},
+        {"a.py": 11.0, "b.py": 21.0},
+    ])
+
+    got = measure_repeatedly(["a.py", "b.py"], passes=3,
+                             run=lambda paths: next(passes))
+
+    assert got == {"a.py": 11.0, "b.py": 21.0}, (
+        "one file's bad pass moved another file's reading")
+
+
+def test_a_file_missing_from_a_pass_refuses_rather_than_averaging_the_rest():
+    """A test that ran twice out of three times measured something other than
+    its cost, and a quiet median over the two it managed would read as a clean
+    number (L11, L98)."""
+    passes = iter([
+        {"a.py": 10.0, "b.py": 20.0},
+        {"a.py": 11.0},
+        {"a.py": 12.0, "b.py": 21.0},
+    ])
+
+    with pytest.raises(SystemExit) as refusal:
+        measure_repeatedly(["a.py", "b.py"], passes=3,
+                           run=lambda paths: next(passes))
+
+    assert "b.py" in str(refusal.value)
+    assert "all 3 passes" in str(refusal.value)
+
+
+def test_a_run_that_measured_nothing_at_all_refuses():
+    """The other emptiness. Distinct from the one above, because a run that
+    reported NOTHING and one that reported some files are different failures
+    and a shared message would answer for both (L11)."""
+    with pytest.raises(SystemExit) as refusal:
+        measure_repeatedly(["a.py"], passes=2, run=lambda paths: {})
+
+    assert "nothing to take a median of" in str(refusal.value)
+
+
+def test_zero_passes_refuses():
+    with pytest.raises(SystemExit):
+        measure_repeatedly(["a.py"], passes=0, run=lambda paths: {"a.py": 1.0})
+
+
+def test_the_pass_count_is_odd_so_a_median_is_a_reading():
+    """An even count makes the median the average of the two middle readings,
+    which is the mean this was adopted to get away from."""
+    assert ADD_PASSES % 2 == 1, (
+        f"{ADD_PASSES} passes makes the median an average of two readings")
+    assert ADD_PASSES >= 3, (
+        f"{ADD_PASSES} passes cannot survive one of them landing under a burst "
+        f"of load, which is the whole reason for repeating")
+
+
+def test_every_pass_measures_the_same_files():
+    """A pass measuring a different set would make the medians be over
+    different populations, which is the shape L220 is about."""
+    asked: list[list[str]] = []
+
+    def record_the_ask(paths):
+        asked.append(list(paths))
+        return {name: 1.0 for name in paths}
+
+    measure_repeatedly(["a.py", "b.py"], passes=3, run=record_the_ask)
+
+    assert asked == [["a.py", "b.py"]] * 3
+
+def test_adding_a_file_actually_goes_through_the_repeated_measurement(monkeypatch,
+                                                                     tmp_path):
+    """Built is not wired (L3).
+
+    Every check above drives `measure_repeatedly` directly. This is the one that
+    says `--add` calls it, because a median nothing reaches is a median that
+    changes nothing, and the single reading would go on deciding the boundary
+    while these tests all passed."""
+    import json
+
+    import tools.record_test_durations as recorder
+
+    record = tmp_path / "durations.json"
+    record.write_text(json.dumps({
+        # The record is keyed by BASENAME while REFERENCE_FILES are paths,
+        # which is what the tool itself reconciles.
+        "seconds": {Path(name).name: 10.0 for name in recorder.REFERENCE_FILES},
+        "measured": {Path(name).name: {"run": "full-2026-01-01T00:00Z"}
+                     for name in recorder.REFERENCE_FILES},
+    }), encoding="utf-8")
+    monkeypatch.setattr(recorder, "RECORD", record)
+
+    passes: list[int] = []
+
+    def counted(paths):
+        passes.append(len(paths))
+        return {Path(p).name: 10.0 for p in paths}
+
+    monkeypatch.setattr(recorder, "measure", counted)
+    recorder._add(["tests/test_brand_new_thing.py"])
+
+    assert len(passes) == recorder.ADD_PASSES, (
+        f"--add measured {len(passes)} time(s), so the median is over one "
+        f"reading and the single sample still decides the boundary")
+    assert json.loads(record.read_text())["seconds"]["test_brand_new_thing.py"]
