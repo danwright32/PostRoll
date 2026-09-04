@@ -34,7 +34,8 @@ from pathlib import Path
 
 import pytest
 
-from tests.test_bridge_payload_contract import CONTRACT_PATH, PAYLOADS, emitted_keys
+from tests.test_bridge_payload_contract import (
+    CONTRACT_PATH, PAYLOADS, emitted_keys, keys_per_producer)
 
 CONTRACT = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
 
@@ -148,6 +149,69 @@ def test_every_exception_says_why(group):
             f"{group}: {key!r} is excused from the comparison with no reason "
             f"given, so nobody can tell a considered difference from an "
             f"oversight")
+
+
+# ── several producers of ONE entry are parts, not rivals ─────────────────────
+
+
+def multi_producer_payloads() -> list[str]:
+    return sorted(name for name, spec in PAYLOADS.items()
+                  if len(spec.get("python") or []) > 1)
+
+
+def test_the_sweep_finds_the_entries_with_more_than_one_producer():
+    """The positive control. A sweep matching nothing reports every entry as
+    consistent, which is what the union already did (L98, L100)."""
+    assert multi_producer_payloads(), (
+        "no payload entry names more than one producer, so the check below "
+        "passes over an empty set")
+
+
+@pytest.mark.parametrize("name", multi_producer_payloads())
+def test_the_producers_of_one_entry_write_disjoint_parts(name):
+    """`emitted_keys` UNIONS an entry's producers, and that is only the right
+    question while they are contributing different PARTS of one object.
+
+    Measured 2026-09-04, all three such entries are exactly that, with zero
+    keys in common: `generate_week` writes the days and `_write_results` adds
+    `complete` and its neighbours; `_snapshot` and `_write`; `generate_media`
+    and `_render_cover`. So the union is correct for them and there is nothing
+    to fix.
+
+    What the union would HIDE is two producers each building the whole shape,
+    where a key only one of them writes still satisfies the entry. That is the
+    #1023 defect, and an overlap is its signature: parts do not share keys,
+    rivals do. So this is the guard on the assumption the union rests on,
+    rather than a check on the three entries as they are today.
+
+    If this ever goes red the answer is not to widen it. Either the two are
+    genuinely rivals, in which case they belong in a sibling group above where
+    they are compared key by key, or one of them is writing a key that is not
+    its part.
+    """
+    per_producer = keys_per_producer(PAYLOADS[name])
+
+    shared = set.intersection(*per_producer.values())
+
+    assert not shared, (
+        f"{name} is written by {sorted(per_producer)}, and they both write "
+        f"{sorted(shared)}. Producers listed under one entry are meant to be "
+        f"contributing different PARTS of one object, which is what makes "
+        f"unioning them the right question. Two producers writing the same key "
+        f"are rivals building the same shape, and the union then hides a key "
+        f"only one of them writes (#1023).")
+
+
+def test_two_rival_producers_would_be_caught():
+    """The control, driven with a shape it invents, because all three real
+    entries are disjoint and a check only ever run on clean input has never
+    been seen to fail (L1)."""
+    rivals = {"generate": {"caption", "alt_texts", "hashtags"},
+              "revise": {"caption", "alt_texts"}}
+
+    assert set.intersection(*rivals.values()) == {"caption", "alt_texts"}, (
+        "two producers building the same shape share keys, which is the "
+        "signature this check keys on")
 
 
 # ── the check can actually fail ──────────────────────────────────────────────

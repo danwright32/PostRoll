@@ -50,14 +50,23 @@ def _resolve_dynamic(spec: dict) -> DynamicKey:
     return DynamicKey(values=values)
 
 
-def emitted_keys(payload: dict) -> set[str]:
-    keys: set[str] = set()
+def keys_per_producer(payload: dict) -> dict[str, set[str]]:
+    """What EACH producer of this payload writes, kept apart.
+
+    `emitted_keys` below unions these, which is the right question for "does
+    the contract declare everything Python writes" and the wrong one for "do
+    the producers agree": a key only one of them writes satisfies the union,
+    so two producers of one entry could disagree with nothing reporting it
+    (#1023, #1353). tests/test_sibling_payloads_agree.py asks the other
+    question from here.
+    """
+    per: dict[str, set[str]] = {}
     for source in payload["python"]:
         dynamic = {
             name: _resolve_dynamic(spec)
             for name, spec in (source.get("dynamic") or {}).items()
         }
-        keys |= payload_keys_from_file(
+        per[source["function"]] = payload_keys_from_file(
             source["module"],
             function=source["function"],
             variable=source.get("variable"),
@@ -66,7 +75,13 @@ def emitted_keys(payload: dict) -> set[str]:
             # that matter are the entry's, not a wrapper's.
             element=source.get("element", False),
         )
-    return keys
+    return per
+
+
+def emitted_keys(payload: dict) -> set[str]:
+    """Everything Python writes for this payload, however many producers."""
+    per = keys_per_producer(payload)
+    return set().union(*per.values()) if per else set()
 
 
 def test_the_contract_file_is_where_both_suites_look_for_it():
