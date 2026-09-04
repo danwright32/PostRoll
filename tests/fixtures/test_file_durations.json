@@ -255,6 +255,7 @@
     "test_the_pr_guard_job_has_a_deadline.py": 0.0,
     "test_the_suite_spreads_its_slowest_work.py": 0.0,
     "test_the_test_target_stays_self_contained.py": 0.12,
+    "test_the_two_sweep_windows_are_one_rule.py": 0.0,
     "test_thursday_reel_legibility.py": 126.39000000000001,
     "test_toolchain_matches_ci.py": 0.14,
     "test_top_anchored_crop.py": 0.01,
@@ -1297,6 +1298,10 @@
     "test_the_test_target_stays_self_contained.py": {
       "run": "full-2026-09-04T03:02Z",
       "scale": 1.0
+    },
+    "test_the_two_sweep_windows_are_one_rule.py": {
+      "run": "partial-2026-09-04T20:36Z",
+      "scale": 1.042
     },
     "test_thursday_reel_legibility.py": {
       "run": "full-2026-09-04T03:02Z",
