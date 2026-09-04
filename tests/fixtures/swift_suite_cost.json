@@ -108,7 +108,7 @@
   }
  },
  "run_to_run_spread": {
-  "what": "How much the SAME code varies between two runs on the runner, which is the number that decides whether any before and after comparison here means anything (L224). Without it a difference gets read as a result.",
+  "what": "How much the SAME code varies between two runs on the runner. It is the bar any before and after comparison here has to clear (L224), and it is a FLOOR rather than a characterisation: two runs prove the spread is at least this wide, never that it is only this wide.",
   "machine": "GitHub macos-26 runner",
   "cores": 3,
   "measured_on": "2026-09-04",
@@ -116,26 +116,30 @@
    183.4,
    157.5
   ],
-  "spread_seconds": 25.9,
-  "spread_percent": 16.5,
   "measured_from": "two workflow_dispatch runs of swift.yml on the same commit of main, 33880346541 and 33880353129, each read off xcodebuild's own IDETestOperationsObserverDebug elapsed line",
   "what_it_means": [
-   "A wall clock difference smaller than about 26 seconds between two",
-   "single runs on this runner is not evidence of anything. #1257 was",
-   "reported as a 10.8% improvement (188.99s against 168.67s, a 20.3s",
-   "gap) on one run per arm, and that gap is INSIDE this spread, so the",
-   "claim was not supported and has been withdrawn.",
+   "Two runs of identical code differed by 25.9 seconds, 16.5%. That is a",
+   "FLOOR on the noise, not a measurement of it: the true spread could be",
+   "wider, and nothing here says it is not.",
    "",
-   "What still stands for #1257 is the structural bound rather than the",
-   "wall clock: the heaviest class went from 55.2s to under 30s, which is",
-   "arithmetic over the per class sums and not a timing comparison, and",
-   "at 12 workers the heaviest class IS the floor.",
+   "It is enough to disqualify a claim, which is the direction it is used in.",
+   "#1257 was reported as a 10.8% improvement (188.99s against 168.67s, a",
+   "20.3s gap) off one run per arm, and a gap smaller than an observed",
+   "same-code difference cannot be told from noise. That claim is withdrawn.",
    "",
-   "To claim a wall clock improvement here, take several runs per arm and",
-   "compare the medians against this spread, the way",
-   "tools/record_test_durations.py takes three readings for the same",
-   "reason (#976)."
+   "It is NOT enough to support a claim. To say an improvement is real, take",
+   "several runs per arm and compare the medians, the way",
+   "tools/record_test_durations.py takes three readings for the same reason",
+   "(#976). Two runs cannot do that and this record does not pretend to.",
+   "",
+   "What still stands for #1257 is the structural bound rather than the wall",
+   "clock: the heaviest class went from 55.2s to under 30s, which is",
+   "arithmetic over the per class sums and not a timing comparison, and at 12",
+   "workers the heaviest class IS the floor."
   ],
-  "re_measure_with": "gh workflow run swift.yml --ref main, twice, then read the elapsed line from each: gh run view <id> --log --job <swift-unit id> | grep -oE 'IDETestOperationsObserverDebug: [0-9.]+ elapsed'"
+  "re_measure_with": "gh workflow run swift.yml --ref main, twice, then read the elapsed line from each: gh run view <id> --log --job <swift-unit id> | grep -oE 'IDETestOperationsObserverDebug: [0-9.]+ elapsed'",
+  "spread_seconds_at_least": 25.9,
+  "spread_percent_at_least": 16.5,
+  "runs": 2
  }
 }

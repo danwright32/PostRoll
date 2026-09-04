@@ -347,7 +347,8 @@ def test_the_run_to_run_spread_is_recorded():
         "no run to run spread is recorded, so any wall clock difference "
         "measured on this runner can be read as a result when it is noise")
     for field in ("machine", "cores", "measured_on", "wall_seconds",
-                  "spread_seconds", "measured_from", "re_measure_with"):
+                  "spread_seconds_at_least", "runs", "measured_from",
+                  "re_measure_with"):
         assert field in spread, (
             f"the spread does not record {field}, so it cannot be checked or "
             f"taken again and it is a dated sentence rather than a measurement "
@@ -362,7 +363,7 @@ def test_the_spread_is_taken_from_more_than_one_run():
     assert len(spread["wall_seconds"]) >= 2, (
         "the spread is built from fewer than two runs, so there is nothing for "
         "it to be a spread between")
-    assert spread["spread_seconds"] > 0, (
+    assert spread["spread_seconds_at_least"] > 0, (
         "the spread is zero, which is not a reading off a real runner")
 
 
@@ -372,8 +373,9 @@ def test_the_spread_matches_the_readings_it_was_taken_from():
     spread = _record()["run_to_run_spread"]
     readings = spread["wall_seconds"]
 
-    assert abs((max(readings) - min(readings)) - spread["spread_seconds"]) < 0.5, (
-        f"the recorded spread {spread['spread_seconds']} is not the difference "
+    assert abs((max(readings) - min(readings)) - spread["spread_seconds_at_least"]) < 0.5, (
+        f"the recorded spread {spread['spread_seconds_at_least']} is not the "
+        f"difference "
         f"between {max(readings)} and {min(readings)}")
 
 
@@ -383,7 +385,11 @@ def test_the_spread_says_what_it_means_for_a_comparison():
     (L316, L244)."""
     said = " ".join(_record()["run_to_run_spread"]["what_it_means"])
 
-    assert "not evidence" in said or "not supported" in said, (
+    assert "FLOOR" in said or "floor" in said, (
+        "the spread does not say it is a floor rather than a characterisation, "
+        "so two runs get read as having measured the noise when they only "
+        "proved it is at least this wide")
+    assert "not evidence" in said or "cannot be told from noise" in said, (
         "the spread does not say what it disqualifies, so the next person "
         "reads it as background rather than as a bar their comparison has to "
         "clear")
