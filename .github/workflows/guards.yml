@@ -291,7 +291,14 @@ jobs:
       issues: write
     outputs:
       due: ${{ steps.ask.outputs.due }}
+      # The shards to START, as JSON, which the matrix below reads through
+      # `fromJson`. Never an empty list: GitHub treats a matrix vector with no
+      # values as a workflow ERROR rather than a skipped job, so when nothing
+      # is due this names every shard and the `if:` does the skipping (#1344).
       shards: ${{ steps.ask.outputs.shards }}
+      # How many ways the sweep is split, so the denominator handed to
+      # check_guards comes from the same place the matrix does.
+      count: ${{ steps.ask.outputs.count }}
     steps:
       - uses: actions/checkout@v5
 
@@ -300,15 +307,17 @@ jobs:
         with:
           python-version: "3.11"
 
-      # `--shards 7` rather than seven calls: ONE read of the run history
+      # `--shards` rather than seven calls: ONE read of the run history
       # answers for every shard, and seven reads to answer one question is the
-      # cost this job exists to remove. The 7 is the matrix width below, held to
-      # it by tests/test_guard_sweep_fits_its_deadline.py.
+      # cost this job exists to remove. `--shards` takes no number: the width
+      # is SHARD_COUNT in check_guard_sweep_due.py, which is also where the
+      # matrix below and the denominator handed to check_guards come from, so
+      # there is one number rather than several kept in step by hand (L41).
       - name: Ask whether any shard has something to prove
         id: ask
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python tools/check_guard_sweep_due.py --shards 7
+        run: python tools/check_guard_sweep_due.py --shards
 
       # The three steps below moved here from the foot of `full` (#1259).
       #
@@ -462,7 +471,15 @@ jobs:
         # shard to about 69%. Do not widen the share instead: a shard that runs
         # out of time reports its remaining entries as UNPROVEN while the
         # workflow still goes green (L98, L315).
-        shard: [1, 2, 3, 4, 5, 6, 7]
+        #
+        # The width is SHARD_COUNT in tools/check_guard_sweep_due.py since
+        # #1344, not a literal here. What this expands to is the shards that
+        # actually have something to prove, so a run where one shard was left
+        # unproved by its own deadline starts ONE Mac rather than seven, and
+        # the six that would each burn a billed minute finding nothing to do
+        # are not started (#1344, L46: the gate computed this list and nothing
+        # read it).
+        shard: ${{ fromJson(needs.due.outputs.shards) }}
     # Enough to file the one issue this job opens when it goes red (#1011).
     #
     # At JOB level rather than on the step, because a step's own `permissions:`
@@ -531,7 +548,9 @@ jobs:
         # runner, as 14.4s averaged over 469 entries, which hides a spread of
         # 90x (#1245).
         run: |
-          python tools/check_guards.py --shard ${{ matrix.shard }}/7 --deadline-seconds 1800 \
+          python tools/check_guards.py \
+            --shard ${{ matrix.shard }}/${{ needs.due.outputs.count }} \
+            --deadline-seconds 1800 \
             --timings guard-timings-${{ matrix.shard }}.json
 
       # Uploaded rather than committed, because a scheduled job pushing to main

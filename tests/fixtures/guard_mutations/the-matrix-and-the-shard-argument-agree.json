@@ -1,8 +1,8 @@
 {
   "name": "the-matrix-and-the-shard-argument-agree",
-  "file": ".github/workflows/guards.yml",
-  "find": "--shard ${{ matrix.shard }}/7 --deadline-seconds 1800",
-  "replace": "--shard ${{ matrix.shard }}/4 --deadline-seconds 1800",
-  "test": "tests/test_guard_sweep_fits_its_deadline.py::test_the_matrix_and_the_command_split_the_sweep_the_same_way",
-  "breaks": "the sweep runs seven shards while check_guards is told there are four, so three shards re-prove entries nearly half the registry never reaches, and every shard still reports success (#989, L41, L98)"
+  "file": "tools/check_guard_sweep_due.py",
+  "find": "            fh.write(f\"count={args.shards}\\n\")",
+  "replace": "            fh.write(\"count=4\\n\")",
+  "test": "tests/test_the_sweep_runs_only_the_due_shards.py::test_the_count_it_reports_is_the_width_it_was_asked_about",
+  "breaks": "the width the shards are told to split by stops being the width the sweep was asked about, so the matrix divides the registry one way and check_guards divides it another: entries proved twice, entries proved by nobody, and every shard still green (#989, #1344, L41, L98)"
 }

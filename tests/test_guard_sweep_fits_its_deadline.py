@@ -40,6 +40,10 @@ from pathlib import Path
 
 from tools import guard_entry_costs
 
+from tools.check_guard_sweep_due import SHARD_COUNT
+
+from source_text import without_prose
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TIMING = REPO_ROOT / "tests" / "fixtures" / "guard_sweep_timing.json"
 REGISTRY = REPO_ROOT / "tests" / "fixtures" / "guard_mutations"
@@ -75,13 +79,17 @@ def entries_now() -> int:
 
 
 def shards_now() -> int:
-    """How many shards the workflow actually runs, read from the matrix."""
-    text = WORKFLOW.read_text(encoding="utf-8")
-    match = re.search(r"^\s*shard: \[([0-9, ]+)\]\s*$", text, re.M)
-    assert match, (
-        "guards.yml declares no `shard: [...]` matrix any more, so this cannot "
-        "say how many ways the sweep is split")
-    return len([piece for piece in match.group(1).split(",") if piece.strip()])
+    """How many shards the workflow actually runs.
+
+    Read from SHARD_COUNT rather than from a matrix literal. #1344 made the
+    matrix the shards that actually have work, expanded from the gate's answer,
+    so there is no list in the workflow to count any more and the width lives
+    in one place instead (L41).
+    """
+    assert isinstance(SHARD_COUNT, int) and SHARD_COUNT >= 1, (
+        f"SHARD_COUNT is {SHARD_COUNT!r}, so this cannot say how many ways the "
+        f"sweep is split and the projection below is about nothing")
+    return SHARD_COUNT
 
 
 def seconds_per_entry() -> float:
@@ -208,16 +216,29 @@ def test_the_projection_would_notice_the_registry_growing():
 # ── the two places the shard count is written agree ──────────────────────────
 
 def test_the_matrix_and_the_command_split_the_sweep_the_same_way():
-    """The count is in the matrix and again in `--shard N/M`. They are two
-    copies of one number and a guard proves them equal rather than trusting
-    them (L41): split six ways while told it is four, two shards would prove
-    the same entries twice and a third of the registry would go unproven with
-    every shard green."""
-    text = WORKFLOW.read_text(encoding="utf-8")
-    told = re.search(r"--shard \$\{\{ matrix\.shard \}\}/(\d+)", text)
+    """The width is one number now, and this is what keeps it that way.
 
-    assert told, "guards.yml no longer passes --shard N/M, so nothing splits"
-    assert int(told.group(1)) == shards_now(), (
-        f"the matrix runs {shards_now()} shards and check_guards is told there "
-        f"are {told.group(1)}. Entries would be proved twice or not at all, and "
-        "every shard would still report success")
+    It used to be two: a literal matrix and a literal `/M` beside it, proved
+    equal by comparing them. #1344 removed the pair, so comparing them is no
+    longer possible and would not mean anything if it were. What can still go
+    wrong is the denominator being pinned to a number of its own again while
+    the matrix comes from the gate, so that is what this refuses: split six
+    ways while told it is four, two shards prove the same entries twice and a
+    third of the registry goes unproven with every shard green (L41).
+
+    The other half, that the gate's `count` really is the width it asked
+    about, is a behaviour test in
+    tests/test_the_sweep_runs_only_the_due_shards.py: it cannot be seen from
+    the workflow text at all.
+    """
+    # Through without_prose: the comments in guards.yml name every
+    # construct below, and a guard reading raw text is answered by the
+    # prose about a rule as readily as by the rule (L103, L135).
+    text = without_prose(WORKFLOW)
+
+    assert not re.search(r"--shard \$\{\{ matrix\.shard \}\}/\d", text), (
+        "check_guards is told a literal number of shards again, so it can "
+        "disagree with the matrix the gate expands")
+    assert "--shard ${{ matrix.shard }}/${{ needs.due.outputs.count }}" in text, (
+        "the denominator does not come from the gate that also builds the "
+        "matrix, so the two are separate readings of the width again")
