@@ -103,7 +103,6 @@ _SLICE_NOTE = (
     "and quality criteria above applied within it.\n\n"
 )
 
-_COUNT_ASKED = re.compile(r"to include in a scroll reel", re.IGNORECASE)
 
 
 def _count_asked_for(prompt: str) -> int:

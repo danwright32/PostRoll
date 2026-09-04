@@ -3,6 +3,6 @@
   "file": "postroll/media/generate_reel_morph.py",
   "find": "FPS = 30",
   "replace": "RAW_DESATURATION = 0.0\nFPS = 30",
-  "test": "tests/test_no_dead_tuning_controls.py::test_the_reel_generator_declares_nothing_it_never_reads[generate_reel_morph]",
-  "breaks": "a tuning constant nothing reads lands in a reel generator (L46)"
+  "test": "tests/test_no_dead_tuning_controls.py::test_the_module_declares_nothing_it_never_reads[generate_reel_morph]",
+  "breaks": "a constant nothing reads lands in a module and nothing says so. A tuning control that changes nothing is worse than no control at all, because the person setting it has no way to tell (L46, L29). The subject widened from the renderers to the whole package in #1105"
 }

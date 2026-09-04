@@ -96,7 +96,6 @@ from ..posting_preset import (
     day_format,
 )
 
-ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 
 # One owner for the mark and for what a missing one means (#334). These used to
 # be declared here and again in generate_cover, and every call site below made
@@ -179,11 +178,6 @@ def event_folder_name(*, org: str, venue: str, event: str, date: str) -> str:
 
 
 from ..media.ffmpeg_check import ffmpeg_status, ffmpeg_version_line  # noqa: E402
-
-
-def _has_ffmpeg() -> bool:
-    """Return True if the whole ffmpeg toolchain (ffmpeg AND ffprobe) is on PATH."""
-    return ffmpeg_status().available
 
 
 # Thursday's audio tag derivation lives in postroll.ai.audio_tags so the

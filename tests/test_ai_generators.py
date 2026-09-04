@@ -740,3 +740,61 @@ def test_thursday_produces_no_story_when_the_reel_is_skipped(tmp_path, monkeypat
     # And no reel either, since the reel is what was skipped. The day is
     # honestly incomplete rather than padded with a substitute.
     assert "reel" not in thursday, thursday
+
+
+# ── the two post-type sets cannot come to contradict each other (#1105) ──────
+
+def test_no_post_type_is_both_single_subject_and_event_level():
+    """`SINGLE_SUBJECT_POST_TYPES` was read by nothing at all.
+
+    `_scope_rule_for` tests only `EVENT_LEVEL_POST_TYPES` and gives everything
+    else the single-subject rule, so the single-subject list describes the
+    complement rather than deciding it. That is a rule's DATA sitting beside
+    logic that does not consult it, which is how the two come to disagree with
+    nobody noticing (L370, L46, L507).
+
+    Deleting it would take a real product decision with it, which posts are
+    about ONE moment. So it is made load-bearing instead.
+    """
+    from postroll.ai.generate_captions import (
+        EVENT_LEVEL_POST_TYPES, SINGLE_SUBJECT_POST_TYPES)
+
+    both = sorted(SINGLE_SUBJECT_POST_TYPES & EVENT_LEVEL_POST_TYPES)
+
+    assert not both, (
+        f"{both} are listed as posts about one moment AND as posts about the "
+        f"whole event, so the module says two opposite things about them and "
+        f"only one of them is what `_scope_rule_for` does")
+
+
+def test_every_post_type_the_prompt_frames_is_in_one_of_the_two_sets():
+    """The half that catches a NEW post type.
+
+    A type in neither set silently takes the single-subject rule, because that
+    is the default arm. A remainder records no members and can never be
+    enumerated (L507), so the sets are held to covering everything
+    `POST_TYPE_FRAMING` knows how to frame: adding a type there now forces the
+    scope decision to be made rather than defaulted.
+    """
+    from postroll.ai.generate_captions import (
+        EVENT_LEVEL_POST_TYPES, POST_TYPE_FRAMING, SINGLE_SUBJECT_POST_TYPES)
+
+    assert POST_TYPE_FRAMING, "nothing to check against"
+    unplaced = sorted(set(POST_TYPE_FRAMING)
+                      - SINGLE_SUBJECT_POST_TYPES - EVENT_LEVEL_POST_TYPES)
+
+    assert not unplaced, (
+        f"{unplaced} have framing but sit in neither scope set, so each one "
+        f"takes the single-subject rule by falling through the default rather "
+        f"than because anybody chose it for them")
+
+
+def test_the_scope_rule_really_follows_those_sets():
+    """The positive control (L159). Disjointness and coverage are both
+    satisfied by sets nothing consults, which is the state this started in."""
+    from postroll.ai import generate_captions as gc
+
+    for post_type in sorted(gc.EVENT_LEVEL_POST_TYPES):
+        assert gc._scope_rule_for(post_type) == gc.SCOPE_RULE_EVENT_LEVEL, post_type
+    for post_type in sorted(gc.SINGLE_SUBJECT_POST_TYPES):
+        assert gc._scope_rule_for(post_type) == gc.SCOPE_RULE_SINGLE_SUBJECT, post_type
