@@ -40,9 +40,10 @@ GUARDS = REPO_ROOT / ".github" / "workflows" / "guards.yml"
 
 #: Asking for the WHOLE sweep, before any Mac is taken. `--shards`, plural.
 DUE_TOOL = "check_guard_sweep_due.py --shards"
-#: Asking for ONE shard, inside it. Singular, and deliberately still there: it
-#: is what keeps a shard that was already proved from redoing its share when a
-#: neighbour is the reason the sweep ran.
+#: Asking for ONE shard, inside it. Singular, and gone since #1348: the matrix
+#: expands to the due shards only, so a shard that starts has already been
+#: decided about and asking again reads the same history to reach the same
+#: answer.
 PER_SHARD_TOOL = "check_guard_sweep_due.py --shard "
 #: The step that costs the money, identified by the sweep's OWN deadline.
 #:
@@ -106,18 +107,28 @@ def test_the_question_is_asked_once_rather_than_once_per_shard(jobs):
         f"once per shard again and the saving is undone")
 
 
-def test_the_per_shard_gate_is_kept_inside_the_shards(jobs):
-    """The two gates answer different questions and both are needed.
+def test_the_shards_do_not_re_ask_what_the_gate_answered(jobs):
+    """The inverse of what this file asserted until #1348, and deliberately so.
 
-    Without the per-shard one, a single shard left unproved by its deadline
-    makes the whole sweep due, and the other six redo a share they have already
-    proved: 25 minutes of Mac to re-establish something already true.
+    While all seven shards started regardless, the per-shard gate was what kept
+    six of them from redoing proved work. #1344 made the matrix expand to the
+    due shards only, so a shard that starts is one the gate already decided was
+    due, and asking again reads the same run history and can only agree.
+
+    That is worse than dead code. Two readings of one lookup can only confirm
+    the lookup is self-consistent, never that it is correct (L70), and it reads
+    as a second, independent safeguard, so anyone changing the gate believes
+    the shards are protected twice.
+
+    The test that required it is deleted rather than adjusted, because its
+    whole content was the arrangement this removed (L252, L373).
     """
     sweep_name, sweep = _job_running(jobs, SWEEP_TOOL)
 
-    assert PER_SHARD_TOOL in sweep, (
-        f"{sweep_name!r} no longer asks whether THIS shard has anything to do, "
-        f"so every shard runs whenever any one of them is due")
+    assert PER_SHARD_TOOL not in sweep, (
+        f"{sweep_name!r} asks whether THIS shard has anything to prove, which "
+        f"the gate decided before the shard was started. It reads the same run "
+        f"history and can only agree, while reading as a safeguard (#1348)")
 
 
 def test_the_mac_shards_do_not_start_unless_there_is_something_to_prove(jobs):

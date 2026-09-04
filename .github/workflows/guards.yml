@@ -515,40 +515,39 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      # Does this shard still have anything to prove? (#989)
+      # There is deliberately NO per-shard "does this shard have anything to
+      # prove" step here any more (#1348).
       #
-      # A step rather than a job on purpose. A new job is a new CHECK NAME, and
-      # tools/wait_for_checks.py derives the bar a pull request has to clear
-      # from these workflow files, calibrated against a recorded reply from a
-      # real green pull request. Adding a name means a run carrying it can only
-      # be green once the fixture already holds it, so there is no green run to
-      # record from and breaking the loop costs a knowingly red merge (L48).
-      # The same reason the two steps at the foot of this job are steps.
-      - name: Say whether this shard still has anything to prove
-        id: due
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python tools/check_guard_sweep_due.py --shard ${{ matrix.shard }}
+      # It was load bearing while all seven shards started regardless: it kept
+      # six of them from redoing proved work when one was the reason the sweep
+      # ran. #1344 made the matrix expand to the DUE shards only, so a shard
+      # that starts is one the gate already decided about, and asking again
+      # reads the same run history to reach the same answer.
+      #
+      # That is worse than dead code. Two readings of one lookup can only
+      # confirm the lookup is self-consistent, never that it is correct (L70),
+      # and a check that cannot disagree reads as a second safeguard, so the
+      # next person to change the gate believes the shards are protected
+      # independently. tests/test_a_quiet_day_costs_no_mac.py holds it out.
+      #
+      # Everything below is unconditional: this job only runs when the gate
+      # said so.
 
       # Shared with swift.yml and ui.yml (#1249). The `if:` stays HERE: it is
       # what keeps a quiet day from paying for the whole setup, and it reads a
       # step of THIS job.
       - name: Prepare the Mac build
-        if: steps.due.outputs.due == 'true'
         uses: ./.github/actions/prepare-mac-build
 
       - name: Install dependencies
-        if: steps.due.outputs.due == 'true'
         run: pip install -r requirements.txt
 
       # Same reason as the `changed` job above: a guard whose test renders a
       # reel skips without ffmpeg, and a skip is not a proof (#777).
       - name: Install ffmpeg
-        if: steps.due.outputs.due == 'true'
         run: brew install ffmpeg
 
       - name: Re-prove this shard of the guards
-        if: steps.due.outputs.due == 'true'
         # The deadline sits well under `timeout-minutes` on purpose. Whichever
         # fires first decides what is reported, and only this one can say which
         # entries went unproven.
@@ -577,7 +576,7 @@ jobs:
       # A red guard is a real verdict about one entry, not a reason to throw
       # away the timings of the other eighty.
       - name: Keep this shard's timings
-        if: always() && steps.due.outputs.due == 'true'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: guard-timings-${{ matrix.shard }}
