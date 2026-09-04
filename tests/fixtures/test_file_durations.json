@@ -81,6 +81,7 @@
     "test_caption_review_is_split.py": 0.07,
     "test_check_guards.py": 9.559999999999995,
     "test_check_guards_reminder.py": 2.7199999999999998,
+    "test_check_issue_figures.py": 0.01,
     "test_ci_builds_one_architecture.py": 0.04,
     "test_ci_caches_and_cancels.py": 0.0,
     "test_ci_gates.py": 0.97,
@@ -592,6 +593,10 @@
     "test_check_guards_reminder.py": {
       "run": "full-2026-09-04T03:02Z",
       "scale": 1.0
+    },
+    "test_check_issue_figures.py": {
+      "run": "partial-2026-09-04T10:54Z",
+      "scale": 1.302
     },
     "test_ci_builds_one_architecture.py": {
       "run": "full-2026-09-04T03:02Z",

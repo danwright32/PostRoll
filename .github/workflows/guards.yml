@@ -411,6 +411,24 @@ jobs:
       # It warns and never gates. A job getting slower does not make the change
       # being merged wrong, and failing a run for it is how a check teaches
       # everyone to bypass it (L36).
+      # The figures an OPEN ISSUE was written on (#1033).
+      #
+      # #991 recorded 58 cache entries holding 16 GB; a day later it was 76
+      # holding 20.9 GB, 30 percent out, and a previous session found three of
+      # six premises in one issue did not survive checking. A number with a date
+      # on it reads as MORE trustworthy, not less (L316), so the remedy is to
+      # re-take the reading.
+      #
+      # Here, on one shard, and warning only, for exactly the reasons written
+      # above the two steps below it: a new job is a new CHECK NAME, the
+      # question is about the repository rather than any shard, and a figure
+      # having moved does not make the change being merged wrong (L36).
+      - name: Say whether an open issue's recorded figures have moved
+        if: always() && matrix.shard == 1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python tools/check_issue_figures.py
+
       - name: Say whether any CI job's duration has moved
         if: always() && matrix.shard == 1
         env:
