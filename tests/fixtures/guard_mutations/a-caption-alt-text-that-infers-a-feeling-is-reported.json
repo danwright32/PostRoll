@@ -1,8 +1,8 @@
 {
   "name": "a-caption-alt-text-that-infers-a-feeling-is-reported",
-  "file": "postroll/ai/caption_quality.py",
-  "find": "        hits += [m.group(0) for pat in DIRECTED_INTENT",
-  "replace": "        hits += [] or [] if True else [m.group(0) for pat in DIRECTED_INTENT",
+  "file": "postroll/ai/blog_quality.py",
+  "find": "    hits += [m.group(0) for pat in DIRECTED_INTENT",
+  "replace": "    hits += [] or [] if True else [m.group(0) for pat in DIRECTED_INTENT",
   "test": "tests/test_caption_alt_text_checks.py::test_an_expression_aimed_at_someone_is_reported",
-  "breaks": "an alt text reading a visible expression as being AIMED at somebody ('grinning toward the audience') is accepted. The expression is in the frame; who it was meant for is not, so the description states as fact something the camera did not record (#1068)"
+  "breaks": "an alt text reading a visible expression as being AIMED at somebody ('grinning toward the audience') is accepted. The expression is in the frame; who it was meant for is not, so the description states as fact something the camera did not record (#1068). The perturbation is in blog_quality's shared matcher and the test it must break is the CAPTION one, which is what proves the caption path really goes through that matcher rather than a copy of it (#1224, L3)"
 }

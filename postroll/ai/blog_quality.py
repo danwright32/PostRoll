@@ -632,6 +632,33 @@ GROUP_CREDIT = re.compile(
 )
 
 
+
+def inferred_state_hits(low: str) -> list[str]:
+    """What in `low` describes an inner state rather than what the camera saw.
+
+    One matcher for both callers. `INFERRED_STATE` and `DIRECTED_INTENT` were
+    shared and the matching built on them was not: these lines existed here and
+    again in `caption_quality`, byte for byte (#1224).
+
+    Sharing the word lists while copying the matcher is the half measure that
+    makes divergence likely: the lists LOOK like the single source of truth, so
+    a change to how they are APPLIED, a word boundary, case folding, a new
+    pattern family, is made in whichever file the author had open, and a shared
+    NAME reads as evidence of shared BEHAVIOUR so nobody compares the two again
+    (L263, L370).
+
+    Only the matching is shared. Both callers build their own `Finding`, since
+    they word them differently and target them differently, a marker filename
+    against a photo name or position.
+
+    `low` is expected already lowercased, as both call sites have it to hand.
+    """
+    hits = [w for w in INFERRED_STATE if re.search(rf"\b{re.escape(w)}\b", low)]
+    hits += [m.group(0) for pat in DIRECTED_INTENT
+             for m in [re.search(pat, low)] if m]
+    return hits
+
+
 def names_a_group(alt: str) -> bool:
     """Whether the alt text credits an ensemble by count and name (#227)."""
     return GROUP_CREDIT.search(alt) is not None
@@ -705,9 +732,7 @@ def check_alt_text(name: str, alt: str, *, venue: str = "",
             f"{name}: {alt[:90]}"))
 
     # 19. no inferred inner states
-    hits = [w for w in INFERRED_STATE if re.search(rf"\b{re.escape(w)}\b", low)]
-    hits += [m.group(0) for pat in DIRECTED_INTENT
-             for m in [re.search(pat, low)] if m]
+    hits = inferred_state_hits(low)
     if hits:
         found.append(Finding(
             "alt_text_inferred_state",

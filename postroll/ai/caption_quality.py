@@ -113,13 +113,18 @@ Caption:
 # finding on most posts, and a panel that fires on everything is one that gets
 # skimmed (L36).
 #
-# The word lists come from `blog_quality` rather than being copied, so "an
+# The MATCHER comes from `blog_quality` rather than being copied, so "an
 # inferred inner state" has ONE definition across both paths. Two same named
 # rules either side of a boundary are never compared and drift indefinitely
 # (L263).
+#
+# It was the word lists alone until #1224, with the matching built on them
+# written out here as well. That is the half measure that makes drift likely:
+# the shared lists look like the single source of truth, so a change to how
+# they are APPLIED lands in whichever file the author had open (L370).
 
 from .blog_findings import Finding                       # noqa: E402
-from .blog_quality import DIRECTED_INTENT, INFERRED_STATE  # noqa: E402
+from .blog_quality import inferred_state_hits            # noqa: E402
 
 
 def check_caption_alt_texts(
@@ -166,10 +171,8 @@ def check_caption_alt_texts(
                 f"Alt text for this post should be {band[0]} to {band[1]} words.",
                 f"{where}: {words} words. {alt[:90]}"))
 
-        low = alt.lower()
-        hits = [w for w in INFERRED_STATE if re.search(rf"\b{re.escape(w)}\b", low)]
-        hits += [m.group(0) for pat in DIRECTED_INTENT
-                 for m in [re.search(pat, low)] if m]
+        # The same matcher the blog path uses, not a copy of it (#1224).
+        hits = inferred_state_hits(alt.lower())
         if hits:
             found.append(Finding(
                 "alt_text_inferred_state",
