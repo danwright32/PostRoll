@@ -154,4 +154,91 @@ final class WorkWithNoWindowTests: XCTestCase {
     //
     // What stays here is what a text scan cannot do: the tests above drive
     // WorkActivity and the notification itself.
+
+    // MARK: - #879 the failure banner's silent half
+
+    /// The rule the issue calls deliberate, driven for the first time.
+    ///
+    /// `notifyWorkFailed` read `NSApplication.shared.isActive` directly, so
+    /// nothing could say which way this went: the suppression and its absence
+    /// produced the same evidence in a test, which is none. A banner appearing
+    /// while PostRoll is in front is as much a defect as one failing to appear
+    /// when it should, and only one of those two had any coverage.
+    @MainActor
+    private func serviceInFront(_ frontmost: Bool) -> NotificationService {
+        let service = NotificationService.shared
+        let restore = service.isFrontmost
+        addTeardownBlock { @MainActor in service.isFrontmost = restore }
+        service.isFrontmost = { frontmost }
+        return service
+    }
+
+    @MainActor
+    func testAFailedRunIsSilentWhilePostRollIsInFront() {
+        let service = serviceInFront(true)
+        let before = service.sentAnnouncements.count
+
+        service.notifyWorkFailed(work: "generating Thursday",
+                                 eventName: "Winter Gala",
+                                 reason: "the Python bridge exited 1")
+
+        XCTAssertEqual(service.sentAnnouncements.count, before,
+                       "a failure bannered over the screen already showing it, "
+                       + "which is the noise that teaches somebody to wave "
+                       + "every banner away")
+    }
+
+    @MainActor
+    func testAFailedRunIsAnnouncedWhenPostRollIsNotInFront() {
+        // The positive control. Without it the test above is satisfied by a
+        // notifyWorkFailed that never announces anything at all (L159).
+        let service = serviceInFront(false)
+        let before = service.sentAnnouncements.count
+
+        service.notifyWorkFailed(work: "generating Thursday",
+                                 eventName: "Winter Gala",
+                                 reason: "the Python bridge exited 1")
+
+        let sent = service.sentAnnouncements.dropFirst(before)
+        XCTAssertEqual(sent.count, 1,
+                       "a failed run with the app in the background said "
+                       + "nothing, which is the whole of #863 one level down")
+        guard let announcement = sent.first else { return }
+        XCTAssertTrue(announcement.title.contains("Winter Gala"),
+                      "the banner does not name the event it was about, so it "
+                      + "is the placeholder rather than this run: "
+                      + announcement.title)
+        XCTAssertTrue(announcement.body.contains("the Python bridge exited 1"),
+                      "the banner does not carry the reason, so there is "
+                      + "nothing to act on from it")
+    }
+
+    @MainActor
+    func testTheBadgeAlsoStaysAwayWhilePostRollIsInFront() {
+        // Same rule, second place. These were two copies of one predicate and
+        // both had to be driven, because a rule enforced at one of two sites
+        // is not enforced (L280).
+        let service = serviceInFront(true)
+        service.clearBadge()
+
+        service.incrementBadge()
+
+        XCTAssertNil(NSApplication.shared.dockTile.badgeLabel,
+                     "the badge counted finished work while the person was "
+                     + "already looking at it")
+    }
+
+    @MainActor
+    func testTheBadgeCountsWhilePostRollIsNotInFront() {
+        let service = serviceInFront(false)
+        service.clearBadge()
+
+        service.incrementBadge()
+
+        XCTAssertEqual(NSApplication.shared.dockTile.badgeLabel, "1",
+                       "finished work waiting to be looked at is not being "
+                       + "counted anywhere")
+        service.clearBadge()
+    }
 }
+

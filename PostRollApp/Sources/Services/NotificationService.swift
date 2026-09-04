@@ -38,6 +38,25 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// yet (by activating the app). Reset to 0 on `clearBadge()`.
     private var pendingCount: Int = 0
 
+    /// Whether PostRoll is the application in front.
+    ///
+    /// Asked as a question rather than read off `NSApplication.shared` at the
+    /// point of use, because two deliberate rules turn on it and neither could
+    /// be driven while it was a global (#879, L196):
+    ///
+    /// - a failed run is announced ONLY when PostRoll is not in front, since
+    ///   the screen is already showing the failure and a banner over it is the
+    ///   noise that teaches somebody to wave banners away;
+    /// - the badge counts finished work ONLY when PostRoll is not in front,
+    ///   because the person is already looking.
+    ///
+    /// Both were written as `guard !NSApplication.shared.isActive`, which is
+    /// correct and untestable, so the rule the issue calls deliberate had no
+    /// test saying which way it went. A closure rather than a stored Bool: it
+    /// is asked at the moment of the decision, so it cannot go stale between
+    /// the app losing focus and the run finishing.
+    var isFrontmost: () -> Bool = { NSApplication.shared.isActive }
+
     // MARK: - Permission
 
     /// What the last request for permission produced.
@@ -180,7 +199,7 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// noise that teaches him to wave banners away (L36). The case this exists
     /// for is the one where he is not looking.
     func notifyWorkFailed(work: String, eventName: String, reason: String?) {
-        guard !NSApplication.shared.isActive else { return }
+        guard !isFrontmost() else { return }
         let announcement = WorkOutcome.failed(work: work, eventName: eventName, reason: reason)
         send(title: announcement.title, body: announcement.body)
     }
@@ -191,7 +210,7 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// If the app is currently active the badge stays hidden — the user is
     /// already looking, so the count starts accumulating from 0 again.
     func incrementBadge() {
-        guard !NSApplication.shared.isActive else { return }
+        guard !isFrontmost() else { return }
         pendingCount += 1
         NSApplication.shared.dockTile.badgeLabel = "\(pendingCount)"
     }
@@ -271,7 +290,20 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// Compiled only into the test bundle, the same way every other seam here
     /// is, so the shipping app cannot end up silently not notifying.
     #if POSTROLL_TESTS
+    /// What a banner would have said, in the order it would have been sent.
+    ///
+    /// Recorded rather than counted, because "a banner went out" and "the right
+    /// banner went out" are different questions and a count answers only the
+    /// first (#879, L11).
+    struct Announcement: Equatable {
+        let title: String
+        let body: String
+    }
+
+    private(set) var sentAnnouncements: [Announcement] = []
+
     private func send(title: String, body: String) {
+        sentAnnouncements.append(Announcement(title: title, body: body))
         pendingCount += 1
     }
     #else
