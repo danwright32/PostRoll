@@ -161,6 +161,7 @@
     "test_manifest_read_keys.py": 0.0,
     "test_measure_blog_calls.py": 0.0,
     "test_measure_clip_reel_encodes.py": 0.0,
+    "test_measure_thursday_alt_text.py": 0.0,
     "test_media_design_fingerprint.py": 4.239999999999999,
     "test_media_design_version.py": 1.51,
     "test_media_generators.py": 4.07,
@@ -924,6 +925,10 @@
     "test_measure_clip_reel_encodes.py": {
       "run": "full-2026-09-04T03:02Z",
       "scale": 1.0
+    },
+    "test_measure_thursday_alt_text.py": {
+      "run": "partial-2026-09-04T22:26Z",
+      "scale": 0.88
     },
     "test_media_design_fingerprint.py": {
       "run": "full-2026-09-04T03:02Z",
