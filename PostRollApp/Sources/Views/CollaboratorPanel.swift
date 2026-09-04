@@ -250,6 +250,55 @@ struct AccountNumbersSheet: View {
     @State private var declined: String = ""
 
     var body: some View {
+        // The FIELDS scroll; the buttons do not (#1279).
+        //
+        // This form has grown from three fields to seven controls across #982,
+        // #1271 and #986, in a fixed sheet with no scroll region. Measured by
+        // rendering it on 2026-09-03: 668pt tall against the 760pt window the
+        // app opens at, so roughly one more control's worth of room, and a
+        // sheet is inset from the window so the usable height is less than that.
+        //
+        // Every fact about an account is recorded here, so this is the surface
+        // most likely to gain another control, and each of the last three
+        // features added one. A row pinned over the edge of a scrolling region
+        // is what keeps the last thing in it reachable (L189), and the failure
+        // being avoided is the Save button sitting below the bottom of the
+        // window with no way to get to it.
+        //
+        // `testTheNumbersFormStillFitsInTheWindow` stays, as the thing that
+        // says when the layout stopped being merely tight rather than the thing
+        // that stops it being unusable.
+        VStack(alignment: .leading, spacing: 0) {
+            ScrollView {
+                fields
+            }
+            // Never taller than it needs to be, so a short form is a short
+            // sheet: the scroll region only earns its keep when the content
+            // outgrows the window.
+            .frame(maxHeight: WindowMetrics.numbersFormMaxHeight)
+
+            buttons
+                .padding(.top, Spacing.md)
+        }
+        .padding(Spacing.xl)
+        .frame(width: 360)
+        .onAppear {
+            // Prefilled from what is stored, so saving without touching a field
+            // cannot silently clear it.
+            followers = AccountNumbersEntry.text(stats?.followers)
+            likes = AccountNumbersEntry.text(stats?.likes)
+            comments = AccountNumbersEntry.text(stats?.comments)
+            isPrivate = stats?.isPrivate ?? false
+            neverInvite = stats?.neverInvite ?? false
+            // Prefilled like every other field, so saving an unrelated
+            // correction cannot silently unmark the account.
+            accepted = AccountNumbersEntry.text(stats?.acceptedInvites)
+            declined = AccountNumbersEntry.text(stats?.declinedInvites)
+        }
+    }
+
+    /// The controls, which scroll.
+    private var fields: some View {
         VStack(alignment: .leading, spacing: Spacing.md) {
             // The screen that TELLS him to open the profile is the one that
             // most needs to be able to (#973).
@@ -308,36 +357,26 @@ struct AccountNumbersSheet: View {
                                      ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)
             }
 
-            HStack {
-                Spacer()
-                Button("Cancel", action: onCancel)
-                    .buttonStyle(.plain)
-                    .foregroundStyle(PaintedSurfaces.secondaryText)
-                Button("Save") {
-                    onSave(AccountNumbersEntry.parse(followers),
-                           AccountNumbersEntry.parse(likes),
-                           AccountNumbersEntry.parse(comments),
-                           isPrivate, neverInvite,
-                           AccountNumbersEntry.parse(accepted),
-                           AccountNumbersEntry.parse(declined))
-                }
-                .keyboardShortcut(.defaultAction)
-            }
         }
-        .padding(Spacing.xl)
-        .frame(width: 360)
-        .onAppear {
-            // Prefilled from what is stored, so saving without touching a field
-            // cannot silently clear it.
-            followers = AccountNumbersEntry.text(stats?.followers)
-            likes = AccountNumbersEntry.text(stats?.likes)
-            comments = AccountNumbersEntry.text(stats?.comments)
-            // Prefilled like every other field, so saving an unrelated
-            // correction cannot silently unmark the account.
-            isPrivate = stats?.isPrivate ?? false
-            neverInvite = stats?.neverInvite ?? false
-            accepted = AccountNumbersEntry.text(stats?.acceptedInvites)
-            declined = AccountNumbersEntry.text(stats?.declinedInvites)
+    }
+
+    /// Cancel and Save, pinned outside the scroll region so they are reachable
+    /// however tall the content becomes (L189).
+    private var buttons: some View {
+        HStack {
+            Spacer()
+            Button("Cancel", action: onCancel)
+                .buttonStyle(.plain)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
+            Button("Save") {
+                onSave(AccountNumbersEntry.parse(followers),
+                       AccountNumbersEntry.parse(likes),
+                       AccountNumbersEntry.parse(comments),
+                       isPrivate, neverInvite,
+                       AccountNumbersEntry.parse(accepted),
+                       AccountNumbersEntry.parse(declined))
+            }
+            .keyboardShortcut(.defaultAction)
         }
     }
 

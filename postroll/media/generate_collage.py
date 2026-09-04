@@ -456,11 +456,27 @@ def distinct_collage_splits(
 
     # No arrangement in the pool can hold these photos without breaching the crop
     # budget. Say so rather than quietly rendering the sliver anyway.
+    #
+    # And say what ELSE is wrong with what it fell back to (#1237). This branch
+    # used to report only the cropping, while the arrangement it picks can also
+    # bury a photograph: measured 2026-09-02 on eleven 3:2 landscapes, which is
+    # the smallest count with no fitting arrangement at all, the fallback hides
+    # 90.3% of a row behind Instagram's caption. That is worse than the 88.9%
+    # offender #921 was filed about, reached through the door that fix did not
+    # cover, and the warning named the lesser of its two problems (L11).
+    buried = hidden_by_the_caption(splits[0], photo_ratios)
+    also_buried = (
+        f" It also puts {buried:.0%} of a photograph behind Instagram's caption,"
+        f" past the {MOSTLY_HIDDEN:.0%} this treats as mostly hidden; use fewer"
+        f" photos to avoid that."
+        if buried > MOSTLY_HIDDEN else ""
+    )
     print(
         f"WARNING: no collage layout fits {n} photos of aspect "
         f"{[round(r, 2) for r in photo_ratios]} within the crop budget "
         f"(width ≥ {MIN_WIDTH_RETENTION:.0%}, height ≥ {MIN_HEIGHT_RETENTION:.0%}). "
-        f"Falling back to {splits[0]}, which will crop harder than intended.",
+        f"Falling back to {splits[0]}, which will crop harder than intended."
+        + also_buried,
         file=sys.stderr,
     )
     return splits[:1]

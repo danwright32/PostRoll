@@ -75,3 +75,62 @@ def test_the_forced_fallback_is_what_a_refusal_would_replace():
 def test_no_ratios_admits_everything():
     """A caller with no shapes to judge by is not a caller reporting a problem."""
     assert crop_budget_admits(7, None)
+
+
+# ── the last resort names BOTH of its problems (#1237) ──────────────────────
+#
+# `distinct_collage_splits` has three outcomes in order: the chrome safe pool,
+# the pool that merely fits the crop budget, and a last resort when neither has
+# anything. The second warns that every arrangement buries a photograph. The
+# third said only that the layout "will crop harder than intended", and nothing
+# about the caption.
+#
+# Measured 2026-09-02 on eleven 3:2 landscapes, the smallest count with no
+# fitting arrangement at all: the arrangement it falls back to hides 90.3% of a
+# row behind Instagram's caption. That is worse than the 88.9% offender #921 was
+# filed about, reached through the door that fix did not cover, and the warning
+# reported the lesser of its two problems (L11).
+#
+# Latent rather than live: no posting preset reaches eleven photographs today
+# (4, 7 and 10), so the path is unreachable through the product as configured.
+# It is one preset change away.
+
+def test_the_last_resort_says_what_it_buries_as_well_as_what_it_crops(capsys):
+    from postroll.media.generate_collage import (
+        MOSTLY_HIDDEN, distinct_collage_splits, hidden_by_the_caption)
+
+    ratios = [LANDSCAPE] * 11
+    assert fitting_collage_splits(11, ratios) == [], (
+        "eleven landscapes now fit the crop budget, so this no longer reaches "
+        "the last resort and is measuring a different branch (L101)")
+
+    picked = distinct_collage_splits(11, ratios)
+    said = capsys.readouterr().err
+
+    assert hidden_by_the_caption(picked[0], ratios) > MOSTLY_HIDDEN, (
+        "the fallback no longer buries a photograph, so the sentence below "
+        "would be a claim about nothing")
+    assert "crop harder than intended" in said, "it stopped saying what it crops"
+    assert "behind Instagram's caption" in said, (
+        f"the last resort reports only the cropping, so the worse of its two "
+        f"problems is invisible: {said}")
+
+
+def test_a_last_resort_that_buries_nothing_says_only_what_it_crops(capsys):
+    """The other direction (L159). Without it, "it mentions the caption" is
+    satisfied by a branch that says so every time, which would be a warning
+    that cries wolf about a layout with nothing wrong on that axis (L36)."""
+    from postroll.media.generate_collage import (
+        MOSTLY_HIDDEN, distinct_collage_splits, hidden_by_the_caption)
+
+    ratios = [PORTRAIT] * 7
+    assert fitting_collage_splits(7, ratios) == [], "this is not the last resort"
+
+    picked = distinct_collage_splits(7, ratios)
+    said = capsys.readouterr().err
+
+    if hidden_by_the_caption(picked[0], ratios) > MOSTLY_HIDDEN:
+        pytest.skip("this fixture also buries a photograph, so it cannot show "
+                    "the quiet case")
+    assert "behind Instagram's caption" not in said, (
+        f"it warned about the caption for a layout that hides nothing: {said}")
