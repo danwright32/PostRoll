@@ -1,8 +1,8 @@
 {
   "name": "only-the-locks-state-readers-govern-a-skip",
   "file": "tools/check_guards.py",
-  "find": "LOCK_STATE_READERS = (\"verdict\", \"current\")",
-  "replace": "LOCK_STATE_READERS = (\"verdict\", \"current\", \"lock_path\")",
+  "find": "        if node.returns is not None and \"Path\" in ast.unparse(node.returns):\n            continue\n",
+  "replace": "",
   "test": "tests/test_check_guards.py::test_the_lock_policy_tests_are_not_mistaken_for_stand_down_helpers",
-  "breaks": "any call into the lock module counts as producing a stand-down decision, so `path = lock_path(tmp_path)` followed by an unrelated skip reads as a check silencing itself. tests/test_perturbation_lock.py is then refused, and that file is the alternative the refusal tells people to use (#931, L104)"
+  "breaks": "any call into the lock module counts as producing a stand-down decision, so `path = lock_path(tmp_path)` followed by an unrelated skip reads as a check silencing itself. tests/test_perturbation_lock.py is then refused, and that file is the alternative the refusal tells people to use (#931, L104). The anchor moved in #1165: the readers used to be a hand written tuple and are now derived from the lock module, so the way to widen them is to drop the filter that separates a function reporting the lock's STATE from one handing back its PATH"
 }
