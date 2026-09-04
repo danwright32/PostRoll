@@ -1,8 +1,8 @@
 {
   "name": "every-ci-job-carries-a-deadline",
   "file": ".github/workflows/tests.yml",
-  "find": "    timeout-minutes: 20\n    steps:",
-  "replace": "    steps:",
+  "find": "    timeout-minutes: 20\n",
+  "replace": "",
   "test": "tests/test_ci_gates.py::test_every_ci_job_carries_a_deadline",
-  "breaks": "a CI job goes back to having no deadline, so a run that stops making progress sits until the platform default and is indistinguishable from a slow queue (#832, L110)"
+  "breaks": "a CI job goes back to having no deadline, so a run that stops making progress sits until the platform default and is indistinguishable from a slow queue (#832, L110). The anchor was the deadline followed by `steps:`; #1011 put a `permissions:` block between the two, so it now anchors on the deadline line alone"
 }

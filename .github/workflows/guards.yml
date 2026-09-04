@@ -281,6 +281,14 @@ jobs:
         # out of time reports its remaining entries as UNPROVEN while the
         # workflow still goes green (L98, L315).
         shard: [1, 2, 3, 4, 5, 6, 7]
+    # Enough to file the one issue this job opens when it goes red (#1011).
+    #
+    # At JOB level rather than on the step, because a step's own `permissions:`
+    # is not a thing GitHub honours: writing it there reads as a restriction and
+    # applies none.
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@v5
         with:
@@ -411,3 +419,26 @@ jobs:
           for workflow in swift.yml tests.yml guards.yml; do
             python tools/check_job_durations.py --workflow "${workflow}"
           done
+
+      # A red run here reaches nobody otherwise (#1011).
+      #
+      # This job carries a condition excluding pull requests, so it runs on push to main AFTER the merge has landed, and on the weekly schedule with no push behind it at all. Neither gates anything, so a failure is a guard already dead on main. That is how the whole registry stopped being re-proved for hours on 2026-08-19 (L13).
+      #
+      # On EVERY shard, unlike the two steps above it, which ask a question about the workflow and have one answer. This REPORTS a failure, and shard 3 going red while shard 1 is green is exactly the case that must not be silent.
+      #
+      # It speaks only on a FAILURE. A notice on every green run is what teaches
+      # a person to skip the whole list (L36). 
+      #
+      # A step rather than a job, because a new job is a new CHECK NAME and
+      # tests/test_wait_for_checks.py calibrates the names it waits for against
+      # a recorded reply from a real pull request (L305).
+      - name: Say so if this run went red
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python tools/say_when_ci_goes_red.py \
+            --workflow guards.yml \
+            --job "full (${{ matrix.shard }})" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+

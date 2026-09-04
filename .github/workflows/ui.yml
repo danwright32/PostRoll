@@ -108,6 +108,7 @@ jobs:
     if: github.event_name == 'push'
     timeout-minutes: 5
     permissions:
+      issues: write
       contents: read
     steps:
       - uses: actions/checkout@v5
@@ -145,11 +146,39 @@ jobs:
             echo '```'
           } >> "${GITHUB_STEP_SUMMARY}"
 
+      # A red run here reaches nobody otherwise (#1011).
+      #
+      # It runs only on push, so it is always after the merge. Its whole job is to say when a merge touched something only the hand check can see, and a run that DIED saying it is indistinguishable from a merge that touched nothing (L98), which is the worse of the two silences.
+      #
+      # It speaks only on a FAILURE. A notice on every green run is what teaches
+      # a person to skip the whole list (L36). 
+      #
+      # A step rather than a job, because a new job is a new CHECK NAME and
+      # tests/test_wait_for_checks.py calibrates the names it waits for against
+      # a recorded reply from a real pull request (L305).
+      - name: Say so if this run went red
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python tools/say_when_ci_goes_red.py \
+            --workflow ui.yml \
+            --job "hand-check-reminder" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
   ui:
     # The same image as swift-unit, for the same reason: CI's compiler must be
     # at or ahead of the one on the development Mac, never behind (#528).
     runs-on: macos-26
     timeout-minutes: 45
+    # Enough to file the one issue this job opens when it goes red (#1011).
+    #
+    # At JOB level rather than on the step, because a step's own `permissions:`
+    # is not a thing GitHub honours: writing it there reads as a restriction and
+    # applies none.
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@v5
 
@@ -192,3 +221,24 @@ jobs:
             -default-test-execution-time-allowance 180 \
             -maximum-test-execution-time-allowance 300 \
             test
+
+      # A red run here reaches nobody otherwise (#1011).
+      #
+      # This workflow has no pull request trigger at all: it runs on push and by hand, so no failure here has ever blocked anything.
+      #
+      # It speaks only on a FAILURE. A notice on every green run is what teaches
+      # a person to skip the whole list (L36). 
+      #
+      # A step rather than a job, because a new job is a new CHECK NAME and
+      # tests/test_wait_for_checks.py calibrates the names it waits for against
+      # a recorded reply from a real pull request (L305).
+      - name: Say so if this run went red
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python tools/say_when_ci_goes_red.py \
+            --workflow ui.yml \
+            --job "ui" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+

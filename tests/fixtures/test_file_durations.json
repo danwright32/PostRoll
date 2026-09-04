@@ -216,6 +216,7 @@
     "test_resolve_reel_audio.py": 0.0,
     "test_revise_caption_backstops.py": 0.0,
     "test_safe_area_tokens.py": 0.0,
+    "test_say_when_ci_goes_red.py": 0.0,
     "test_screen_reel_logo_contrast.py": 0.0,
     "test_screens_draw_from_named_colours.py": 2.5300000000000002,
     "test_screens_take_their_stores.py": 0.51,
@@ -1131,6 +1132,10 @@
     "test_safe_area_tokens.py": {
       "run": "full-2026-09-04T03:02Z",
       "scale": 1.0
+    },
+    "test_say_when_ci_goes_red.py": {
+      "run": "partial-2026-09-04T10:30Z",
+      "scale": 1.327
     },
     "test_screen_reel_logo_contrast.py": {
       "run": "full-2026-09-04T03:02Z",

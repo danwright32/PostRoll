@@ -55,6 +55,7 @@ jobs:
     # downloads a handful of small artifacts and writes one file.
     timeout-minutes: 20
     permissions:
+      issues: write
       contents: write
       pull-requests: write
     # At JOB level rather than on the step that uses it, because a step's own
@@ -167,3 +168,24 @@ jobs:
               echo "secret and this job will do it tomorrow."
             fi
           } >> "${GITHUB_STEP_SUMMARY}"
+
+      # A red run here reaches nobody otherwise (#1011).
+      #
+      # This runs on `workflow_run`, after another workflow finished, so it gates nothing by construction. A failure means the guard cost record stopped being updated, and every check reading it goes on passing against a record quietly standing still (L289).
+      #
+      # It speaks only on a FAILURE. A notice on every green run is what teaches
+      # a person to skip the whole list (L36). 
+      #
+      # A step rather than a job, because a new job is a new CHECK NAME and
+      # tests/test_wait_for_checks.py calibrates the names it waits for against
+      # a recorded reply from a real pull request (L305).
+      - name: Say so if this run went red
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python tools/say_when_ci_goes_red.py \
+            --workflow record-guard-costs.yml \
+            --job "record" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+

@@ -52,6 +52,7 @@ jobs:
     # reads one log and writes one file.
     timeout-minutes: 20
     permissions:
+      issues: write
       contents: write
       pull-requests: read
       actions: read
@@ -175,3 +176,24 @@ jobs:
               echo "secret and this job will do it next time."
             fi
           } >> "${GITHUB_STEP_SUMMARY}"
+
+      # A red run here reaches nobody otherwise (#1011).
+      #
+      # This runs on `workflow_run` and gates nothing. A failure means the recorded suite count stopped being updated, so a run that lost a worker's share of the tests would be waved through as full (L288).
+      #
+      # It speaks only on a FAILURE. A notice on every green run is what teaches
+      # a person to skip the whole list (L36). 
+      #
+      # A step rather than a job, because a new job is a new CHECK NAME and
+      # tests/test_wait_for_checks.py calibrates the names it waits for against
+      # a recorded reply from a real pull request (L305).
+      - name: Say so if this run went red
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python tools/say_when_ci_goes_red.py \
+            --workflow record-suite-count.yml \
+            --job "record" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
