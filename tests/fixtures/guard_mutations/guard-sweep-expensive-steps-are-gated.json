@@ -1,8 +1,8 @@
 {
   "name": "guard-sweep-expensive-steps-are-gated",
   "file": ".github/workflows/guards.yml",
-  "find": "      - name: Install ffmpeg\n        if: steps.due.outputs.due == 'true'\n",
-  "replace": "      - name: Install ffmpeg\n",
+  "find": "    if: github.event_name != 'pull_request' && needs.due.outputs.due == 'true'\n",
+  "replace": "    if: github.event_name != 'pull_request'\n",
   "test": "tests/test_ci_gates.py::test_every_expensive_step_of_the_sweep_is_behind_the_due_gate",
-  "breaks": "a step of the daily sweep runs whether or not there is anything to prove, so a day with no merges pays for it anyway and the cadence change stops saving what it was measured to save (#989)"
+  "breaks": "the sweep's shards start whether or not there is anything to prove, so a day with no merges starts a macOS runner per shard and pays a whole billed minute for each at a ten times multiplier, which is what the gate was measured to save (#989, #1259, #1348). The gate is a JOB now rather than a step, so the perturbation is the job's condition: it was the `if:` on one costly step until #1348 removed the per-shard check that condition read"
 }

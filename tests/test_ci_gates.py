@@ -537,38 +537,38 @@ def test_the_sweep_does_not_run_on_every_push_to_main(guards):
 def test_every_expensive_step_of_the_sweep_is_behind_the_due_gate(guards):
     """What makes a daily cadence cost nothing on a quiet day.
 
-    Derived from what a step DOES rather than from a list of step names kept
-    beside it, so a new brew install or a second proving command is covered the
-    day it lands rather than the day somebody remembers this file (L96).
+    The gate is a JOB now, not a step (#1259, #1348). It used to be the first
+    step of each shard, and every costly step below it carried
+    `if: steps.due.outputs.due`; a quiet day then still started seven macOS
+    runners to be told seven times there was nothing to do, which bills as
+    seven whole minutes at a ten times multiplier. So the shards depend on the
+    gate and do not start at all, and what has to be true is that every costly
+    step lives in a job that waits for it.
+
+    "Costly" is derived from what a step DOES rather than from a list of names
+    kept beside it, so a new brew install or a second proving command is
+    covered the day it lands rather than the day somebody remembers this file
+    (L96). The action reference counts since #1249 moved the three setup steps
+    into it: a pattern naming only the commands stopped matching them, and this
+    guard would have gone on passing while the sweep paid for the whole setup.
     """
-    gate = "steps.due.outputs.due == 'true'"
-    # The action reference counts as costly since #1249: the three setup steps
-    # moved into it, so a pattern naming only the commands stopped matching them
-    # and this guard would have gone on passing while the sweep paid for the
-    # whole setup on a quiet day (L247).
     costly = re.compile(
         r"brew install|xcodegen generate|pip install|check_guards\.py"
         r"|" + re.escape(mac_build_setup.ACTION_REF))
-    ungated = [name for name, text in _steps(_full_job(guards))
-               if costly.search(text) and gate not in text]
-    assert not ungated, (
-        f"these steps of the daily sweep run whether or not there is anything "
-        f"to prove, so a day with no merges still pays for them: {ungated}")
+    body = _full_job(guards)
 
+    spending = [name for name, text in _steps(body) if costly.search(text)]
+    assert spending, (
+        "no step of the sweep matched the costly pattern, so this passes by "
+        "finding nothing (L98, L100)")
 
-def test_the_gate_is_asked_before_anything_it_gates(guards):
-    """A condition on a step whose `id` has not run yet is empty, and an empty
-    condition is false, so a gate placed after its dependants silently switches
-    the whole sweep off rather than failing (L98)."""
-    names = [name for name, _ in _steps(_full_job(guards))]
-    texts = dict(_steps(_full_job(guards)))
-    asking = next(i for i, name in enumerate(names) if "anything to prove" in name)
-    gated = [i for i, name in enumerate(names)
-             if "steps.due.outputs.due" in texts[name]]
-    assert gated, "nothing is behind the gate, so the gate decides nothing"
-    assert min(gated) > asking, (
-        "a step is gated on an answer that has not been given yet, which reads "
-        "as false and skips the sweep every single day")
+    condition = re.search(r"^    if:[ \t]*(.+?)[ \t]*$", body, re.M)
+    needs = re.search(r"^    needs:[ \t]*(.+?)[ \t]*$", body, re.M)
+    assert needs and condition and "needs." in condition.group(1), (
+        f"the sweep's {len(spending)} costly steps run in a job that does not "
+        f"wait on the gate's answer, so a day with nothing to prove still "
+        f"starts a macOS runner for each shard and pays a whole billed minute "
+        f"for each (#1259)")
 
 
 def test_the_steps_that_report_are_not_behind_the_gate(guards):
