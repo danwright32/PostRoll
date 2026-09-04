@@ -24,8 +24,15 @@ import AppKit
 /// twice, once normally and once with its words switched off through
 /// `WordFootprint`'s wordless path, and require the two to differ. What differs
 /// between them is the type and nothing else.
+///
+/// ## Cut into slices (#1257)
+///
+/// It renders eight whole screens twice each and held 30.7 of the suite's 296.9
+/// seconds of test bodies, measured on the 12 core Mac on 2026-09-04. A class
+/// can never finish faster than its longest test, and `xcodebuild` deals by
+/// class, so this is three classes rather than three methods.
 @MainActor
-final class ScreensDrawSomethingTests: XCTestCase {
+class ScreensDrawSomething: SweptInSlices {
 
     /// How much of a screen has to be words.
     ///
@@ -42,10 +49,19 @@ final class ScreensDrawSomethingTests: XCTestCase {
     /// collapsed, and all three measure at or near nothing. This is not a
     /// legibility check: `HostedControlLegibilityTests` is that, and it runs
     /// over the same surfaces.
-    private static let mustBeWords = 0.002
+    static let mustBeWords = 0.002
 
-    private func screens() -> [(name: String, render: (Bool) throws -> NSBitmapImageRep)] {
+    func screens() -> [(name: String, render: (Bool) throws -> NSBitmapImageRep)] {
         HostedControlLegibilityTests().wholeScreens
+    }
+
+    /// This slice's share of them.
+    private func mineToDraw() -> [(name: String, render: (Bool) throws -> NSBitmapImageRep)] {
+        let mine = mine(of: screens())
+        XCTAssertFalse(mine.isEmpty,
+                       "this slice holds no screens, so it reports every one it "
+                       + "covers as drawing its words while covering none (L98)")
+        return mine
     }
 
     func testTheSweepHasTheScreensToMeasure() {
@@ -60,7 +76,7 @@ final class ScreensDrawSomethingTests: XCTestCase {
 
     func testEveryScreenOnTheSheetDrewItsWords() throws {
         var thin: [String] = []
-        for screen in screens() {
+        for screen in mineToDraw() {
             let whole = try screen.render(false)
             let wordless = try screen.render(true)
             let share = WordFootprint.share(whole, wordless)
@@ -101,4 +117,14 @@ final class ScreensDrawSomethingTests: XCTestCase {
                              + "the check could never pass and nobody could "
                              + "satisfy it (L109)")
     }
+}
+
+
+@MainActor
+final class ScreensDrawSomethingA: ScreensDrawSomething {
+    override nonisolated class var slice: Int { 0 }
+}
+@MainActor
+final class ScreensDrawSomethingB: ScreensDrawSomething {
+    override nonisolated class var slice: Int { 1 }
 }
