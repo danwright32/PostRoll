@@ -200,9 +200,10 @@ def test_it_can_still_be_asked_for_by_hand(workflow: str) -> None:
 
 def test_it_opens_a_pull_request_rather_than_committing_to_main(workflow: str) -> None:
     body = uncommented(workflow)
-    assert "gh pr create" in body, (
-        "the readings would arrive as a push from a scheduled job rather than "
-        "as a reviewed change")
+    assert "propose_recorded_change.sh" in body, (
+        "the readings are not proposed through the shared script, so this "
+        "workflow carries its own copy of the push, and the copy it used to "
+        "carry was one git refuses on the second run of any day (#1311)")
     assert "git push origin main" not in body
 
 

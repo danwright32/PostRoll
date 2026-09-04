@@ -305,13 +305,26 @@ def test_it_follows_the_swift_workflow_by_the_name_that_workflow_carries() -> No
 
 
 def test_it_opens_a_pull_request_rather_than_pushing_to_main() -> None:
+    """The reading arrives as a reviewed change, never as a scheduled job's
+    commit on main.
+
+    How the proposal is pushed is no longer here: it is one script shared with
+    the other recorder, and it is proved by running it in
+    tests/test_recorded_change_is_proposed.py rather than by reading for it.
+
+    This used to assert `--force-with-lease` was present, on the grounds that a
+    plain push would be refused on a second run of the same day. That is the
+    opposite of what git does on a runner, where the day branch is untracked
+    and the lease has no value: the lease is what was refused, 37 times in one
+    day. The assertion is deleted rather than adjusted, because its whole
+    content was defending the defect (#1311, L252).
+    """
     text = uncommented(workflow_text())
 
-    assert "gh pr create" in text
-    assert "git push" in text
-    assert "--force-with-lease" in text, (
-        "a re-run of the same day would be refused by a plain push, which "
-        "reads as the recorder failing rather than as it having already run")
+    assert "propose_recorded_change.sh" in text, (
+        "the count is not proposed through the shared script, so this workflow "
+        "carries its own copy of the push (#1311)")
+    assert "git push origin main" not in text
 
 
 def test_it_carries_a_deadline() -> None:
