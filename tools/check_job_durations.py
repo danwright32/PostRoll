@@ -83,9 +83,32 @@ MATERIAL_SHIFT = 0.08
 #: against the shared default, and the message says which bar it used. Read from
 #: the fixture rather than copied here, so the two cannot drift (L41), and a job
 #: with nothing recorded keeps the default rather than being exempted (L96).
-NOISE_FLOORS = {
-    "swift-unit": ("tests/fixtures/swift_suite_cost.json", "run_to_run_spread"),
-}
+NOISE_FLOORS_FILE = "tests/fixtures/ci_job_noise.json"
+
+
+def _measured_spreads(root=None) -> dict[str, float]:
+    """Each job's measured run to run spread, as a fraction, from the record.
+
+    Read rather than restated here, so the numbers and the readings they were
+    derived from cannot drift apart (L41). An unreadable record yields nothing,
+    which leaves the shared default in place: a floor of zero would make every
+    reading material, which is the opposite of what a missing measurement
+    should do (L42, L215).
+    """
+    path = (Path(root) if root is not None else REPO_ROOT) / NOISE_FLOORS_FILE
+    try:
+        jobs = json.loads(path.read_text())["jobs"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return {}
+    found = {}
+    for name, entry in jobs.items():
+        try:
+            percent = float(entry["spread_percent"]) / 100
+        except (KeyError, TypeError, ValueError):
+            continue
+        if percent > 0:
+            found[name] = percent
+    return found
 
 
 def noise_floor(job: str, root=None) -> tuple[float, str] | None:
@@ -101,18 +124,15 @@ def noise_floor(job: str, root=None) -> tuple[float, str] | None:
     record must leave the shared default in place rather than produce a floor
     of zero, which would make every reading material (L42, L215).
     """
-    where = NOISE_FLOORS.get(work_family(job))
-    if where is None:
-        return None
-    path = (Path(root) if root is not None else REPO_ROOT) / where[0]
-    try:
-        block = json.loads(path.read_text())[where[1]]
-        floor = float(block["spread_percent_at_least"]) / 100
-    except (OSError, ValueError, KeyError, TypeError):
-        return None
-    if floor <= 0:
-        return None
-    return floor, f"{where[0]} {where[1]}"
+    # The FULL job name first. `reference-frames (goldens)` and
+    # `reference-frames (legibility)` differ by 7 points, and the matrix suffix
+    # is the only thing that tells them apart, so a lookup that stripped it
+    # would judge one against the other's noise (L237).
+    spreads = _measured_spreads(root=root)
+    for key in (job, work_family(job)):
+        if key in spreads:
+            return spreads[key], f"{NOISE_FLOORS_FILE} {key}"
+    return None
 
 
 def unreadable_floor(job: str, root=None) -> str | None:
@@ -122,10 +142,29 @@ def unreadable_floor(job: str, root=None) -> str | None:
     NOISE_FLOORS has nothing to fail to read, and reporting one would be an
     accusation about every job nobody has measured (L11, L93).
     """
-    where = NOISE_FLOORS.get(work_family(job))
-    if where is None or noise_floor(job, root=root) is not None:
+    if noise_floor(job, root=root) is not None:
         return None
-    return where[0]
+    # A job with nothing recorded ANYWHERE has no record to fail to read, and
+    # `changed` is deliberately one of those: it cannot be dispatched, and the
+    # record says why. Only a job the file names but cannot be read for counts.
+    path = (Path(root) if root is not None else REPO_ROOT) / NOISE_FLOORS_FILE
+    try:
+        named = set(json.loads(path.read_text())["jobs"])
+    except (OSError, ValueError, KeyError, TypeError):
+        # The whole record is unreadable, which is a failure for every job it
+        # would have covered. Reported for the ones it is supposed to name.
+        return NOISE_FLOORS_FILE if job in _JOBS_EXPECTED_TO_HAVE_A_FLOOR else None
+    if job in named or work_family(job) in named:
+        return NOISE_FLOORS_FILE
+    return None
+
+
+#: The jobs whose floors have been measured, so a record that stops being
+#: readable is reported for them rather than passing as "nobody measured this".
+_JOBS_EXPECTED_TO_HAVE_A_FLOOR = frozenset({
+    "swift-unit", "macos", "python",
+    "reference-frames (goldens)", "reference-frames (legibility)",
+})
 
 #: The fewest runs that can be split into two halves and still say anything.
 #: Three a side: two would make a median a mean of two numbers, which one slow

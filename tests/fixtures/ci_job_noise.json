@@ -1,0 +1,104 @@
+{
+ "what": "How much each CI job varies between runs of IDENTICAL code (#1336). The bar any before and after comparison on that job has to clear (L224), and a FLOOR rather than a characterisation: runs of one commit prove the spread is at least this wide, never that it is only this wide.",
+ "measured_on": "2026-09-04",
+ "why_grouped_by_commit": "Only runs of the SAME commit measure noise. Main moves between dispatches, and a pair taken across that move reports the change as spread.",
+ "jobs": {
+  "swift-unit": {
+   "runner": "macos-26",
+   "runs": 2,
+   "commit": "8ea7b53448cf",
+   "seconds": [
+    438.0,
+    611.0
+   ],
+   "spread_seconds": 173.0,
+   "spread_percent": 39.5,
+   "from_runs": [
+    33885254523,
+    33885978257
+   ],
+   "note": "The WHOLE job, which includes compiling. Wider than the 30.5% recorded for the test phase alone in swift_suite_cost.json, and this is the one the detector judges."
+  },
+  "reference-frames (legibility)": {
+   "runner": "macos-26",
+   "runs": 2,
+   "commit": "2a91c4e8528f",
+   "seconds": [
+    171.0,
+    229.0
+   ],
+   "spread_seconds": 58.0,
+   "spread_percent": 33.9,
+   "from_runs": [
+    33883238909,
+    33884272900
+   ]
+  },
+  "reference-frames (goldens)": {
+   "runner": "macos-26",
+   "runs": 2,
+   "commit": "d6fbca354005",
+   "seconds": [
+    175.0,
+    221.0
+   ],
+   "spread_seconds": 46.0,
+   "spread_percent": 26.3,
+   "from_runs": [
+    33880346541,
+    33880353129
+   ]
+  },
+  "macos": {
+   "runner": "macos-15",
+   "runs": 3,
+   "commit": "2649f451ca8d",
+   "seconds": [
+    176.0,
+    221.0,
+    204.0
+   ],
+   "spread_seconds": 45.0,
+   "spread_percent": 25.6,
+   "from_runs": [
+    33901131206,
+    33901533311,
+    33901973467
+   ]
+  },
+  "python": {
+   "runner": "ubuntu-latest",
+   "runs": 3,
+   "commit": "2649f451ca8d",
+   "seconds": [
+    255.0,
+    267.0,
+    263.0
+   ],
+   "spread_seconds": 12.0,
+   "spread_percent": 4.7,
+   "from_runs": [
+    33901131206,
+    33901533311,
+    33901973467
+   ]
+  }
+ },
+ "not_measured": {
+  "changed": "Runs only on a pull request, so it cannot be dispatched. A workflow_dispatch of guards.yml runs the FULL four shard sweep instead, about 1,000 allowance minutes a go, which is not worth spending on this. Its readings across real pull requests are at different commits and would measure the changes rather than the runner, so it keeps the shared default and this says why (L129)."
+ },
+ "what_it_means": [
+  "The machine is the story. Every macOS job spreads 25% to 40% on identical",
+  "code. The one Linux job spreads 4.7%.",
+  "",
+  "So the shared 8% default was about right for python and badly wrong for",
+  "all four macOS jobs, where it sits far inside the noise and reports drift",
+  "that is the runner rather than the work.",
+  "",
+  "Two pairs came out tight: swift-unit 3.5% at one commit, legibility 3.6%",
+  "at another. That is the trap, not a reassurance. A tight pair licenses",
+  "exactly the false confidence it should prevent, which is why every figure",
+  "here is a floor and why no pair, however close, can lower one."
+ ],
+ "re_measure_with": "gh workflow run <workflow>.yml --ref main, several times, ONE AT A TIME because the concurrency group is keyed on the SHA and every pending run but the newest is cancelled. Then group by the run's headSha before comparing any two."
+}

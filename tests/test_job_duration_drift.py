@@ -57,12 +57,12 @@ def test_a_job_that_got_materially_slower_is_reported():
     costs more PER UNIT of work, so a fixture without one would be asserting
     about a reading the tool no longer makes.
     """
-    verdict = drift_of("python", _series([470, 476, 480, 478],
+    verdict = drift_of("changed", _series([470, 476, 480, 478],
                                              [525, 530, 535, 532]),
                        work=[2600] * 8)
 
     assert verdict.state is Drift.SLOWER
-    assert "python" in verdict.message, (
+    assert "changed" in verdict.message, (
         "a notice that does not name the job leaves the reader with nowhere "
         "to go (L80)")
 
@@ -73,7 +73,7 @@ def test_a_steady_job_is_not_reported():
     Without it the warning is equally satisfied by a rule that fires on
     everything, which is the failure mode that gets a check ignored.
     """
-    verdict = drift_of("python", _series([185, 190, 187, 192],
+    verdict = drift_of("changed", _series([185, 190, 187, 192],
                                          [188, 186, 191, 189]))
 
     assert verdict.state is Drift.STEADY
@@ -88,7 +88,7 @@ def test_ordinary_run_to_run_noise_does_not_fire():
 
     This is the case that decides whether anyone keeps reading the warnings.
     """
-    verdict = drift_of("python", _series([470, 476, 480, 478],
+    verdict = drift_of("changed", _series([470, 476, 480, 478],
                                              [475, 610, 477, 479]))
 
     assert verdict.state is Drift.STEADY, (
@@ -102,7 +102,7 @@ def test_a_job_that_got_faster_is_named_as_that():
     for the two issues it exists to serve, which are both changes whose whole
     purpose is to move this number (L11).
     """
-    verdict = drift_of("python", _series([520, 530, 525, 528],
+    verdict = drift_of("changed", _series([520, 530, 525, 528],
                                              [410, 405, 415, 408]),
                        work=[2600] * 8)
 
@@ -425,7 +425,7 @@ def test_a_single_step_name_still_works_as_a_bare_string():
 
 def test_a_job_given_more_work_for_proportionally_more_time_is_steady():
     """The case that produced the false reading, in reverse."""
-    verdict = drift_of("python",
+    verdict = drift_of("changed",
                        seconds=[300, 300, 300, 100, 100, 100],
                        work=[30, 30, 30, 10, 10, 10])
     assert verdict.state is Drift.STEADY, verdict.message
@@ -441,7 +441,7 @@ def test_a_job_doing_the_same_work_more_slowly_is_still_reported():
 
 
 def test_a_job_that_got_faster_at_the_same_work_is_reported_as_faster():
-    verdict = drift_of("swift-unit",
+    verdict = drift_of("changed",
                        seconds=[400, 400, 400, 600, 600, 600],
                        work=[2600] * 6)
     assert verdict.state is Drift.FASTER, verdict.message
@@ -467,7 +467,7 @@ def test_a_material_move_with_no_divisor_is_not_called_slower():
 def test_a_partial_work_series_does_not_normalise_half_the_window():
     """Some runs measured and some not is not a rate, and quietly dropping the
     unmeasured ones would shift which runs fall in each half (L288)."""
-    verdict = drift_of("python",
+    verdict = drift_of("changed",
                        seconds=[300, 300, 300, 100, 100, 100],
                        work=[30, 30, None, 10, 10, 10])
     assert verdict.state is Drift.NOT_NORMALISED, verdict.message
@@ -476,7 +476,7 @@ def test_a_partial_work_series_does_not_normalise_half_the_window():
 def test_a_zero_work_count_does_not_normalise():
     """A job that did nothing has no rate, and dividing by it would report an
     infinite one."""
-    verdict = drift_of("python",
+    verdict = drift_of("changed",
                        seconds=[300, 300, 300, 100, 100, 100],
                        work=[30, 30, 30, 0, 10, 10])
     assert verdict.state is Drift.NOT_NORMALISED, verdict.message
@@ -792,12 +792,17 @@ def test_a_job_with_a_measured_spread_is_judged_against_it():
     assert percent > MATERIAL_SHIFT, (
         "the measured spread is inside the shared default, so reading it "
         "changes nothing and this wiring is decoration")
-    assert "swift_suite_cost.json" in where
+    assert "ci_job_noise.json" in where
 
 
 def test_a_job_with_no_measured_spread_keeps_the_shared_default():
-    """A job with nothing recorded is not exempt, it falls back (L96)."""
-    assert check_job_durations.noise_floor("python") is None
+    """A job with nothing recorded is not exempt, it falls back (L96).
+
+    `changed` rather than `python`: python has a measured floor now (#1336),
+    and `changed` is the job that genuinely cannot be measured, because it runs
+    only on a pull request and dispatching guards.yml runs the full sweep.
+    """
+    assert check_job_durations.noise_floor("changed") is None
 
 
 def test_the_reading_that_prompted_this_now_reads_as_noise():
@@ -806,10 +811,10 @@ def test_the_reading_that_prompted_this_now_reads_as_noise():
     verdict = drift_of("swift-unit", [182.0] * 3 + [203.0] * 3, work=[1] * 6)
 
     assert verdict.state is Drift.INSIDE_THE_NOISE, verdict.message
-    assert "30%" in verdict.message, verdict.message
+    assert "40%" in verdict.message, verdict.message
     assert "nothing can be said about it either way" in verdict.message, (
         "the verdict reads as a finding rather than as a refusal to make one")
-    assert "swift_suite_cost.json" in verdict.message, (
+    assert "ci_job_noise.json" in verdict.message, (
         "the verdict does not say where its bar came from, so a reader cannot "
         "check it (L316)")
 
@@ -817,7 +822,7 @@ def test_the_reading_that_prompted_this_now_reads_as_noise():
 def test_the_same_reading_on_a_job_with_no_floor_still_fires():
     """A control: without the measured floor this shift IS material, so the
     test above is about the floor rather than about the numbers (L159)."""
-    verdict = drift_of("python", [182.0] * 3 + [203.0] * 3, work=[1] * 6)
+    verdict = drift_of("changed", [182.0] * 3 + [203.0] * 3, work=[1] * 6)
 
     assert verdict.state is Drift.FASTER, verdict.message
     assert "8% bar" in verdict.message, verdict.message
@@ -825,17 +830,17 @@ def test_the_same_reading_on_a_job_with_no_floor_still_fires():
 
 def test_a_shift_past_the_measured_floor_still_fires():
     """Raising the bar must not switch the detector off."""
-    verdict = drift_of("swift-unit", [100.0] * 3 + [300.0] * 3, work=[1] * 6)
+    verdict = drift_of("swift-unit", [100.0] * 3 + [500.0] * 3, work=[1] * 6)
 
     assert verdict.state is Drift.FASTER, verdict.message
-    assert "past the 30% bar" in verdict.message, verdict.message
+    assert "past the 40% bar" in verdict.message, verdict.message
 
 
 def test_an_unreadable_record_falls_back_rather_than_to_zero(tmp_path):
     """A floor of zero would make every reading material, which is the opposite
     of what a missing measurement should do (L42, L215)."""
     (tmp_path / "tests" / "fixtures").mkdir(parents=True)
-    (tmp_path / "tests" / "fixtures" / "swift_suite_cost.json").write_text("{}")
+    (tmp_path / "tests" / "fixtures" / "ci_job_noise.json").write_text("{}")
 
     assert check_job_durations.noise_floor("swift-unit", root=tmp_path) is None
 
@@ -843,8 +848,8 @@ def test_an_unreadable_record_falls_back_rather_than_to_zero(tmp_path):
 def test_a_record_naming_a_zero_spread_is_refused(tmp_path):
     """Zero is not a reading off a real runner, it is an empty record."""
     (tmp_path / "tests" / "fixtures").mkdir(parents=True)
-    (tmp_path / "tests" / "fixtures" / "swift_suite_cost.json").write_text(
-        '{"run_to_run_spread": {"spread_percent_at_least": 0}}')
+    (tmp_path / "tests" / "fixtures" / "ci_job_noise.json").write_text(
+        '{"jobs": {"swift-unit": {"spread_percent": 0}}}')
 
     assert check_job_durations.noise_floor("swift-unit", root=tmp_path) is None
 
@@ -858,16 +863,91 @@ def test_a_broken_record_is_told_from_a_job_nobody_measured(tmp_path):
     measured noise and the message would say it was nobody's fault.
     """
     (tmp_path / "tests" / "fixtures").mkdir(parents=True)
-    (tmp_path / "tests" / "fixtures" / "swift_suite_cost.json").write_text("{}")
+    (tmp_path / "tests" / "fixtures" / "ci_job_noise.json").write_text("{}")
 
     assert check_job_durations.unreadable_floor("swift-unit", root=tmp_path) == (
-        "tests/fixtures/swift_suite_cost.json")
+        "tests/fixtures/ci_job_noise.json")
     # A job nobody has measured has nothing to fail to read, so accusing it
     # would be a finding about every such job (L93).
-    assert check_job_durations.unreadable_floor("python", root=tmp_path) is None
+    assert check_job_durations.unreadable_floor("changed", root=tmp_path) is None
 
 
 def test_a_readable_record_reports_no_failure_to_read_it():
     """A positive control: without this, the check above is satisfied by the
     function always answering with a path (L159)."""
     assert check_job_durations.unreadable_floor("swift-unit") is None
+
+
+# --- a floor for every job that has one measured (#1336) ---------------------
+
+
+def test_every_macos_job_is_judged_against_its_own_measured_spread():
+    """The machine is the story: every macOS job spreads 25% to 40% on
+    identical code, so the shared 8% sits far inside the noise for all of
+    them and reports the runner rather than the work."""
+    for job in ("swift-unit", "macos",
+                "reference-frames (goldens)", "reference-frames (legibility)"):
+        floor = check_job_durations.noise_floor(job)
+        assert floor is not None, f"{job} has no measured floor"
+        percent, where = floor
+        assert percent > MATERIAL_SHIFT, (
+            f"{job}'s measured spread {percent:.0%} is inside the shared "
+            f"default, so reading it changes nothing")
+        assert "ci_job_noise.json" in where
+
+
+def test_the_two_reference_frames_jobs_keep_their_own_floors():
+    """They differ by 7 points and the matrix suffix is what tells them apart,
+    so a lookup that strips it would give both the wrong bar for one of them."""
+    goldens = check_job_durations.noise_floor("reference-frames (goldens)")
+    legibility = check_job_durations.noise_floor("reference-frames (legibility)")
+
+    assert goldens is not None and legibility is not None
+    assert goldens[0] != legibility[0], (
+        "both reference-frames jobs resolved to one floor, so the matrix "
+        "suffix was stripped and one of them is judged against the other's "
+        "noise")
+
+
+def test_the_linux_job_is_judged_against_a_floor_that_is_actually_tighter():
+    """python spreads 4.7%, so measuring it TIGHTENED the bar rather than
+    loosening it. Without this the change reads as nothing but permission."""
+    floor = check_job_durations.noise_floor("python")
+
+    assert floor is not None, "python has no measured floor"
+    assert floor[0] < MATERIAL_SHIFT, (
+        f"python's measured spread {floor[0]:.1%} is not tighter than the 8% "
+        "default, so the one job that could have narrowed the bar did not")
+
+
+def test_a_job_nobody_could_measure_keeps_the_shared_default():
+    """`changed` runs only on a pull request, so it cannot be dispatched and a
+    dispatch of guards.yml runs the full sweep instead. Named rather than
+    silently absent (L129)."""
+    assert check_job_durations.noise_floor("changed") is None
+    assert check_job_durations.unreadable_floor("changed") is None, (
+        "an unmeasurable job is being reported as a record that failed to "
+        "read, which is a different fact")
+
+
+def test_the_recorded_spreads_match_the_readings_they_came_from():
+    """Derived rather than asserted beside them, so a typo in either is caught
+    (L41, L70)."""
+    import json
+    record = json.loads(
+        (REPO_ROOT / "tests" / "fixtures" / "ci_job_noise.json").read_text())
+
+    for job, entry in record["jobs"].items():
+        seconds = entry["seconds"]
+        assert entry["runs"] == len(seconds), f"{job} miscounts its own runs"
+        assert entry["runs"] == len(entry["from_runs"]), (
+            f"{job} does not name one run id per reading, so a reading cannot "
+            f"be traced back and taken again (L316)")
+        spread = max(seconds) - min(seconds)
+        assert abs(spread - entry["spread_seconds"]) < 0.5, (
+            f"{job} records a spread that is not the difference between its "
+            f"own readings")
+        percent = spread / min(seconds) * 100
+        assert abs(percent - entry["spread_percent"]) < 0.2, (
+            f"{job} records {entry['spread_percent']}% against a computed "
+            f"{percent:.1f}%")
