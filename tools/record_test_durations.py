@@ -62,6 +62,7 @@ floor in seconds would have been crossed by four files with no test changing.
 from __future__ import annotations
 
 import json
+import statistics
 import os
 import re
 import subprocess
@@ -301,6 +302,65 @@ def measure(argv: list[str] | None = None,
     return dict(totals)
 
 
+#: How many times `--add` measures, before taking the median of each file.
+#:
+#: The fix #976 asked for. One reading under an unknown load is what the whole
+#: expensive/ordinary boundary rested on, and it moves: two consecutive full
+#: re-timings on this Mac with the same tests came out at 1071s and 1737s, a
+#: swing of 62%. The scale a partial add is put on is already a median across
+#: seven references for that reason, and it still ran 0.16 to 3.57 across them,
+#: so the median was doing real work on top of readings that were themselves
+#: single samples.
+#:
+#: Three, not more. A median needs an odd count to be a reading rather than an
+#: average of two, and three is the smallest that survives one pass landing
+#: under a burst of load. It is affordable because `--add` measures ONE new file
+#: beside seven references, not the suite: three passes of that is seconds, not
+#: the hour a triple full re-record would cost.
+ADD_PASSES = 3
+
+
+def measure_repeatedly(paths: list[str], passes: int = ADD_PASSES,
+                       run=None) -> dict[str, float]:
+    """The median reading for each file across several passes.
+
+    Per FILE rather than per pass, so one file having a bad moment in one pass
+    does not drag the others: a pass is not a unit anybody cares about, a file's
+    cost is.
+
+    A file missing from some passes is a REFUSAL rather than a median of what
+    came back. A test that ran twice out of three times measured something other
+    than its cost, and a quiet median over the two would look exactly like a
+    clean reading (L11, L98).
+    """
+    if passes < 1:
+        raise SystemExit(f"{passes} passes measures nothing. Nothing was written.")
+
+    # Resolved HERE rather than as a default argument, because a default is
+    # bound once when the function is defined: a test replacing `measure` on
+    # this module would be ignored, and the check that `--add` really repeats
+    # would run the whole suite three times instead (L196, L284).
+    run = run or measure
+    readings: list[dict[str, float]] = [run(paths=paths) for _ in range(passes)]
+
+    seen = [set(r) for r in readings]
+    everywhere = set.intersection(*seen) if seen else set()
+    missing = sorted(set.union(*seen) - everywhere) if seen else []
+    if missing:
+        raise SystemExit(
+            f"these did not report in all {passes} passes: {missing}. A file "
+            f"that ran some of the time measured something other than its "
+            f"cost, and a median over the passes it managed would read as a "
+            f"clean number. Nothing was written.")
+    if not everywhere:
+        raise SystemExit(
+            f"no file reported in all {passes} passes, so there is nothing to "
+            "take a median of. Nothing was written.")
+
+    return {name: statistics.median(r[name] for r in readings)
+            for name in sorted(everywhere)}
+
+
 def main(argv: list[str] | None = None) -> int:
     words = list(sys.argv[1:] if argv is None else argv)
 
@@ -334,9 +394,10 @@ def _add(paths: list[str]) -> int:
     record = json.loads(RECORD.read_text(encoding="utf-8"))
     stamped_at = datetime.now(timezone.utc).strftime("partial-%Y-%m-%dT%H:%MZ")
     print(f"measuring {len(paths)} file(s) beside "
-          f"{len(REFERENCE_FILES)} reference files already in the record")
+          f"{len(REFERENCE_FILES)} reference files already in the record, "
+          f"{ADD_PASSES} times each (#976)")
 
-    totals = measure(paths=list(paths) + list(REFERENCE_FILES))
+    totals = measure_repeatedly(list(paths) + list(REFERENCE_FILES))
     grown = added(record, totals, run=stamped_at)
     _write(grown)
 

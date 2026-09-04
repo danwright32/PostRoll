@@ -79,8 +79,15 @@ RECORD = REPO_ROOT / "tests" / "fixtures" / "test_file_durations.json"
 #:
 #: Those four are 729s of that run, 57% of it, so the saving is still where it
 #: always was. `test_generate_media_friday_clips.py` moves back into the fast
-#: run, which is the tenth time that one file has decided this, and #976 is
-#: where that recurrence is dealt with rather than absorbed again here.
+#: run, which is the tenth time that one file has decided this.
+#:
+#: #976 dealt with that recurrence at its source rather than absorbing it here
+#: again. Ranking (#1196) removed the threshold a file could sit near, and this
+#: is the other half: a file added to the record used to be measured ONCE and
+#: scaled onto the record's run by a median of seven reference ratios that
+#: themselves ran 0.16 to 3.57. `--add` takes three readings and the median of
+#: each file now, so a single pass landing under a burst of load can no longer
+#: reorder the boundary on its own.
 #:
 #: `test_fast_subset_stays_honest.py` holds the boundary open: the fourth file
 #: has to stay clearly dearer than the fifth, or two files a hair apart would
