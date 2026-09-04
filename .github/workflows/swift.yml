@@ -104,6 +104,14 @@ jobs:
     # it matches what the macOS job in tests.yml already carries for work of the
     # same kind.
     timeout-minutes: 45
+    # Enough to file the one issue this job opens when it goes red (#1011).
+    #
+    # At JOB level rather than on the step, because a step's own `permissions:`
+    # is not a thing GitHub honours: writing it there reads as a restriction and
+    # applies none.
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@v5
 
@@ -348,6 +356,26 @@ jobs:
       # anything about the job (L102, L331). It reads this step's own
       # conclusion instead, under one name shared by every gated job, so there
       # is no per-workflow table to keep in step (L96).
+      # A red run here reaches nobody otherwise (#1011).
+      #
+      # On a pull request a failure here blocks the merge and cannot be missed. On a PUSH it is after the merge has landed and gates nothing, which is the case this reports. A run somebody dispatched by hand is one somebody is watching, so it is not reported either.
+      #
+      # It speaks only on a FAILURE. A notice on every green run is what teaches
+      # a person to skip the whole list (L36). It also asks the tree gate, because every step after that gate has to: a job whose work was skipped as already proved has nothing that could have failed, and a step ignoring the gate runs on every merge whatever the gate decided.
+      #
+      # A step rather than a job, because a new job is a new CHECK NAME and
+      # tests/test_wait_for_checks.py calibrates the names it waits for against
+      # a recorded reply from a real pull request (L305).
+      - name: Say so if this run went red
+        if: failure() && github.event_name == 'push' && steps.already.outputs.run != 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python tools/say_when_ci_goes_red.py \
+            --workflow swift.yml \
+            --job "swift-unit" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
       - name: Confirm this job ran its checks
         # `!cancelled()` rather than nothing, so a job whose checks went RED
         # still counts as time spent. Dropping a red run would hide a job
@@ -503,6 +531,14 @@ jobs:
             files: tests/test_golden_frames.py tests/test_thursday_reel_legibility.py tests/test_frame_names_its_show.py
           - name: legibility
             files: tests/test_closing_crossfade_legibility.py tests/test_frame_legibility.py tests/test_slider_program_plate.py tests/test_phone_safe_area.py tests/test_gallery_alignment.py tests/test_story_title_clamp.py
+    # Enough to file the one issue this job opens when it goes red (#1011).
+    #
+    # At JOB level rather than on the step, because a step's own `permissions:`
+    # is not a thing GitHub honours: writing it there reads as a restriction and
+    # applies none.
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@v5
 
@@ -670,6 +706,26 @@ jobs:
       # anything about the job (L102, L331). It reads this step's own
       # conclusion instead, under one name shared by every gated job, so there
       # is no per-workflow table to keep in step (L96).
+      # A red run here reaches nobody otherwise (#1011).
+      #
+      # Same as the job above: on a push this runs after the merge and gates nothing.
+      #
+      # It speaks only on a FAILURE. A notice on every green run is what teaches
+      # a person to skip the whole list (L36). It also asks the tree gate, because every step after that gate has to: a job whose work was skipped as already proved has nothing that could have failed, and a step ignoring the gate runs on every merge whatever the gate decided.
+      #
+      # A step rather than a job, because a new job is a new CHECK NAME and
+      # tests/test_wait_for_checks.py calibrates the names it waits for against
+      # a recorded reply from a real pull request (L305).
+      - name: Say so if this run went red
+        if: failure() && github.event_name == 'push' && steps.already.outputs.run != 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python tools/say_when_ci_goes_red.py \
+            --workflow swift.yml \
+            --job "reference-frames" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
       - name: Confirm this job ran its checks
         # `!cancelled()` rather than nothing, so a job whose checks went RED
         # still counts as time spent. Dropping a red run would hide a job
