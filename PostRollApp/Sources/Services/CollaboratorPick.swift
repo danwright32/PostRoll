@@ -98,9 +98,16 @@ enum CollaboratorPick {
         var fillingLine: String {
             "Filling the remaining slots, \(notInIt): "
         }
+        /// Where being in it IS, as a phrase a sentence can put "not being"
+        /// in front of. `notInIt` above reads correctly after a comma and
+        /// wrongly after "for being", which is how "for being not in the first
+        /// photo" reached CAPTIONS.txt (L21).
+        var place: String {
+            self == .firstPhoto ? "in the first photo" : "on screen in the reel"
+        }
         /// Said of the one account the rule alone held back.
         var leftOutLine: String {
-            "Left out only for being \(notInIt), swap in by hand if the reach "
+            "Left out only for not being \(place), swap in by hand if the reach "
             + "is worth it: "
         }
         var leftOutHeading: String {
@@ -986,24 +993,25 @@ enum CollaboratorPick {
         // cannot put the post on a grid anybody can see, so the slot is wasted
         // however good the figures are.
         if a.isPrivate != b.isPrivate { return !a.isPrivate }
-        // What actually happened beats what we assume will (#986). The first
-        // photo bias below exists PRECISELY because somebody not in the visible
-        // image usually declines, which is an assumption; this is a record of
-        // what an account did, so it wins wherever the two disagree.
-        //
-        // Above the event-account key too, so a person who keeps refusing falls
-        // below an organisation that does not. That only ever reorders accounts
-        // with a recorded history: with both counts zero the comparison is
-        // false, which is every account in the book today.
-        if a.refuses != b.refuses { return !a.refuses }
         // The event's own account under the people, and over a private one
-        // (#985). The order of these two keys is the whole decision: a private
-        // account cannot put the post in front of anybody new at all, while an
-        // org can, so private stays outermost and this sits between it and the
-        // people who are actually in the pictures.
+        // (#985). A private account cannot put the post in front of anybody new
+        // at all, while an org can, so private stays outermost and this sits
+        // between it and the people who are actually in the pictures.
+        //
+        // ABOVE the refusal key below, corrected on 2026-09-03. #986 shipped it
+        // the other way round, on the reasoning that a measured refusal should
+        // beat an assumed preference. Dan's answer is that the org staying under
+        // the people is his rule rather than a guess the history may overturn:
+        // an invite puts the post on somebody's grid, and he would rather ask a
+        // person who has declined before than an organisation who has not.
         if a.candidate.isEventAccount != b.candidate.isEventAccount {
             return !a.candidate.isEventAccount
         }
+        // What actually happened beats what we assume will (#986). The first
+        // photo bias below exists PRECISELY because somebody not in the visible
+        // image usually declines, which is an assumption; this is a record of
+        // what an account did, so it wins wherever those two disagree.
+        if a.refuses != b.refuses { return !a.refuses }
         if respectingFirstPhoto, a.candidate.inFirstPhoto != b.candidate.inFirstPhoto {
             return a.candidate.inFirstPhoto
         }
