@@ -47,6 +47,8 @@ from pathlib import Path
 
 import pytest
 
+import json
+from tools import record_test_durations
 from tools.record_test_durations import (
     ADD_PASSES,
     OWN_GUARD_CLASSNAME,
@@ -739,3 +741,33 @@ def test_adding_a_file_actually_goes_through_the_repeated_measurement(monkeypatc
         f"--add measured {len(passes)} time(s), so the median is over one "
         f"reading and the single sample still decides the boundary")
     assert json.loads(record.read_text())["seconds"]["test_brand_new_thing.py"]
+
+
+def test_the_recorder_writes_how_many_passes_each_figure_came_from(tmp_path,
+                                                                   monkeypatch):
+    """The sample size comes from the WRITER, not from a hand edit (#1328).
+
+    A hand edit does not survive: `_write` rewrites the whole record, so adding
+    one test file erases anything a person put beside the durations (L379).
+    """
+    record = tmp_path / "test_file_durations.json"
+    monkeypatch.setattr(record_test_durations, "RECORD", record)
+
+    record_test_durations._write({"seconds": {"test_a.py": 1.0}, "measured": {}})
+
+    written = json.loads(record.read_text())
+    assert written["passes"] == record_test_durations.ADD_PASSES
+    assert "MEDIAN" in written["_sample"]
+    # The durations themselves are untouched by the addition.
+    assert written["seconds"] == {"test_a.py": 1.0}
+
+
+def test_the_recorded_sample_note_names_the_real_pass_count(monkeypatch):
+    """A note saying "three passes" beside a constant of four is worse than no
+    note, because it reads as a measurement (L210)."""
+    monkeypatch.setattr(record_test_durations, "ADD_PASSES", 9)
+
+    said = record_test_durations.SAMPLE_NOTE.format(
+        passes=record_test_durations.ADD_PASSES)
+
+    assert "9 measured passes" in said

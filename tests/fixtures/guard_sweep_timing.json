@@ -5,6 +5,13 @@
   "entries": 469,
   "shards": 4,
   "deadline_seconds": 1800,
-  "shard_seconds": [1783, 1772, 1590, 1600],
-  "re_measure_with": "read the `Re-prove this shard of the guards` step of the newest scheduled guards.yml run, and count tests/fixtures/guard_mutations at its commit"
+  "shard_seconds": [
+    1783,
+    1772,
+    1590,
+    1600
+  ],
+  "re_measure_with": "read the `Re-prove this shard of the guards` step of the newest scheduled guards.yml run, and count tests/fixtures/guard_mutations at its commit",
+  "runs": 1,
+  "_sample": "One run, read off run 33329633579. The four shard_seconds are four shards of that single run, not four readings (#1328)."
 }

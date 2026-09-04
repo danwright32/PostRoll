@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import argparse
 import enum
+import json
 import os
 import re
 import statistics
@@ -69,6 +70,63 @@ WORK_STEPS = (PROOF_STEP, WORK_STEP)
 #: not (L172).
 MATERIAL_SHIFT = 0.08
 
+#: Where a job's own MEASURED run to run noise is recorded, when it has one.
+#:
+#: The 8% above was derived from two week-long shifts, which is a reasonable way
+#: to pick a bar and is not the same as measuring what the runner does. On
+#: 2026-09-04 that measurement was taken for the Swift suite: two runs of
+#: IDENTICAL code at commit 8ea7b53448cf came out at 156.1s and 203.7s, 30.5%
+#: apart. On that same day this tool reported `swift-unit: faster, -11%`, which
+#: is a reading well inside a spread the runner produces on its own (#1329).
+#:
+#: So a job with a measured floor is judged against that floor rather than
+#: against the shared default, and the message says which bar it used. Read from
+#: the fixture rather than copied here, so the two cannot drift (L41), and a job
+#: with nothing recorded keeps the default rather than being exempted (L96).
+NOISE_FLOORS = {
+    "swift-unit": ("tests/fixtures/swift_suite_cost.json", "run_to_run_spread"),
+}
+
+
+def noise_floor(job: str, root=None) -> tuple[float, str] | None:
+    """A job's measured run to run spread, and where it was measured, or None.
+
+    None for a job with nothing recorded. A recorded floor that cannot be READ
+    is a different fact and gets `unreadable_floor` below, because both fall
+    back to the same threshold but only one of them means "nobody has measured
+    this job", and a message saying so when a record exists and is broken is a
+    claim the check never made (L11).
+
+    Falling back rather than raising is deliberate: a missing or malformed
+    record must leave the shared default in place rather than produce a floor
+    of zero, which would make every reading material (L42, L215).
+    """
+    where = NOISE_FLOORS.get(work_family(job))
+    if where is None:
+        return None
+    path = (Path(root) if root is not None else REPO_ROOT) / where[0]
+    try:
+        block = json.loads(path.read_text())[where[1]]
+        floor = float(block["spread_percent_at_least"]) / 100
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if floor <= 0:
+        return None
+    return floor, f"{where[0]} {where[1]}"
+
+
+def unreadable_floor(job: str, root=None) -> str | None:
+    """Where a job's floor SHOULD have been read from, when it could not be.
+
+    Only for a job this repository claims to have measured. A job absent from
+    NOISE_FLOORS has nothing to fail to read, and reporting one would be an
+    accusation about every job nobody has measured (L11, L93).
+    """
+    where = NOISE_FLOORS.get(work_family(job))
+    if where is None or noise_floor(job, root=root) is not None:
+        return None
+    return where[0]
+
 #: The fewest runs that can be split into two halves and still say anything.
 #: Three a side: two would make a median a mean of two numbers, which one slow
 #: runner moves as much as a real regression.
@@ -96,6 +154,15 @@ class Drift(enum.Enum):
     #: caveat, because a caveat in the second sentence is read as a hedge on a
     #: verdict already given, and this is not a verdict.
     NOT_NORMALISED = "not normalised"
+    #: The shift is smaller than this job's own MEASURED run to run spread, so
+    #: nothing can be said about it either way (#1329).
+    #:
+    #: Its own state rather than a STEADY, because those are different facts and
+    #: a reader cannot tell them apart otherwise: STEADY means the job did not
+    #: move, this means the instrument cannot see whether it did. Folding them
+    #: would make the Swift job report "steady" forever, since its measured
+    #: spread is 30.5% and almost nothing clears that (L11, L98).
+    INSIDE_THE_NOISE = "inside the noise"
 
     @property
     def exit_code(self) -> int:
@@ -332,11 +399,35 @@ def drift_of(job: str, seconds: list[float],
     moved = (f"{older * scale:.0f} to {recent * scale:.0f}{per} ({shift:+.0%})"
              + (f", on {counts}" if counts else ""))
 
-    if abs(shift) < MATERIAL_SHIFT:
+    measured = noise_floor(job)
+
+    if measured is not None:
+        floor, where = measured
+        if abs(shift) < floor:
+            return Verdict(
+                Drift.INSIDE_THE_NOISE,
+                f"{job}: {moved}, which is inside the {floor:.0%} this runner "
+                f"produces on IDENTICAL code ({where}), so nothing can be said "
+                f"about it either way. To claim a real change here, take "
+                f"several runs per arm and compare the medians, or use a "
+                f"measure that is not wall clock (#1329)")
+
+    if measured is not None:
+        bar, why = measured
+    else:
+        broken = unreadable_floor(job)
+        bar = MATERIAL_SHIFT
+        why = (f"{broken} records a spread for this job but it could not be "
+               f"read, so the shared default is standing in and the bar below "
+               f"is NOT this runner's measured noise"
+               if broken else
+               "no measured spread for this job, so the shared default")
+
+    if abs(shift) < bar:
         return Verdict(
             Drift.STEADY,
-            f"{job}: {moved}, inside the {MATERIAL_SHIFT:.0%} that ordinary "
-            f"run to run variation covers")
+            f"{job}: {moved}, inside the {bar:.0%} that ordinary run to run "
+            f"variation covers ({why})")
 
     if rates is None:
         return Verdict(
@@ -348,13 +439,13 @@ def drift_of(job: str, seconds: list[float],
     if shift > 0:
         return Verdict(
             Drift.SLOWER,
-            f"{job}: SLOWER, {moved}. The work is divided out, so this is the "
-            "job costing more per unit rather than the week bringing bigger "
-            "changes")
+            f"{job}: SLOWER, {moved}, past the {bar:.0%} bar ({why}). The "
+            "work is divided out, so this is the job costing more per unit "
+            "rather than the week bringing bigger changes")
 
     return Verdict(
         Drift.FASTER,
-        f"{job}: faster, {moved}")
+        f"{job}: faster, {moved}, past the {bar:.0%} bar ({why})")
 
 
 def did_its_work(job: dict, work_step: str | Iterable[str] | None) -> bool:
