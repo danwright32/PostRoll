@@ -38,6 +38,8 @@ from pathlib import Path
 
 import pytest
 
+from source_text import without_prose
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = REPO_ROOT / "tools" / "propose_recorded_change.sh"
 
@@ -364,7 +366,10 @@ def test_the_gh_arguments_are_real(tmp_path):
     for flag in ("--head", "--state", "--json"):
         assert flag in gh.stdout, f"gh pr list has no {flag}"
 
-    body = SCRIPT.read_text()
+    # Through without_prose, because the paragraph at the top of the script
+    # explains this exact call, and a guard that reads raw text is answered by
+    # the explanation as readily as by the code (L103, L135).
+    body = without_prose(SCRIPT)
     assert 'pr list --head "${branch}" --state open --json number' in body, (
         "the script no longer asks gh the question these flags were checked "
         "for, so this test is guarding a call that is not made")
