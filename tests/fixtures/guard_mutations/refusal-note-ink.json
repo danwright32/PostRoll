@@ -3,6 +3,6 @@
   "file": "PostRollApp/Sources/Views/SharedChrome.swift",
   "find": ".fixedSize(horizontal: false, vertical: true)\n        }\n        .foregroundStyle(PaintedSurfaces.tertiaryText)",
   "replace": ".fixedSize(horizontal: false, vertical: true)\n        }\n        .foregroundStyle(Color.cream)",
-  "test": "PostRollTests/BannerLegibilityTests/testEveryBannerActuallyDrawsItsMessage",
-  "breaks": "RefusalNote draws cream on cream, the invisible-type defect that has shipped three times (#389)"
+  "test": "PostRollTests/BannerSweepA/testEveryBannerActuallyDrawsItsMessage",
+  "breaks": "RefusalNote draws cream on cream, the invisible-type defect that has shipped three times (#389) The sweep moved to BannerSweep in #1257: it was one test in BannerLegibilityTests holding 30.7s of the suite's test bodies, and a class can never finish faster than its longest test. Slice A rather than the whole sweep, because a mutation only has to be caught once and running all three would prove the same thing three times."
 }
