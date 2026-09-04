@@ -543,7 +543,7 @@ struct CaptionReviewView: View {
                     LongRunIndicator(label: "Regenerating captions…",
                                      startedAt: captionWork.startedAt(event.id, .regenerateWeek),
                                      eventID: event.id,
-                                     estimate: "~3 to 6 min",
+                                     estimate: RunEstimate.captionWeek.text,
                                      onStop: { captionWork.stop(event.id, .regenerateWeek) },
                                      isStopping: captionWork.isStopping(event.id, .regenerateWeek))
                         .padding(Spacing.xl)
@@ -552,7 +552,7 @@ struct CaptionReviewView: View {
                                      startedAt: graphics.startedAt(event.id),
                                      eventID: event.id,
                                      run: .media,
-                                     estimate: "~1 min",
+                                     estimate: RunEstimate.storyGraphics.text,
                                      onStop: { graphics.stop(event.id) },
                                      isStopping: graphics.isStopping(event.id))
                         .padding(Spacing.xl)

@@ -349,7 +349,7 @@ struct BlogSection: View {
                             progress: (eventID.map {
                                 RevisionPanel.Progress(
                                     eventID: $0, startedAt: revisionStartedAt,
-                                    run: .blog, estimate: "~2 to 5 min",
+                                    run: .blog, estimate: RunEstimate.blogRevision.text,
                                     onStop: onStop(.reviseBlog),
                                     isStopping: isStopping(.reviseBlog))
                             }),
@@ -380,7 +380,7 @@ struct BlogSection: View {
                                             startedAt: photoSwapStartedAt,
                                             eventID: eventID,
                                             run: .blogPhotos,
-                                            estimate: "~1 to 3 min",
+                                            estimate: RunEstimate.blogPhotoSwap.text,
                                             onStop: onStop(.swapBlogPhotos),
                                             isStopping: isStopping(.swapBlogPhotos))
                                     } else {

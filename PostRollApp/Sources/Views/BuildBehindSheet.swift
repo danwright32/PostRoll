@@ -121,7 +121,7 @@ struct BuildBehindSheet: View {
             LongRunIndicator(label: "Updating PostRoll",
                              startedAt: appState.updateStartedAt,
                              stepFile: appState.updateProgressFile,
-                             estimate: "usually 3 to 6 min")
+                             estimate: RunEstimate.appUpdate.text)
 
             Text("The tests run first, so this takes a few minutes. PostRoll "
                  + "will close and reopen itself once the new version is "
