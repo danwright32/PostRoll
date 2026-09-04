@@ -1,0 +1,8 @@
+{
+  "name": "a-symbol-name-that-draws-nothing",
+  "file": "PostRollApp/Sources/Views/EventListView.swift",
+  "find": "Image(systemName: \"archivebox\")",
+  "replace": "Image(systemName: \"archivebox.fil\")",
+  "test": "PostRollTests/SymbolNamesResolveTests/testEverySymbolTheAppNamesResolves",
+  "breaks": "an SF Symbol name that does not resolve draws NOTHING. Image(systemName:) renders empty and raises no error, and the legibility checks measure ink over a surface, so a banner keeps its fill, its border and its words and the reading barely moves: a misspelled icon is invisible to every other check in the suite (#1215, L141)"
+}
