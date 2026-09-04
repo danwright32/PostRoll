@@ -409,6 +409,17 @@ enum AppPaths {
     struct ImportCopyFailure: Error, Equatable {
         let fileName: String
         let message: String
+        /// The SOURCE was not there, so there was nothing to copy (#971).
+        ///
+        /// Its own state rather than one more message nobody can branch on. A
+        /// file that is gone and a copy that could not be made need opposite
+        /// responses: the first belongs to the missing-media flow and must not
+        /// be re-attempted every launch, the second is worth retrying and worth
+        /// telling somebody about (L11, L35).
+        ///
+        /// Defaulted, so the call sites that construct a real copy failure are
+        /// unchanged and cannot accidentally claim this one.
+        var sourceIsMissing: Bool = false
     }
 
 
@@ -427,6 +438,21 @@ enum AppPaths {
         of url: URL, into dir: URL, storageRoot: URL = AppPaths.root
     ) -> Result<URL, ImportCopyFailure> {
         if isInside(url, root: storageRoot) { return .success(url) }
+        // Before ANY work (#971). Measured on the live store on 2026-08-29,
+        // 1,514 stored paths point at files that are no longer there, and each
+        // one cost a createDirectory, a destination check, a doomed copyItem
+        // and an NSLog on every cold launch, on the main thread before the
+        // first frame. None of it could ever succeed.
+        //
+        // Reported as its own state rather than as a copy failure, because the
+        // two need opposite responses and the caller has to be able to tell
+        // them apart (L11).
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            return .failure(ImportCopyFailure(
+                fileName: url.lastPathComponent,
+                message: "the file is no longer at \(url.path)",
+                sourceIsMissing: true))
+        }
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var dest = dir.appendingPathComponent(url.lastPathComponent)
         if FileManager.default.fileExists(atPath: dest.path) {

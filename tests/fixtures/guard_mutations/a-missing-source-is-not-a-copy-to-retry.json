@@ -1,0 +1,8 @@
+{
+  "name": "a-missing-source-is-not-a-copy-to-retry",
+  "file": "PostRollApp/Sources/Services/AppPaths.swift",
+  "find": "        guard FileManager.default.fileExists(atPath: url.path) else {",
+  "replace": "        guard true else {",
+  "test": "PostRollTests/MediaReclaimTests/testAMissingSourceIsNotAttemptedAsACopy",
+  "breaks": "every cold launch attempts a copy of every stored path whose file is gone, creating the destination folder, checking it, running a doomed copyItem and logging it, on the main thread before the first frame. Measured on the live store 2026-08-29 that is 1,514 of them, and the cost grows with every dead reference that accumulates (#971, L47)"
+}
