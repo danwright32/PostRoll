@@ -171,6 +171,52 @@ final class CollaboratorPickForDayTests: XCTestCase {
                        "the literal is still there to be drawn on a reel")
     }
 
+    func testTheSwapLineReadsAsEnglish() {
+        // Caught by reading the block cold rather than by any test (L21). The
+        // reel wording change built this sentence from the "not in the first
+        // photo" phrase, which reads correctly in the fallbacks line above it
+        // and produces "for being not in the first photo" here.
+        for kind in [CollaboratorPick.MembershipKind.firstPhoto, .onScreen] {
+            XCTAssertFalse(kind.leftOutLine.contains("being not"),
+                           "reads as \(kind.leftOutLine)")
+            XCTAssertTrue(kind.leftOutLine.contains("not being"),
+                          "reads as \(kind.leftOutLine)")
+        }
+    }
+
+    func testAPersonWhoRefusesStillOutranksTheEventAccount() {
+        // Dan's call on 2026-09-03, correcting the order I shipped in #986.
+        // The organisation stays under the people even against somebody with a
+        // record of declining: an invite puts the post on their grid, and that
+        // preference is his rule rather than something the history overrides.
+        var refuser = stats(1_000, 50, 5)
+        refuser.declinedInvites = 3
+        var event = carouselEvent()
+        event.eventHandles = "@dciny"
+        var wed = event.days[DayName.wednesday.rawValue]!
+        let photos = wed.photoPaths
+        wed.photoTags = [photos[0].absoluteString: ["refuser"],
+                         photos[1].absoluteString: ["other1", "other2", "other3", "other4"]]
+        event.days[DayName.wednesday.rawValue] = wed
+        let table = ["refuser": refuser,
+                     "other1": stats(900, 40, 4), "other2": stats(900, 30, 3),
+                     "other3": stats(900, 20, 2), "other4": stats(900, 10, 1),
+                     "dciny": stats(50_000, 2_500, 250)]
+
+        let result = CollaboratorPick.suggest(
+            event: event, day: .wednesday, preset: .balanced,
+            stats: { table[AccountBook.key($0)] }, asOf: now)
+        let order = result.suggested.map(\.handle)
+
+        // Five people for five slots, so the org takes none of them however
+        // its figures compare. Before this order was corrected the refuser was
+        // cut and the org took the slot instead.
+        XCTAssertTrue(order.contains("refuser"), order.description)
+        XCTAssertFalse(order.contains("dciny"),
+                       "the event's own account overtook somebody in the photos "
+                       + "because that person has declined before: \(order)")
+    }
+
     // MARK: - The event's own accounts (#985)
     //
     // On a collage carousel the pool was only the people tagged in that day's
