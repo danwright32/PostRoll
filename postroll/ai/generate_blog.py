@@ -72,6 +72,7 @@ from .blog_photo_stamps import photo_stamps
 from .blog_repair import deadline_from, repair_alt_text
 from .repair_log import RepairLog
 from .blog_quality import (check_blog_targeted, filenames_used_by, finding_entry,
+                           outside_markers,
                            refuse_colliding_filenames,
                            repair_marker_filenames,
                            repair_marker_placement)
@@ -1464,7 +1465,16 @@ def _fix_wrong_names(body: str, program: dict[str, Any]) -> str:
         )
         return f"{correct} {last}"
 
-    return _NAME_PAIR_RE.sub(_repl, body)
+    # Prose spans only. Blog filenames are named after the show and the venue,
+    # so they are full of capitalised word pairs, and a performer sharing a
+    # surname with one of those words had the FILENAME rewritten into a file
+    # that does not exist (#975). The alt text is skipped for the same reason:
+    # it is judged against the photograph, not against the program.
+    #
+    # `_repl` reads `body` for its own before/after guards, and that stays the
+    # whole body deliberately: a capitalised word on the far side of a marker
+    # is still evidence the pair is part of a longer run.
+    return outside_markers(body, lambda span: _NAME_PAIR_RE.sub(_repl, span))
 
 
 # --- Per-paragraph contraction backstop ------------------------------------
