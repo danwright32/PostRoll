@@ -690,12 +690,19 @@ final class AppState {
         // picked from ~/Downloads/~/Desktop before the import-copy fix) into the
         // app's folder, so collage edits and exports stop re-triggering the
         // macOS permission prompt on every interaction.
-        if MediaReclaim.reclaim(events: &events,
-                                photosDir: layout.photosDir,
-                                audioDir: layout.audioDir,
-                                clipsDir: layout.clipsDir,
-                                storageRoot: layout.root) {
-            dirty = true
+        let reclaimed = MediaReclaim.reclaim(events: &events,
+                                             photosDir: layout.photosDir,
+                                             audioDir: layout.audioDir,
+                                             clipsDir: layout.clipsDir,
+                                             storageRoot: layout.root)
+        if reclaimed.changed { dirty = true }
+        // Said once per load rather than swallowed (#971). A repair that can
+        // never succeed and reports nothing reads exactly like one with
+        // nothing to do (L98). Not a warning: `~/Downloads` is a working
+        // folder, a file can come back, and MissingMediaScan is where a person
+        // acts on these.
+        if reclaimed.unreachable > 0 {
+            NSLog("MediaReclaim: \(reclaimed.unreachable) stored media paths point at files that are not on disk")
         }
 
         if dirty { persist() }
