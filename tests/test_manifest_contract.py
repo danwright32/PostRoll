@@ -15,9 +15,14 @@ read something nobody sends.
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 
 from bridge_payload_keys import CONTRACT_PATH, load_contract, manifest_reads_from_file
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 MANIFESTS = {k: v for k, v in (load_contract().get("manifests") or {}).items()
              if not k.startswith("_")}
@@ -124,3 +129,94 @@ def test_the_required_keys_are_genuinely_required_on_the_python_side():
                         f"its absence is a crash, but the contract calls it "
                         f"conditional. One of the two is wrong."
                     )
+
+# ── every sender has an entry ────────────────────────────────────────────────
+#
+# The gap #1187 came through. Nothing noticed that `runBlogRepairRetry` sent a
+# manifest no contract entry described, so the guard above did not look at that
+# path at all, and adding `event_id` in #1162 was caught for `week`,
+# `blog_revision` and `blog_photo_swap` while passing silently there.
+#
+# A guard is only as wide as its hand written registry (L96), and the fix for
+# that is never another hand written list: it is enumerating the subjects from
+# the code and requiring each to be declared (L247). The enumeration here is
+# every function in PythonBridge.swift that hands Python a `--manifest`, which
+# is the state that makes a function a sender, rather than a naming convention
+# a new one might not follow.
+
+BRIDGE = REPO_ROOT / "PostRollApp" / "Sources" / "Services" / "PythonBridge.swift"
+
+#: A sender that deliberately has no contract entry, and why.
+#:
+#: Empty, and that is the current truth rather than a placeholder. An entry
+#: here carries the REASON, because an exclusion with no reason is evidence
+#: nobody reasoned about it (L233).
+SENDERS_WITHOUT_A_CONTRACT: dict[str, str] = {}
+
+
+def swift_functions() -> dict[str, str]:
+    """Every function in PythonBridge.swift, by name, with its body.
+
+    Read from the source rather than listed, so a sender added later is a
+    subject of this check on the day it lands (L96, L247).
+    """
+    declaration = re.compile(r"^    (?:nonisolated )?(?:static )?func (\w+)")
+    bodies: dict[str, list[str]] = {}
+    current: str | None = None
+    for line in BRIDGE.read_text(encoding="utf-8").splitlines():
+        found = declaration.match(line)
+        if found:
+            current = found.group(1)
+            bodies.setdefault(current, [])
+        elif current:
+            bodies[current].append(line)
+    return {name: "\n".join(body) for name, body in bodies.items()}
+
+
+def manifest_senders() -> set[str]:
+    """The functions that hand Python a `--manifest`.
+
+    That state is what makes a function a sender, rather than a naming
+    convention a new one might not follow (L247).
+    """
+    return {name for name, body in swift_functions().items()
+            if "--manifest" in body}
+
+
+def test_the_enumeration_finds_the_senders_it_is_supposed_to():
+    """The positive control. A regex that matched nothing would report every
+    sender as declared and this whole section would guard nothing (L100, L98)."""
+    senders = manifest_senders()
+
+    assert len(senders) >= 10, (
+        f"only {len(senders)} manifest senders were found in {BRIDGE.name}, "
+        f"which is fewer than the app is known to have: {sorted(senders)}")
+    assert "runWeekGeneration" in senders and "runBlogRevision" in senders
+
+
+@pytest.mark.parametrize("sender", sorted(manifest_senders()))
+def test_every_manifest_sender_is_described_by_the_contract(sender: str):
+    """An entry describes a sender by naming either the sender itself or the
+    builder it assembles the manifest with, because the contract anchors on
+    whichever of the two is the one pure function (#266, #270). Both are read
+    off the source rather than assumed, so an entry naming a function that has
+    been renamed away stops describing anything and fails here."""
+    declared = {
+        (entry.get("swift") or "").split(".")[-1]
+        for entry in MANIFESTS.values()
+    }
+    body = swift_functions().get(sender, "")
+    described = {name for name in declared
+                 if name == sender or f"{name}(" in body}
+
+    if sender in SENDERS_WITHOUT_A_CONTRACT:
+        pytest.skip(f"deliberately not described: "
+                    f"{SENDERS_WITHOUT_A_CONTRACT[sender]}")
+
+    assert described, (
+        f"PythonBridge.{sender} sends Python a manifest and no entry under "
+        f"`manifests` in {CONTRACT_PATH.name} describes it, so the guard does "
+        f"not look at that path at all. A key the app stops sending there is "
+        f"silently replaced by Python's own default and generation carries on "
+        f"producing something subtly different (#1187, L96). Add the entry, or "
+        f"add it to SENDERS_WITHOUT_A_CONTRACT with a written reason.")

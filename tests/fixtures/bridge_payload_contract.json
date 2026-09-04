@@ -1150,6 +1150,31 @@
         }
       }
     },
+    "blog_repair_retry": {
+      "_what": "Retrying the alt text repairs a blog repair pass could not finish (#1162).",
+      "swift": "PythonBridge.buildBlogRepairRetryManifest",
+      "python": [
+        {
+          "module": "postroll/ai/retry_blog_repair.py",
+          "function": "main",
+          "variable": "m"
+        }
+      ],
+      "keys": {
+        "body": "always",
+        "markers": "always",
+        "photo_paths": "always",
+        "event_id": {
+          "conditional": "Sent only when the retry knows its event, which both callers do. Which post this is, so the repair journal's records are shown against it and no other (#1162)."
+        },
+        "venue": {
+          "conditional": "Sent only when the retry knows its event. Prose context for the alt text being rewritten; Python defaults it to an empty string without one."
+        },
+        "program": {
+          "conditional": "Sent when the retry knows its event AND that event has OCR data, so a blog whose programme was never scanned can still have its alt text retried."
+        }
+      }
+    },
     "analytics": {
       "_what": "Reading the Instagram export to find what performed.",
       "swift": "PythonBridge.runAnalytics",
