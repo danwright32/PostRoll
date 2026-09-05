@@ -62,27 +62,7 @@ jobs:
     env:
       RECORD_UPDATE_TOKEN: ${{ secrets.RECORD_UPDATE_TOKEN }}
     steps:
-      # With the token the proposal is OPENED with, so the push inside
-      # tools/propose_recorded_change.sh carries it too. `actions/checkout`
-      # persists its credentials for the whole job, and that push uses them.
-      #
-      # Both halves have to run as ONE actor. `gh pr create` already uses the
-      # token, so opening the proposal is attributed to a person and its checks
-      # run. Pushing an UPDATE to that same branch with the default token is
-      # attributed to github-actions[bot], and GitHub holds those runs at
-      # `action_required`, so the pull request reports no checks at all, which
-      # reads exactly like checks that have not started yet (#1390, L403).
-      #
-      # It only ever shows on a RE-push, which is the run carrying the newest
-      # measurement, and the branch is named for the day precisely so that a
-      # second run of the day meets the first one's branch (L393).
-      #
-      # Falls back to the default token where the secret is absent, which is
-      # the state the propose step below already skips on, so a missing secret
-      # still checks out rather than failing the whole job.
       - uses: actions/checkout@v5
-        with:
-          token: ${{ secrets.RECORD_UPDATE_TOKEN || github.token }}
 
       - name: Set up Python
         uses: actions/setup-python@v6
