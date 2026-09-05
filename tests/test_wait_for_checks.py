@@ -20,38 +20,32 @@ commit's run. The mirror is a superseded run that PASSED reporting green for a
 commit nothing has judged. So every row here is now sourced through the head
 SHA and refused if it names another one (L173).
 
-The fixtures are real replies for pull request 1341 at
-825b338131f9f9cd1f6dbb2881a54e6c8c6b9cb4, recorded on 2026-09-04, not shapes
-invented here (L48):
+The fixtures are real replies about ONE green pull request at ONE commit, not
+shapes invented here (L48). Which pull request, and which commit, is in
+`tests/fixtures/gh_check_fixtures_meta.json`, written by the run that wrote
+them, and the sha below is read from there rather than typed twice (L70).
 
-    gh api "repos/danwright32/PostRoll/actions/runs?head_sha=<sha>&per_page=100"
-    gh api "repos/danwright32/PostRoll/actions/runs/<id>/jobs?per_page=100"
+They are re-recorded together, by command rather than by hand (#1343):
 
-Each run's `repository`, `head_repository`, `pull_requests`, `head_commit`,
-`actor` and `triggering_actor`, and each job's `steps`, were deleted whole
-because nothing here reads them and they are most of the bytes. Every field
-this tool touches is as GitHub sent it.
+    venv/bin/python tools/record_check_fixtures.py --pr <n> --write
 
-`tests/fixtures/gh_pr_checks_real.json` is kept beside them: a real
-`gh pr checks --json name,state,bucket,workflow` reply, which is what the
-verdict rules were calibrated against and still are.
+which takes all four from one head, prunes the fields nothing here reads (each
+run's `repository`, `head_repository`, `pull_requests`, `head_commit`, `actor`
+and `triggering_actor`, and each job's `steps`, which are most of the bytes),
+and REFUSES a pull request that is red, still in flight, or whose reported
+checks are not the bar derived at that commit. Every field this file touches is
+as GitHub sent it.
 
-Re-recorded by #1259 from pull request 1341, all eight checks settled and
-green, because that change ADDED the `Guard proofs / due` job. Before it, by
-#1095 from pull request 1102, because that one removed
-`reference-frames (thursday-reel)` and the recording from pull request 561 on
-2026-08-14 described eight. It is a whole
-reply as GitHub gave it, not the old one with a row taken out: an intermediate
-commit did delete that row to get the pull request green, and it was replaced
-with this the moment a real green reply of the new shape existed, because a
-fixture adjusted to agree with the thing it verifies is no longer evidence of
-anything (L48, L58).
+That last refusal is the loop these names live in. They are CHECK names and the
+bar is derived from the workflows, so a pull request carrying a changed set can
+only go green once the recording matches it, and the recording can only come
+from a green pull request. Removing a name is the cheap direction: delete the
+row, go green, re-record. Adding one costs a knowingly red run to record from.
 
-That is the loop these names live in. They are CHECK names and the bar is
-derived from the workflows, so a pull request carrying a changed set can only go
-green once the recording matches it, and the recording can only come from a
-green pull request. Removing a name is the cheap direction: delete the row,
-go green, re-record. Adding one costs a knowingly red run to record from.
+Before the recorder, this was prose telling the next person which fields to
+delete: #1095 did it by hand and #1259 with a throwaway script. A fixture
+adjusted to agree with the thing it verifies is no longer evidence of anything
+(L48, L58), and there was nothing but care standing between the two.
 
 """
 
@@ -66,6 +60,7 @@ from pathlib import Path
 
 import pytest
 
+from tools import record_check_fixtures as recorder
 from tools import wait_for_checks
 from tools.wait_for_checks import (
     EXIT_BEHIND,
@@ -103,10 +98,16 @@ REAL_JOBS = REPO_ROOT / "tests" / "fixtures" / "gh_actions_jobs_real.json"
 #: that same commit, pruned to the fields this reads (#1342).
 REAL_LISTING = REPO_ROOT / "tests" / "fixtures" / "gh_workflow_listing_real.json"
 
-#: The head commit of pull request 1341, which every recorded reply is about.
-HEAD_SHA = "825b338131f9f9cd1f6dbb2881a54e6c8c6b9cb4"
+#: The commit every recorded reply is about, read from the recording rather
+#: than typed here (#1343). The recorder writes it, so the fixtures and the sha
+#: the tests ask about cannot come apart: they are one derivation, not two
+#: somebody has to keep in step (L70).
+RECORDED = json.loads(
+    (REPO_ROOT / "tests" / "fixtures" / "gh_check_fixtures_meta.json")
+    .read_text(encoding="utf-8"))
+HEAD_SHA = RECORDED["head_sha"]
+REPO = RECORDED["repo"]
 OTHER_SHA = "0ef38b2c1d4e5f60718293a4b5c6d7e8f9a0b1c2"
-REPO = "danwright32/PostRoll"
 
 
 def real_reply() -> list[dict[str, str]]:
@@ -1810,3 +1811,152 @@ def test_not_behind_at_all_still_reads_as_earned_against_what_it_lands_on() -> N
     assert code == EXIT_GREEN
     assert merge.asked == [("7", HEAD_SHA)]
     assert "contains main at" in "\n".join(lines)
+
+
+# ── recording the replies this file is calibrated against (#1343) ────────────
+
+
+class FakeEverything(FakeContents):
+    """The contents calls plus the runs and jobs the recorder also asks for."""
+
+    def __init__(self, *, runs: dict | None = None,
+                 jobs: dict[str, dict] | None = None, **rest) -> None:
+        super().__init__(**rest)
+        self.runs = real_runs() if runs is None else runs
+        self.jobs = real_jobs() if jobs is None else jobs
+
+    def __call__(self, path: str):
+        if "/actions/runs?" in path:
+            return self.runs
+        if "/jobs" in path:
+            run_id = path.split("/actions/runs/", 1)[1].split("/", 1)[0]
+            return self.jobs[run_id]
+        return super().__call__(path)
+
+
+class FakeChecks:
+    """`gh pr checks`, from rows this test controls."""
+
+    def __init__(self, rows: list[dict]) -> None:
+        self.rows = rows
+
+    def __call__(self, _number: str) -> list[dict]:
+        return sorted(self.rows, key=lambda row: (row["workflow"], row["name"]))
+
+
+def a_recording(*, rows: list[dict] | None = None,
+                poll_rows: list[dict] | None = None,
+                unfinished: list[str] | None = None,
+                api=None) -> dict:
+    """The recorder driven over the replies already recorded here."""
+    reading = Poll(head_sha=HEAD_SHA,
+                   rows=poll_rows if poll_rows is not None else real_reply(),
+                   unfinished=unfinished or [], repo=REPO)
+    return recorder.recording(
+        "1341",
+        api=api or FakeEverything(),
+        checks=FakeChecks(rows if rows is not None else real_reply()),
+        poll=lambda _n: reading,
+        bar=lambda _repo, _sha: real_expected())
+
+
+def test_a_recording_says_which_commit_it_came_from() -> None:
+    """The sha lived in this file as a literal somebody had to remember to
+    edit. It is written by the run that writes the fixtures instead, so the two
+    cannot come apart (L70)."""
+    taken = a_recording()
+
+    assert taken["meta"]["head_sha"] == HEAD_SHA
+    assert taken["meta"]["repo"] == REPO
+    assert taken["meta"]["pull_request"] == 1341
+
+
+def test_a_pull_request_that_is_not_green_is_not_recorded() -> None:
+    """A fixture taken from a red run asserts that a broken reply is what green
+    looks like, and every guard calibrated against it is then green about the
+    wrong thing (L48)."""
+    failed = real_reply()
+    failed[0] = dict(failed[0], bucket="fail", state="FAILURE")
+
+    with pytest.raises(recorder.NotWorthRecording) as raised:
+        a_recording(rows=failed, poll_rows=failed)
+
+    assert "red" in str(raised.value)
+
+
+def test_a_run_still_in_flight_is_not_recorded() -> None:
+    with pytest.raises(recorder.NotWorthRecording) as raised:
+        a_recording(unfinished=["macOS"])
+
+    assert "running" in str(raised.value)
+
+
+def test_a_reply_that_does_not_match_the_derived_bar_is_not_recorded() -> None:
+    """The two are checked against each other rather than one being trusted:
+    a recording that quietly disagrees with the bar is the calibration and the
+    thing calibrated drifting together (L58)."""
+    short = [row for row in real_reply() if row["name"] != "python"]
+
+    with pytest.raises(recorder.NotWorthRecording) as raised:
+        a_recording(rows=short)
+
+    assert "does not match the bar" in str(raised.value)
+    assert "python" in str(raised.value)
+
+
+def test_the_noise_nothing_reads_is_pruned_from_a_run() -> None:
+    """The pruning was prose in a docstring telling the next person to do it by
+    hand (#1259). It is the recorder's job now."""
+    pruned = recorder.prune_runs({"total_count": 1, "workflow_runs": [
+        {"id": 7, "head_sha": HEAD_SHA, "name": "Tests",
+         "repository": {"a": 1}, "head_repository": {"b": 2},
+         "pull_requests": [1], "head_commit": {"c": 3},
+         "actor": {"d": 4}, "triggering_actor": {"e": 5}}]})
+
+    kept = pruned["workflow_runs"][0]
+    assert set(kept) == {"id", "head_sha", "name"}
+
+
+def test_the_steps_are_pruned_from_a_job_and_its_timing_is_not() -> None:
+    """`tests/test_job_duration_drift.py` reads these durations, so pruning the
+    wrong field here breaks a guard in another file."""
+    pruned = recorder.prune_jobs({"total_count": 1, "jobs": [
+        {"id": 7, "name": "python", "head_sha": HEAD_SHA,
+         "started_at": "2026-09-04T00:00:00Z",
+         "completed_at": "2026-09-04T00:05:00Z",
+         "steps": [{"name": "checkout"}]}]})
+
+    kept = pruned["jobs"][0]
+    assert "steps" not in kept
+    assert kept["started_at"] and kept["completed_at"]
+
+
+def test_a_job_naming_another_commit_stops_the_recording() -> None:
+    """Every reply has to be about ONE commit, or the fixture is two pull
+    requests spliced together and nothing downstream could tell (#669)."""
+    jobs = real_jobs()
+    first = next(iter(jobs))
+    jobs[first] = dict(jobs[first])
+    jobs[first]["jobs"] = [dict(job, head_sha=OTHER_SHA)
+                           for job in jobs[first]["jobs"]]
+
+    with pytest.raises(recorder.NotWorthRecording) as raised:
+        a_recording(api=FakeEverything(jobs=jobs))
+
+    assert OTHER_SHA[:12] in str(raised.value)
+
+
+def test_the_recording_is_written_as_four_fixtures_and_a_note(tmp_path) -> None:
+    taken = a_recording()
+
+    written = recorder.write(taken, into=tmp_path)
+
+    assert sorted(path.name for path in written) == [
+        "gh_actions_jobs_real.json",
+        "gh_actions_runs_real.json",
+        "gh_check_fixtures_meta.json",
+        "gh_pr_checks_real.json",
+        "gh_workflow_listing_real.json",
+    ]
+    for path in written:
+        assert json.loads(path.read_text(encoding="utf-8"))
