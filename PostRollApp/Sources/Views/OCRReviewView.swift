@@ -982,10 +982,18 @@ private struct PerformerRow: View {
                 BrandField("Description (optional)", text: $performer.voiceOrInstrument)
                     .frame(maxWidth: 200)
                 VStack(alignment: .leading, spacing: 2) {
-                    BrandField("@handle", text: $performer.handle)
+                    // Through `setHandle` rather than straight onto the field,
+                    // so an edit that changes the account drops the address
+                    // checked against the old one (#1372). A mark saying this
+                    // handle was checked against somebody else's profile is
+                    // worse than no mark at all.
+                    BrandField("@handle", text: Binding(
+                        get: { performer.handle },
+                        set: { performer.setHandle($0) }))
                     ForEach(PerformerRowNotes.lines(duplicate: duplicate,
                                                     isGuessed: isGuessed,
-                                                    handle: performer.handle),
+                                                    handle: performer.handle,
+                                                    checkedProfile: performer.profileURL),
                             id: \.text) { note in
                         Label(note.text,
                               systemImage: note.isProblem ? "exclamationmark.triangle"
@@ -1018,6 +1026,27 @@ private struct PerformerRow: View {
             .disabled(performer.name.isEmpty)
             .accessibilityLabel("Search Instagram for this performer")
             .help("Search Instagram")
+            // Open the profile and keep the address, which is how a handle Dan
+            // typed earns the mark the research step's suggestions arrive with
+            // (#1372). Offered only on a value that is really an account, and
+            // only while it has no checked address: pressing it again would
+            // record the same thing twice, and the mark below already says it
+            // happened.
+            if let url = ProfileLink.url(handle: performer.handle),
+               performer.profileURL == nil {
+                Button {
+                    NSWorkspace.shared.open(url)
+                    performer.profileURL = url.absoluteString
+                } label: {
+                    Image(systemName: "checkmark.seal")
+                        .foregroundStyle(PaintedSurfaces.secondaryText)
+                        .font(.system(size: 13))
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 6)
+                .accessibilityLabel("Open this profile and mark the handle checked")
+                .help("Open the profile, and record that this handle was checked")
+            }
             BrandDeleteButton(action: onDelete)
         }
         .padding(.vertical, 2)
