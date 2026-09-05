@@ -1,0 +1,8 @@
+{
+  "name": "a-red-pull-request-is-not-a-recording",
+  "file": "tools/record_check_fixtures.py",
+  "find": "    if answer.state != \"green\":",
+  "replace": "    if False:",
+  "test": "tests/test_wait_for_checks.py::test_a_pull_request_that_is_not_green_is_not_recorded",
+  "breaks": "the fixtures the merge bar is calibrated against can be recorded from a red or half finished pull request, so they assert that a broken reply is what green looks like and every guard built on them is green about the wrong thing (#1343, L48)"
+}

@@ -66,6 +66,7 @@ from pathlib import Path
 
 import pytest
 
+from tools import record_check_fixtures as recorder
 from tools import wait_for_checks
 from tools.wait_for_checks import (
     EXIT_BEHIND,
@@ -1810,3 +1811,152 @@ def test_not_behind_at_all_still_reads_as_earned_against_what_it_lands_on() -> N
     assert code == EXIT_GREEN
     assert merge.asked == [("7", HEAD_SHA)]
     assert "contains main at" in "\n".join(lines)
+
+
+# ── recording the replies this file is calibrated against (#1343) ────────────
+
+
+class FakeEverything(FakeContents):
+    """The contents calls plus the runs and jobs the recorder also asks for."""
+
+    def __init__(self, *, runs: dict | None = None,
+                 jobs: dict[str, dict] | None = None, **rest) -> None:
+        super().__init__(**rest)
+        self.runs = real_runs() if runs is None else runs
+        self.jobs = real_jobs() if jobs is None else jobs
+
+    def __call__(self, path: str):
+        if "/actions/runs?" in path:
+            return self.runs
+        if "/jobs" in path:
+            run_id = path.split("/actions/runs/", 1)[1].split("/", 1)[0]
+            return self.jobs[run_id]
+        return super().__call__(path)
+
+
+class FakeChecks:
+    """`gh pr checks`, from rows this test controls."""
+
+    def __init__(self, rows: list[dict]) -> None:
+        self.rows = rows
+
+    def __call__(self, _number: str) -> list[dict]:
+        return sorted(self.rows, key=lambda row: (row["workflow"], row["name"]))
+
+
+def a_recording(*, rows: list[dict] | None = None,
+                poll_rows: list[dict] | None = None,
+                unfinished: list[str] | None = None,
+                api=None) -> dict:
+    """The recorder driven over the replies already recorded here."""
+    reading = Poll(head_sha=HEAD_SHA,
+                   rows=poll_rows if poll_rows is not None else real_reply(),
+                   unfinished=unfinished or [], repo=REPO)
+    return recorder.recording(
+        "1341",
+        api=api or FakeEverything(),
+        checks=FakeChecks(rows if rows is not None else real_reply()),
+        poll=lambda _n: reading,
+        bar=lambda _repo, _sha: real_expected())
+
+
+def test_a_recording_says_which_commit_it_came_from() -> None:
+    """The sha lived in this file as a literal somebody had to remember to
+    edit. It is written by the run that writes the fixtures instead, so the two
+    cannot come apart (L70)."""
+    taken = a_recording()
+
+    assert taken["meta"]["head_sha"] == HEAD_SHA
+    assert taken["meta"]["repo"] == REPO
+    assert taken["meta"]["pull_request"] == 1341
+
+
+def test_a_pull_request_that_is_not_green_is_not_recorded() -> None:
+    """A fixture taken from a red run asserts that a broken reply is what green
+    looks like, and every guard calibrated against it is then green about the
+    wrong thing (L48)."""
+    failed = real_reply()
+    failed[0] = dict(failed[0], bucket="fail", state="FAILURE")
+
+    with pytest.raises(recorder.NotWorthRecording) as raised:
+        a_recording(rows=failed, poll_rows=failed)
+
+    assert "red" in str(raised.value)
+
+
+def test_a_run_still_in_flight_is_not_recorded() -> None:
+    with pytest.raises(recorder.NotWorthRecording) as raised:
+        a_recording(unfinished=["macOS"])
+
+    assert "running" in str(raised.value)
+
+
+def test_a_reply_that_does_not_match_the_derived_bar_is_not_recorded() -> None:
+    """The two are checked against each other rather than one being trusted:
+    a recording that quietly disagrees with the bar is the calibration and the
+    thing calibrated drifting together (L58)."""
+    short = [row for row in real_reply() if row["name"] != "python"]
+
+    with pytest.raises(recorder.NotWorthRecording) as raised:
+        a_recording(rows=short)
+
+    assert "does not match the bar" in str(raised.value)
+    assert "python" in str(raised.value)
+
+
+def test_the_noise_nothing_reads_is_pruned_from_a_run() -> None:
+    """The pruning was prose in a docstring telling the next person to do it by
+    hand (#1259). It is the recorder's job now."""
+    pruned = recorder.prune_runs({"total_count": 1, "workflow_runs": [
+        {"id": 7, "head_sha": HEAD_SHA, "name": "Tests",
+         "repository": {"a": 1}, "head_repository": {"b": 2},
+         "pull_requests": [1], "head_commit": {"c": 3},
+         "actor": {"d": 4}, "triggering_actor": {"e": 5}}]})
+
+    kept = pruned["workflow_runs"][0]
+    assert set(kept) == {"id", "head_sha", "name"}
+
+
+def test_the_steps_are_pruned_from_a_job_and_its_timing_is_not() -> None:
+    """`tests/test_job_duration_drift.py` reads these durations, so pruning the
+    wrong field here breaks a guard in another file."""
+    pruned = recorder.prune_jobs({"total_count": 1, "jobs": [
+        {"id": 7, "name": "python", "head_sha": HEAD_SHA,
+         "started_at": "2026-09-04T00:00:00Z",
+         "completed_at": "2026-09-04T00:05:00Z",
+         "steps": [{"name": "checkout"}]}]})
+
+    kept = pruned["jobs"][0]
+    assert "steps" not in kept
+    assert kept["started_at"] and kept["completed_at"]
+
+
+def test_a_job_naming_another_commit_stops_the_recording() -> None:
+    """Every reply has to be about ONE commit, or the fixture is two pull
+    requests spliced together and nothing downstream could tell (#669)."""
+    jobs = real_jobs()
+    first = next(iter(jobs))
+    jobs[first] = dict(jobs[first])
+    jobs[first]["jobs"] = [dict(job, head_sha=OTHER_SHA)
+                           for job in jobs[first]["jobs"]]
+
+    with pytest.raises(recorder.NotWorthRecording) as raised:
+        a_recording(api=FakeEverything(jobs=jobs))
+
+    assert OTHER_SHA[:12] in str(raised.value)
+
+
+def test_the_recording_is_written_as_four_fixtures_and_a_note(tmp_path) -> None:
+    taken = a_recording()
+
+    written = recorder.write(taken, into=tmp_path)
+
+    assert sorted(path.name for path in written) == [
+        "gh_actions_jobs_real.json",
+        "gh_actions_runs_real.json",
+        "gh_check_fixtures_meta.json",
+        "gh_pr_checks_real.json",
+        "gh_workflow_listing_real.json",
+    ]
+    for path in written:
+        assert json.loads(path.read_text(encoding="utf-8"))
