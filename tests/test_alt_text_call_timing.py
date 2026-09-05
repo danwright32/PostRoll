@@ -21,6 +21,7 @@ money and reaches the live API, which the suite may never do (L2).
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -119,3 +120,60 @@ def test_the_measured_budget_leaves_the_round_cap_where_the_plan_wanted_it():
         f"seven markers at two rounds now costs "
         f"{summary['seven_markers_two_rounds']}s, which is no longer a rounding "
         "error against the process ceiling. Re-derive the round cap.")
+
+
+def test_a_reading_says_how_many_calls_it_came_from(monkeypatch, tmp_path):
+    """The sample size is built with the reading, not added to the file after.
+
+    #1332 put `runs: 1` on the three recorded readings by hand and updated only
+    `tools/record_test_durations.py`. Nothing here writes it, so the next
+    `--photo` run appends a fourth reading without it and the sample guard goes
+    red on a measurement that was taken correctly (L379).
+
+    The call is stubbed. Timing it is the one thing this tool does that costs
+    money and reaches the live API, and the suite may never do either (L2).
+    """
+    import postroll.ai.claude_client as client
+    from tools import measure_alt_text_call
+
+    monkeypatch.setattr(client, "run_json_prompt",
+                        lambda *a, **k: {"alt": "one two three"})
+    photo = tmp_path / "a.jpg"
+    photo.write_bytes(b"not really a photograph")
+
+    reading = measure_alt_text_call.measure(photo, timeout=30)
+
+    assert reading["runs"] == 1, (
+        "a reading that does not say what it was measured over is refused by "
+        "tools/check_figures_say_their_sample.py")
+
+
+def test_the_record_this_tool_writes_passes_the_sample_guard(monkeypatch,
+                                                             tmp_path):
+    """The whole file, through the writer, judged by the guard itself.
+
+    Asserting the invariant the two tools share rather than a proxy for it: a
+    check that the key is present passes while the guard and the writer
+    disagree about where it has to be (L63).
+    """
+    import postroll.ai.claude_client as client
+    from tools import check_figures_say_their_sample as guard
+    from tools import measure_alt_text_call
+
+    fixtures = tmp_path / "fixtures"
+    fixtures.mkdir()
+    monkeypatch.setattr(measure_alt_text_call, "RECORD",
+                        fixtures / "alt_text_call_timing.json")
+    monkeypatch.setattr(client, "run_json_prompt",
+                        lambda *a, **k: {"alt": "one two three"})
+    photo = tmp_path / "a.jpg"
+    photo.write_bytes(b"not really a photograph")
+
+    # `main` reads sys.argv rather than taking an argv, so the invocation is
+    # set here rather than widening the tool's signature for a test.
+    monkeypatch.setattr(sys, "argv",
+                        ["measure_alt_text_call.py", "--photo", str(photo)])
+    assert measure_alt_text_call.main() == 0
+
+    assert guard.unsourced(root=fixtures) == [], (
+        "the tool wrote a reading its own repository refuses")

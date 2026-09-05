@@ -1,46 +1,40 @@
 {
+  "_sample": "Every figure here is ONE reading: a sweep measures each entry once, so runs is 1. Which run a reading came from is under `measured`, and the `shard` on a cold entry says which shard it ran on, not how many times it was measured (#1328).",
   "cold": [
     {
       "entry": "the shared app build (#1096)",
-      "seconds": 83.65,
-      "shard": "1/7",
-      "runs": 1
+      "seconds": 101.43,
+      "shard": "1/7"
     },
     {
       "entry": "the shared app build (#1096)",
-      "seconds": 102.01,
-      "shard": "2/7",
-      "runs": 1
+      "seconds": 122.56,
+      "shard": "2/7"
     },
     {
       "entry": "the shared app build (#1096)",
-      "seconds": 89.15,
-      "shard": "3/7",
-      "runs": 1
+      "seconds": 112.12,
+      "shard": "3/7"
     },
     {
       "entry": "the shared app build (#1096)",
-      "seconds": 138.08,
-      "shard": "4/7",
-      "runs": 1
+      "seconds": 103.47,
+      "shard": "4/7"
     },
     {
       "entry": "the shared app build (#1096)",
-      "seconds": 100.31,
-      "shard": "5/7",
-      "runs": 1
+      "seconds": 119.93,
+      "shard": "5/7"
     },
     {
       "entry": "the shared app build (#1096)",
-      "seconds": 104.26,
-      "shard": "6/7",
-      "runs": 1
+      "seconds": 105.33,
+      "shard": "6/7"
     },
     {
       "entry": "the shared app build (#1096)",
-      "seconds": 160.92,
-      "shard": "7/7",
-      "runs": 1
+      "seconds": 94.76,
+      "shard": "7/7"
     }
   ],
   "kinds": {
@@ -54,7 +48,9 @@
     "a-bundle-read-never-falls-back-to-the-transcript": false,
     "a-caption-alt-text-outside-its-band-is-reported": false,
     "a-caption-alt-text-that-infers-a-feeling-is-reported": false,
+    "a-caption-husk-is-refused-by-the-shared-gate": false,
     "a-caption-moved-one-pixel-is-caught": false,
+    "a-caption-rewrite-must-clear-the-rule-that-selected-it": false,
     "a-checkout-notice-alone-shows-the-window-inset": true,
     "a-checkout-read-seconds-after-the-last-is-skipped": true,
     "a-checkout-that-moved-and-came-back-is-news-again": true,
@@ -69,6 +65,7 @@
     "a-contraction-rewrite-keeps-its-marker": false,
     "a-count-of-items-is-not-a-measure-of-work": false,
     "a-counted-total-beats-the-models-number": false,
+    "a-cramped-window-is-opened-out": true,
     "a-crashed-runner-is-not-a-bad-test-path": false,
     "a-day-already-rebuilding-is-refused": true,
     "a-day-of-held-back-accounts-is-not-a-day-that-tags-nobody": true,
@@ -77,6 +74,7 @@
     "a-day-with-nothing-to-rank-is-not-an-empty-ranking": true,
     "a-days-failure-is-not-anothers": true,
     "a-dead-handle-is-told-apart-by-instagrams-error-route": false,
+    "a-deadline-is-judged-against-the-tests-its-job-runs": false,
     "a-deleted-alt-text-is-still-a-finding": false,
     "a-design-change-is-not-read-as-a-codec-change": false,
     "a-design-change-refuses-an-unbumped-template": false,
@@ -93,8 +91,10 @@
     "a-failed-frame-names-its-ffmpeg": false,
     "a-failed-permission-request-is-not-a-refusal": true,
     "a-failed-rebuild-keeps-its-reason": true,
+    "a-failed-rules-run-that-named-nothing-is-not-a-pass": false,
     "a-failed-run-is-not-silent": false,
     "a-failing-fetch-is-bounded": true,
+    "a-failure-banner-stays-silent-in-front": true,
     "a-fetch-failure-is-not-the-books-recovery-note": true,
     "a-figure-sent-back-unchanged-keeps-its-provenance": true,
     "a-fold-matching-two-files-repairs-neither": false,
@@ -105,6 +105,7 @@
     "a-half-claimed-pair-starts-nothing": true,
     "a-hand-check-step-names-files-that-exist": false,
     "a-hand-written-decoder-reads-every-field": false,
+    "a-handle-on-screen-offers-its-checked-address": false,
     "a-handle-that-changed-hands-is-not-merged-across": true,
     "a-hanging-gui-test-is-given-a-deadline": false,
     "a-hidden-like-count-says-something-of-its-own": true,
@@ -145,7 +146,9 @@
     "a-rebuilding-days-clips-are-not-editable": true,
     "a-recoloured-element-is-not-read-as-a-codec-change": false,
     "a-recorded-change-names-its-own-version": false,
+    "a-recording-that-disagrees-with-the-bar-is-refused": false,
     "a-red-gated-job-stays-in-the-duration-series": false,
+    "a-red-pull-request-is-not-a-recording": false,
     "a-red-suite-is-not-recorded-past-its-own-guard": false,
     "a-redraw-is-claimed-after-the-event-is-changed": false,
     "a-redraw-refreshes-nothing-outside-the-review-screen": true,
@@ -185,10 +188,12 @@
     "a-second-notes-search-is-refused": true,
     "a-second-person-rewrite-keeps-its-marker": false,
     "a-second-press-does-not-start-a-second-update": true,
+    "a-second-producer-of-one-shape-is-noticed": false,
     "a-second-reflow-on-one-program-is-refused": true,
     "a-secrets-warning-names-its-own-prefix": true,
     "a-sentinel-behind-a-link-is-not-an-account": true,
     "a-shard-with-nothing-to-prove-is-not-a-duration": false,
+    "a-shared-file-still-stops-the-merge": false,
     "a-sheet-command-opens-the-window": true,
     "a-short-duration-window-is-not-called-steady": false,
     "a-short-frame-stream-is-refused": false,
@@ -216,6 +221,7 @@
     "a-thin-report-says-out-of-how-many": true,
     "a-third-layout-is-described-as-the-second": true,
     "a-title-card-muxes-to-the-name-its-callers-pass": false,
+    "a-title-over-the-ceiling-is-refused": false,
     "a-transient-failure-never-becomes-a-scrape": false,
     "a-tried-finding-is-its-own-row": true,
     "a-typed-name-does-not-reach-the-tag-list": false,
@@ -229,6 +235,7 @@
     "a-waved-away-code-folder-warning-stays-away": true,
     "a-wedged-test-still-has-a-deadline": false,
     "a-withheld-like-count-is-not-a-measured-zero": true,
+    "a-workflow-that-cannot-be-read-is-not-an-empty-one": false,
     "accent-as-text-clears-the-text-level": true,
     "accent-is-never-drawn-unnamed": false,
     "accent-is-never-drawn-unnamed-in-a-wrapped-ternary": false,
@@ -246,8 +253,11 @@
     "an-alt-text-is-paired-with-its-neighbour": true,
     "an-assumed-account-is-not-told-to-add-likes": true,
     "an-assumed-rate-is-labelled-wherever-it-renders": true,
+    "an-at-sign-is-a-claim-about-an-account": false,
+    "an-edited-handle-drops-its-check": true,
     "an-edited-test-file-does-not-owe-a-measurement": false,
     "an-empty-caption-alt-text-is-reported": false,
+    "an-empty-tag-list-is-not-a-tagged-photo": true,
     "an-export-folder-belongs-to-one-show": true,
     "an-export-that-fails-is-not-silent": false,
     "an-exported-day-is-not-claimed-to-have-been-seen": true,
@@ -265,8 +275,10 @@
     "an-unreachable-checkout-is-said-at-launch": true,
     "an-unread-log-is-not-a-run-that-passed": false,
     "an-unreadable-branch-point-is-not-a-clean-branch": false,
+    "an-unreadable-file-list-is-not-disjoint": false,
     "an-unreadable-finish-time-is-not-a-fresh-proof": false,
     "an-unreadable-follower-count-is-not-zero-followers": false,
+    "an-unreadable-log-is-not-a-run-that-proved-nothing": false,
     "an-unreadable-module-is-not-cached-as-empty": false,
     "an-unreadable-quota-header-is-not-a-low-reading": false,
     "an-unreadable-repair-record-is-not-an-empty-one": true,
@@ -349,6 +361,7 @@
     "every-make-target-is-phony": false,
     "every-manifest-sender-has-a-contract-entry": false,
     "every-owner-of-background-work-can-say-so": true,
+    "every-path-into-the-repairer-refuses-a-collision": false,
     "every-posting-day-names-its-invites": true,
     "every-progress-file-has-a-reader": true,
     "every-review-surface-still-renders": true,
@@ -551,7 +564,9 @@
     "the-archive-backfill-does-not-become-a-launch-sweep": true,
     "the-assumed-rate-comes-from-the-comparable-band": false,
     "the-audience-measurement-reaches-the-report": false,
+    "the-badge-counts-only-what-was-missed": true,
     "the-banners-do-not-cover-the-content": true,
+    "the-bar-follows-the-commit-being-judged": false,
     "the-blog-pin-comes-from-the-payload": true,
     "the-branded-strip-is-not-draggable": true,
     "the-caption-alt-text-checks-reach-the-review-screen": false,
@@ -671,6 +686,7 @@
     "the-work-scan-actually-finds-running-work": true,
     "the-working-mark-is-never-drawn-on-nothing": true,
     "title-card-type-is-drawn-light": false,
+    "todays-proposal-is-built-on-not-forced-over": false,
     "two-photographs-may-not-share-one-label": false,
     "two-repair-rows-do-not-share-an-id": true,
     "type-colour-is-never-drawn-raw": false,
@@ -685,3201 +701,3310 @@
   },
   "measured": {
     "a-background-verdict-does-not-interrupt-the-form": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-bad-saved-handle-is-still-listed": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-banner-cannot-set-the-windows-minimum-height": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-blank-organisation-is-not-a-handle-book-key": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-border-is-a-named-surface": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-branch-behind-main-is-not-merged": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-bumped-version-carries-the-day-it-changed": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-bundle-read-never-falls-back-to-the-transcript": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-caption-alt-text-outside-its-band-is-reported": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-caption-alt-text-that-infers-a-feeling-is-reported": {
-      "run": "33870420536",
+      "run": "33962482053",
+      "scale": 1.0
+    },
+    "a-caption-husk-is-refused-by-the-shared-gate": {
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-caption-moved-one-pixel-is-caught": {
-      "run": "33870420536",
+      "run": "33962482053",
+      "scale": 1.0
+    },
+    "a-caption-rewrite-must-clear-the-rule-that-selected-it": {
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-checkout-notice-alone-shows-the-window-inset": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-checkout-read-seconds-after-the-last-is-skipped": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-checkout-that-moved-and-came-back-is-news-again": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-clean-main-takes-the-checkout-notice-away": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-cleared-outage-is-stated": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-code-folder-that-came-back-takes-the-warning-away": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-collaborator-candidate-is-in-the-post": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-comment-is-not-a-definition-of-the-test-only-flag": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-commit-landing-mid-wait-is-said-out-loud": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-compiling-job-prepares-its-project": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-condensed-reel-alt-is-caught-by-its-own-word-floor": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-contraction-rewrite-keeps-its-marker": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-count-of-items-is-not-a-measure-of-work": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-counted-total-beats-the-models-number": {
-      "run": "33870420536",
+      "run": "33962482053",
+      "scale": 1.0
+    },
+    "a-cramped-window-is-opened-out": {
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-crashed-runner-is-not-a-bad-test-path": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-day-already-rebuilding-is-refused": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-day-of-held-back-accounts-is-not-a-day-that-tags-nobody": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-day-rebuild-starts-under-a-full-run": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-day-that-went-out-is-not-work": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-day-with-nothing-to-rank-is-not-an-empty-ranking": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-days-failure-is-not-anothers": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-dead-handle-is-told-apart-by-instagrams-error-route": {
-      "run": "33870420536",
+      "run": "33962482053",
+      "scale": 1.0
+    },
+    "a-deadline-is-judged-against-the-tests-its-job-runs": {
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-deleted-alt-text-is-still-a-finding": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-design-change-is-not-read-as-a-codec-change": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-design-change-refuses-an-unbumped-template": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-dismissal-lands-only-on-the-alert-it-named": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-dismissed-checkout-notice-stays-dismissed": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-dismissed-out-of-date-sheet-stays-dismissed": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-dismissed-sheet-records-which-verdict-it-was": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-displaced-sheet-is-kept-rather-than-thrown-away": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-divider-drag-respects-the-cell-floor": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-dragged-layout-is-judged-against-the-posted-photos": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-drift-reading-says-where-the-pixels-are": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-failed-analysis-keeps-its-reason": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-failed-fetch-is-due-another-attempt": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-failed-frame-names-its-ffmpeg": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-failed-permission-request-is-not-a-refusal": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-failed-rebuild-keeps-its-reason": {
-      "run": "33870420536",
+      "run": "33962482053",
+      "scale": 1.0
+    },
+    "a-failed-rules-run-that-named-nothing-is-not-a-pass": {
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-failed-run-is-not-silent": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-failing-fetch-is-bounded": {
-      "run": "33870420536",
+      "run": "33962482053",
+      "scale": 1.0
+    },
+    "a-failure-banner-stays-silent-in-front": {
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-fetch-failure-is-not-the-books-recovery-note": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-figure-sent-back-unchanged-keeps-its-provenance": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-fold-matching-two-files-repairs-neither": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-frame-that-moved-by-design-is-refused-the-third-door": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-full-run-records-why-a-day-failed": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-full-run-starts-over-a-day-rebuild": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-grant-does-not-clear-an-unrelated-refusal": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-half-claimed-pair-starts-nothing": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-hand-check-step-names-files-that-exist": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-hand-written-decoder-reads-every-field": {
-      "run": "33870420536",
+      "run": "33962482053",
+      "scale": 1.0
+    },
+    "a-handle-on-screen-offers-its-checked-address": {
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-handle-that-changed-hands-is-not-merged-across": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-hanging-gui-test-is-given-a-deadline": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-hidden-like-count-says-something-of-its-own": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-job-at-another-commit-is-not-an-answer": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-large-dead-audience-is-held-out-by-the-floor": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-launch-that-counted-nobody-does-not-read-as-success": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-layout-clears-every-surface-it-is-seen-on": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-leg-that-ran-nothing-is-refused": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-link-raised-sheet-is-not-the-default-action": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-lock-nobody-holds-is-loud": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-log-that-will-not-come-does-not-take-the-check-down": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-measured-frame-nobody-kept-is-refused": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-merge-github-refused-is-not-a-merge": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-missing-python-environment-is-refused-by-name": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-missing-source-is-not-a-copy-to-retry": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-missing-suite-count-record-is-refused": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-model-payload-names-a-real-swift-type": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-moved-figure-is-only-explained-when-the-mix-moved": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-name-in-the-handle-field-is-not-a-handle": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-negative-duration-is-never-a-reading": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-one-clip-reel-is-not-encoded-fast": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-one-photo-collage-day-is-called-a-carousel": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-partial-paste-cannot-be-saved-over-a-key": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-partial-work-series-does-not-normalise": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-per-frame-reel-alt-is-reported": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-percentile-interpolates-between-its-neighbours": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-permanent-gh-failure-is-still-bounded": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-permission-is-not-both-required-and-absent": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-personal-post-is-not-an-uncontrolled-observation": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-perturbed-render-cannot-become-the-reference-frame": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-pipeline-marker-is-not-wrapped-in-prose": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-private-account-does-not-take-a-collaborator-slot": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-private-account-is-not-asked-for-figures-it-cannot-have": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-proof-is-not-fresh-forever": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-python-only-sweep-does-not-build-the-app": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-quit-with-work-running-asks-first": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-raises-block-must-decide-about-recording": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-rebuilding-days-clips-are-not-editable": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-recoloured-element-is-not-read-as-a-codec-change": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-recorded-change-names-its-own-version": {
-      "run": "33870420536",
+      "run": "33962482053",
+      "scale": 1.0
+    },
+    "a-recording-that-disagrees-with-the-bar-is-refused": {
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-red-gated-job-stays-in-the-duration-series": {
-      "run": "33870420536",
+      "run": "33962482053",
+      "scale": 1.0
+    },
+    "a-red-pull-request-is-not-a-recording": {
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-red-suite-is-not-recorded-past-its-own-guard": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-redraw-is-claimed-after-the-event-is-changed": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-redraw-refreshes-nothing-outside-the-review-screen": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-reel-band-is-judged-on-the-reels-own-frames": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-reel-is-not-told-about-a-first-photo": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-reel-prompt-is-told-the-reels-size": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-reel-seed-is-minted-on-first-render": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-reel-suggestion-is-checked-against-who-is-on-screen": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-refusal-is-not-swallowed-by-another-notice": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-refused-account-does-not-get-an-engagement-rate": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-refused-analytics-write-is-not-shown-as-an-import": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-refused-band-write-is-reported": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-refused-lookup-names-the-one-holding-the-list": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-refused-marker-move-is-reported": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-refused-rebuild-says-which-day": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-refused-write-leaves-the-stored-key-alone": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-render-is-pinned-to-the-apps-appearance": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-render-test-cannot-open-the-live-history": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-reorder-hiding-inside-a-reword-is-caught": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-repair-may-not-add-a-finding": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-repair-may-not-reorder-the-markers": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-repair-panel-shows-one-posts-records": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-reply-is-not-shown-against-the-wrong-concern": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-retry-estimate-grows-with-its-markers": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-review-pass-cannot-rewrite-a-reel-alt": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-review-pass-may-not-change-the-alt-text-count": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-revision-drops-the-photos-its-alt-texts-describe": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-rewrite-may-not-gut-the-description": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-rewritten-reel-alt-is-reported": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-run-at-another-commit-is-not-an-answer": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-run-still-in-flight-is-never-green": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-scale-of-one-is-a-claim-not-a-default": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-scratch-suite-opens-empty": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-screen-shows-the-layout-with-no-way-to-change-it": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-second-definition-of-the-test-only-flag-is-caught": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-second-insights-analysis-is-refused": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-second-notes-search-is-refused": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-second-person-rewrite-keeps-its-marker": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-second-press-does-not-start-a-second-update": {
-      "run": "33870420536",
+      "run": "33962482053",
+      "scale": 1.0
+    },
+    "a-second-producer-of-one-shape-is-noticed": {
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-second-reflow-on-one-program-is-refused": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-secrets-warning-names-its-own-prefix": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-sentinel-behind-a-link-is-not-an-account": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-shard-with-nothing-to-prove-is-not-a-duration": {
-      "run": "33870420536",
+      "run": "33962482053",
+      "scale": 1.0
+    },
+    "a-shared-file-still-stops-the-merge": {
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-sheet-command-opens-the-window": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-short-duration-window-is-not-called-steady": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-short-frame-stream-is-refused": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-short-page-of-runs-or-jobs-is-refused": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-side-crop-reading-names-its-surface": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-silenced-guard-is-refused-at-load": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-silent-run-erases-nothing": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-skipped-gated-job-leaves-the-duration-series": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-skipped-sweep-is-not-a-proof": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-slot-that-failed-says-so": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-spent-allowance-is-said-out-loud": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-spent-meta-allowance-is-not-retried": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-stalled-insights-analysis-becomes-an-error": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-stalled-notes-search-becomes-an-error": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-starting-prover-is-not-a-dead-one": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-stored-band-that-matches-no-post-is-shown": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-successful-fetch-clears-the-failure-count": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-swift-leg-that-ran-half-is-refused": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-switch-rebuilds-every-day-again": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-symbol-name-that-draws-nothing": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-symlinked-root-still-names-its-files": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-tagged-company-is-not-dropped": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-taken-handle-is-not-suggested-again": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-test-that-fails-every-time-is-not-a-flake": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-thin-report-says-out-of-how-many": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-third-layout-is-described-as-the-second": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-title-card-muxes-to-the-name-its-callers-pass": {
-      "run": "33870420536",
+      "run": "33962482053",
+      "scale": 1.0
+    },
+    "a-title-over-the-ceiling-is-refused": {
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-transient-failure-never-becomes-a-scrape": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-tried-finding-is-its-own-row": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-typed-name-does-not-reach-the-tag-list": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-typed-name-is-credited-not-mentioned": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-typed-note-survives-the-web-search": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-value-that-is-no-account-is-not-a-candidate": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-value-that-is-nobody-gets-no-link": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-venv-inside-an-app-bundle-is-refused": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-view-does-not-own-long-work": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-warning-names-no-cause-it-cannot-know": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-waved-away-code-folder-warning-stays-away": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-wedged-test-still-has-a-deadline": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "a-withheld-like-count-is-not-a-measured-zero": {
-      "run": "33870420536",
+      "run": "33962482053",
+      "scale": 1.0
+    },
+    "a-workflow-that-cannot-be-read-is-not-an-empty-one": {
+      "run": "33962482053",
       "scale": 1.0
     },
     "accent-as-text-clears-the-text-level": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "accent-is-never-drawn-unnamed": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "accent-is-never-drawn-unnamed-in-a-wrapped-ternary": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "accent-tint-is-never-drawn-unnamed": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "accepting-a-suggestion-tells-the-fetch": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "account-book-keeps-generations": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "account-book-names-a-refusal": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "account-book-sets-a-bad-file-aside": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "adding-a-file-does-not-rewrite-the-record": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-absent-secret-is-not-exported-as-blank": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-account-marked-never-to-invite-takes-no-slot": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-account-nobody-looked-at-is-still-not-scored": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-account-that-keeps-refusing-stops-taking-a-slot": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-added-test-file-must-be-measured": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-alt-text-is-paired-with-its-neighbour": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-assumed-account-is-not-told-to-add-likes": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-assumed-rate-is-labelled-wherever-it-renders": {
-      "run": "33870420536",
+      "run": "33962482053",
+      "scale": 1.0
+    },
+    "an-at-sign-is-a-claim-about-an-account": {
+      "run": "33962482053",
+      "scale": 1.0
+    },
+    "an-edited-handle-drops-its-check": {
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-edited-test-file-does-not-owe-a-measurement": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-empty-caption-alt-text-is-reported": {
-      "run": "33870420536",
+      "run": "33962482053",
+      "scale": 1.0
+    },
+    "an-empty-tag-list-is-not-a-tagged-photo": {
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-export-folder-belongs-to-one-show": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-export-that-fails-is-not-silent": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-exported-day-is-not-claimed-to-have-been-seen": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-idle-worker-can-take-work-from-a-busy-one": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-installing-job-caches-its-wheels": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-uncertain-answer-runs-the-job": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-undecided-reel-layout-is-not-pre-rendered": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unfinished-job-has-no-duration": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unknown-check-conclusion-is-not-a-pass": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unknown-outcome-does-not-destroy-the-book": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unmeasured-ffmpeg-major-is-refused": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unmeasured-report-does-not-claim-zero": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unmeasured-surface-is-refused-not-answered-zero": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unnormalisable-move-is-not-called-slower": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unreachable-checkout-is-said-at-launch": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unread-log-is-not-a-run-that-passed": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unreadable-branch-point-is-not-a-clean-branch": {
-      "run": "33870420536",
+      "run": "33962482053",
+      "scale": 1.0
+    },
+    "an-unreadable-file-list-is-not-disjoint": {
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unreadable-finish-time-is-not-a-fresh-proof": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unreadable-follower-count-is-not-zero-followers": {
-      "run": "33870420536",
+      "run": "33962482053",
+      "scale": 1.0
+    },
+    "an-unreadable-log-is-not-a-run-that-proved-nothing": {
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unreadable-module-is-not-cached-as-empty": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unreadable-quota-header-is-not-a-low-reading": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unreadable-repair-record-is-not-an-empty-one": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unreadable-report-is-not-a-clean-run": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unreadable-sweep-history-still-runs-the-sweep": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unrenderable-collage-layout-is-not-drawn": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unrenderable-collage-layout-is-not-saved": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unresolved-concern-is-not-tidied-away": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unseen-warning-is-not-recorded-as-waved-away": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unstamped-asset-older-than-its-design-change-is-badged": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-unstamped-caption-is-called-an-edit": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-untitled-reel-reaches-the-day-not-just-the-console": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "an-untouched-marker-may-not-move-a-byte": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "analytics-file-exists-precheck": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "analytics-save-gate": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "appkit-wrapper-lifetime": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "archive-note-not-satisfied-by-a-comment": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "archive-note-wraps": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "audit-log-refuses-to-rewrite": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "bake-reads-the-live-event": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "banner-action-reads-against-its-fill": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "blocking-waits-stay-off-the-shared-pool": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "blog-heading-by-hand": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "both-design-change-doors-in-one-section": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "brand-hashtag-put-back": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "caption-findings-count-clears-its-wash": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "catching-the-stand-down-is-not-being-silenced": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "catching-up-takes-the-out-of-date-warning-away": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "checkout-banner-is-drawn-from-the-live-notice": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "checkout-notice-is-quiet-on-a-clean-main": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "checkout-notice-names-the-branch": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "checkout-read-has-a-deadline": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "checkout-reads-in-tests-name-their-own-deadline": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "ci-builds-one-architecture": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "ci-builds-the-app": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "ci-builds-the-shipping-configuration": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "ci-selects-the-recorded-xcode": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "ci-unit-scheme": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "cloudflare-plugin-stays-disabled": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "collaborator-sort-default": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "collage-design-version-parity": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "collapsed-group-sweep-armed": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "colour-exemption-has-something-to-exempt": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "colour-sweep-sees-a-branching-helper": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "colour-used-as-a-view-is-a-fill": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "compiling-the-gui-suite-is-not-running-it": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "contract-covers-every-manifest-the-bridge-builds": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "copy-acknowledgment-goes-stale": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "crashed-export-debris-is-swept": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "crop-anchor-python-parity": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "crop-anchor-swift-parity": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "crop-confidence-has-a-reader": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "dead-tuning-control": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "delete-reclaims-the-preview-folder": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "derived-data-actually-built-into": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "design-fingerprint-moves": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "design-stamp-filename-parity": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "discarded-write-allowlist": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "discarded-write-through-a-wrapper": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "docs-ai-cost-honest": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "drift-collection-is-scoped-to-its-shard": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "drift-publishing-is-scoped-to-its-shard": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "drift-publishing-survives-a-red-run": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "duration-drift-ignores-run-to-run-noise": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "each-secret-is-stored-under-its-own-account": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "each-secret-reaches-the-subprocess-under-its-own-carrier": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "each-suite-leg-counts-what-it-ran": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "empty-segment-is-not-a-search-miss": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "event-row-draws-from-the-named-pairs": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "event-row-reaches-the-screen": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "every-alert-button-is-named-by-the-ui-tests": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "every-alert-has-a-ui-test-quoting-it": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "every-check-code-resolves-to-something": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "every-checkout-reading-announces-itself": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "every-ci-job-carries-a-deadline": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "every-declared-owner-is-actually-injected": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "every-font-gated-file-is-in-a-shard": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "every-hand-check-step-names-its-files": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "every-make-target-is-in-the-readme": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "every-make-target-is-phony": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "every-manifest-sender-has-a-contract-entry": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "every-owner-of-background-work-can-say-so": {
-      "run": "33870420536",
+      "run": "33962482053",
+      "scale": 1.0
+    },
+    "every-path-into-the-repairer-refuses-a-collision": {
+      "run": "33962482053",
       "scale": 1.0
     },
     "every-posting-day-names-its-invites": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "every-progress-file-has-a-reader": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "every-review-surface-still-renders": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "every-text-field-states-its-style": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "every-ui-job-carries-a-deadline": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "export-old-folder-survives-a-failed-run": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "failed-downloads-are-not-no-matches": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "failed-restore-is-reported": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "failure-is-read-from-the-process-not-the-launcher": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "failure-names-the-work-that-failed": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "failure-needle-has-a-producer": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "failure-screen-heading-reaches-the-screen": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "failure-screen-way-back-reaches-the-screen": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "faint-label-dresses-a-switched-off-control": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "faint-tone-is-never-drawn-at-a-call-site": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "fast-subset-deselects": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "ffmpeg-cache-fallback": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "ffmpeg-version-recorded": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "field-placeholder-clears-its-field": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "field-text-trims-newlines": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "figma-plugin-stays-disabled": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "findings-panel-is-one-labelled-group": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "fingerprint-record-refuses-a-dirty-reference": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "fingerprint-record-refuses-a-skip": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "fingerprint-record-refuses-an-unphotographed-template": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "fingerprint-record-refuses-when-git-cannot-answer": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "fingerprint-record-requires-every-check-to-report": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "followers-only-is-not-never-counted": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "friday-photos-count-as-content": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "full-export-rebuilds-from-scratch": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "full-local-run-includes-the-fast-tests": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "full-local-run-includes-the-slow-files": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "full-local-run-stays-parallel": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "gap-follows-the-pages-when-they-move": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "gated-steps-ask-the-gate-the-safe-way": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "generate-week-keeps-its-own-copy-of-the-post-type-rule": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "generation-journals-the-markers-it-moved": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "generation-runs-the-repair-under-a-deadline": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "gone-file-is-missing-not-loading": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "green-run-log-survives-without-xcbeautify": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "green-run-log-survives-xcbeautify": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "guard-job-has-the-pinned-xcode": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "guard-sweep-expensive-steps-are-gated": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "guard-sweep-not-on-every-push": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "guard-sweep-reports-even-when-it-skips": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "guards-reproved-on-a-schedule": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "guessed-handle-is-marked": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "handle-matches-its-profile": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "hashtag-gate-prompt": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "hidden-scrollbar-draws-its-edge": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "history-priced-at-its-own-rate": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "horizontal-strip-shows-its-edge": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "hover-off-the-derivation-path": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "icon-only-control-named": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "import-notice-not-a-success": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "insights-metrics-have-no-emoji": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "insights-names-the-account-not-an-organisation": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "install-gate-fast-subset": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "install-gate-uses-one-spelling": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "install-script-portability": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "interrupted-sweep-restores-the-tree": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "keychain-delete-reports-refusal": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "legacy-store-absent-both-spellings": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "lightbox-names-the-missing-file": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "linux-pr-cancellation-scoped": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "load-bearing-plugins-stay-enabled": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "local-work-has-its-own-stall-threshold": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "mac-leg-blocks-pull-requests": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "macos-concurrency-group-per-commit": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "macos-halves-stay-separate-jobs": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "macos-pr-cancellation-scoped": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "make-test-runs-both-suites": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "manager-says-what-work-it-started": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "manifest-day-rule-copy": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "measured-states-put-their-words-on-the-page": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "migration-skips-on-content-not-existence": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "missing-checkout-is-not-a-missing-photo": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "missing-model-is-not-an-outage": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "nested-code-is-signed-before-the-wrapper": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "new-event-refusal-drawn": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "new-event-refusal-not-satisfied-by-a-comment": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "no-control-drawn-as-a-glyph": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "no-dead-swift-build-cache": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "no-file-is-run-by-two-shards": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "no-image-across-an-actor-boundary": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "no-makespan-beats-the-work": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "no-organisation-is-never-an-empty-prompt-value": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "no-paths-filter-narrows-the-macos-checks": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "no-second-swift-job": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "no-system-colour-as-type": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "no-test-builds-a-live-app-state": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "no-update-outcome-is-not-a-successful-update": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "not-found-rule-one-copy": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "nothing-is-written-against-a-blank-organisation": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "ocr-silence-is-not-slowness": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "one-bad-alt-text-does-not-discard-the-others": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "one-build-at-a-time-on-the-shared-cache": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "one-findings-panel": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "one-job-finishing-does-not-clear-the-dock": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "one-lightbox": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "one-rate-limit-is-not-reported-as-an-outage": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "one-thursday-editor-build-at-a-time": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "one-transient-gh-failure-does-not-end-the-wait": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "only-a-green-check-is-a-proof": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "only-the-locks-state-readers-govern-a-skip": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "only-the-pull-requests-own-runs-are-the-bar": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "paid-action-ink": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "painted-fills-are-named": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "painted-fills-named-outside-the-notices": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "palette-mirror-parity": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "parallelism-stays-off-the-shared-scheme": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "parity-guard-not-satisfied-by-a-comment": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "permission-is-not-asked-before-launch": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "picker-storage-not-satisfied-by-a-comment": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "picker-storage-route": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "pip-wheels-cached": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "prd-status-honest": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "pre-corruption-backups-protected": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "preflight-refuses-an-unreachable-checkout": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "prepush-icloud-checker": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "project-root-is-recorded-not-guessed": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "prose-in-the-event-field-is-not-one-account": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "python-answers-the-real-account-question-once": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "pythons-real-account-check-reads-both-halves": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "pythons-sentinel-list-is-the-shared-one": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "quiet-mark-never-dresses-words": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "read-failure-screen-not-headed-in-jargon": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "read-screens-draw-their-words-from-one-place": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "reading-screen-reaches-the-screen": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "recurring-banner-control": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "reel-audio-fallback-is-reported": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "reference-frame-shards-stay-balanced": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "reference-frames-parallel": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "refusal-note-ink": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "rescan-keeps-what-was-already-read": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "rescan-label-reads-against-its-fill": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "rescan-merges-into-the-stored-result": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "rescan-merges-on-position": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "rescan-refusal-tells-denied-from-missing": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "rescan-sends-the-pages-it-placed": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "restore-offers-a-pre-corruption-backup": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "restore-unreadable-folder-is-not-no-backup": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "review-draft-takes-up-the-rescan": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "review-sheet-covers-the-main-screens": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "review-sheet-covers-the-stage-pills": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "review-sheet-covers-the-tag-fields": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "review-sheet-rotation-is-per-group": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "review-staleness-refresh": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "run-header-is-not-the-process-speaking": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "run-log-names-the-commit-that-ran": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "safe-swap-keeps-the-old-file": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "save-failure-banner-offers-retry": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "save-failure-surfaced": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "schedule-liveness-is-reported": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "scoped-re-export-clears-its-own-days": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "screen-reel-dark-mark": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "secondary-text-clears-the-deeper-page": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "seeding-refuses-a-folder-with-no-photographs": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "selected-pill-measured-under-the-pinned-appearance": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "sentence-rule-copy": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "sentinel-is-not-a-page-number": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "settings-form-draws-from-the-named-pair": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "settings-secondary-text-is-readable": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "shards-are-actually-run": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "shoot-type-parity": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "single-line-fields-keep-no-line-breaks": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "some-template-is-still-held-to-a-side-band": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "something-actually-runs-the-gui-suite": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "source-tree-guard-armed": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "speculative-reel-outlives-the-screen": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "stage-pill-draws-its-label": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "stage-pill-label-clears-its-wash": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "stage-strip-refusal-drawn": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "stale-note-names-its-subject": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "staleness-ignores-code-that-is-not-in-the-app": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "staleness-notice-actually-draws": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "state-labels-are-readable": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "store-refusal-has-its-own-sentence": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "stripe-plugin-stays-disabled": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "subfolder-decision-ink": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "subscription-env-parity": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "suite-cost-numbers-agree-with-each-other": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "suite-cost-runner-matches-the-job": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "suite-run-keeps-the-sheet-baseline": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "sweep-narrows-only-on-the-test-that-moved": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "sweep-reuses-one-build-cache": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "sweep-says-how-far-it-has-got": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "sweep-says-when-it-cannot-reuse-a-cache": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "swifts-sentinel-list-is-the-shared-one": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "tagged-handles-stamped-on-success": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "tertiary-text-clears-the-text-level": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "test-seam-stays-out": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-alert-is-told-which-alert-it-is-showing": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-alt-text-block-covers-the-posted-photos": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-app-and-python-agree-on-what-the-phone-covers": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-app-declares-one-window-not-a-group": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-app-is-built-once-before-the-loop": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-app-joins-the-lookup-to-the-fetch": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-app-target-must-not-define-the-test-only-flag": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-archive-backfill-does-not-become-a-launch-sweep": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-assumed-rate-comes-from-the-comparable-band": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-audience-measurement-reaches-the-report": {
-      "run": "33870420536",
+      "run": "33962482053",
+      "scale": 1.0
+    },
+    "the-badge-counts-only-what-was-missed": {
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-banners-do-not-cover-the-content": {
-      "run": "33870420536",
+      "run": "33962482053",
+      "scale": 1.0
+    },
+    "the-bar-follows-the-commit-being-judged": {
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-blog-pin-comes-from-the-payload": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-branded-strip-is-not-draggable": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-caption-alt-text-checks-reach-the-review-screen": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-class-index-reads-what-the-scan-read": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-collaborator-panel-draws-the-shared-sentence": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-deadline-lets-the-rest-of-the-run-finish": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-deadline-rule-reads-the-workflow-directory": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-delivered-reel-reference-is-not-the-titled-one": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-dock-shows-work-that-is-running": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-duration-series-is-actually-taken": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-effective-count-ignores-what-is-assigned": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-encode-reference-throws-nothing-away": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-entry-point-exemption-names-a-reviewer": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-event-account-ranks-under-the-people-in-the-photos": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-export-sentence-is-written-by-hand-again": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-fast-run-boundary-is-a-real-gap": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-ffmpeg-note-reads-the-patch-level": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-ffmpeg-version-parser-refuses-a-spelling-it-cannot-read": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-findings-keep-their-rule-major-order": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-frame-kept-is-the-frame-that-was-rendered": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-frames-can-see-a-moved-element": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-frames-name-the-ffmpeg-that-judged-them": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-freshness-fixture-stamps-its-commits": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-gate-never-fires-on-a-pull-request": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-gui-suite-declares-its-launches": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-gui-suite-launches-the-app-once": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-hand-check-counts-its-own-steps": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-hand-check-only-deletes-what-it-made": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-handle-book-does-not-learn-a-name": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-handles-screen-is-not-a-way-to-write-a-bad-one": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-joined-reel-is-not-encoded-fast": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-layout-control-draws-its-own-spinner": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-live-preference-is-not-compiled-into-the-tests": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-live-preferences-are-not-written-under-test": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-live-store-is-not-compiled-into-the-tests": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-liveliness-floor-comes-from-the-population": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-lock-probe-asks-only-for-what-it-uses": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-lookup-lock-is-not-every-case-of-the-enum": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-mac-leg-does-not-re-render-the-shards-work": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-mac-legs-skip-list-is-derived-not-spelled": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-manifest-keeps-the-plist-ordering-edge": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-matrix-and-the-shard-argument-agree": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-measured-table-names-what-really-ships": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-merge-is-of-the-commit-that-was-judged": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-merge-prompts-the-hand-check": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-meta-doc-names-every-permission-the-token-needs": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-meta-doc-pins-the-codes-api-version": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-noise-anchor-is-a-reading": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-notice-stack-cannot-bury-the-captions": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-notification-banner-is-on-the-review-sheet": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-numbers-form-states-its-requirement": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-organisation-and-venue-can-be-suggested-at-all": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-out-of-date-verdict-is-taken-again": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-performer-lookups-outlive-their-section": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-performers-editor-is-told-why-it-cannot-look-up": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-permission-seam-still-asks": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-photographs-outlive-the-checks": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-placement-result-cannot-be-unpacked-into-two": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-profile-title-is-read-through-its-escaping": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-prompt-does-not-ask-for-a-counted-total": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-re-record-door-actually-saves-the-frame": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-record-says-how-each-reading-was-taken": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-recorder-follows-only-the-sweep": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-recorder-names-the-real-sweep": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-reference-frame-job-records-its-ffmpeg": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-reflow-outlives-the-row-that-started-it": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-refusal-to-open-the-store-cannot-be-waved-away": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-refusal-to-open-the-store-takes-the-screen": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-reminder-is-not-word-split": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-retry-budget-scales-with-the-timeout": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-retry-pauses-back-off": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-returning-accounts-banner-is-about-this-event": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-returning-accounts-sentence-carries-its-scope": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-runner-reads-its-own-test-count": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-save-button-does-not-reach-for-the-store": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-scratch-suite-is-not-the-apps-own-domain": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-seeded-event-can-reach-the-generation-screen": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-seeded-store-is-written-as-the-app-reads-it": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-settings-screen-is-on-the-review-sheet": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-setup-is-not-copied-back-into-a-workflow": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-share-memo-is-keyed-by-width": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-shipped-build-stays-universal": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-split-is-measured-not-apportioned": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-step-split-adds-up": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-suggestion-line-says-what-is-missing": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-suite-runs-on-a-mac": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-suite-still-runs-on-a-mac": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-suites-account-book-is-the-real-one": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-swap-runs-the-repair-under-a-deadline": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-sweep-is-sized-against-its-deadline": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-sweep-knows-every-progress-file": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-sweep-leaves-a-running-export-alone": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-swift-count-comes-from-the-result-bundle": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-swift-half-reads-the-file-date-too": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-swift-suite-runs-in-parallel": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-swift-tag-list-gates-a-typed-name-too": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-swift-walk-refuses-an-empty-scan": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-swift-workers-are-sized-on-the-machine": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-tag-sheet-says-who-is-left-out": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-test-seam-says-where-it-points": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-text-shaper-is-named-not-inherited": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-title-card-pass-uses-no-fast-preset": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-tuesday-photo-strip-scrolls": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-ui-tests-wait-for-titles-that-exist": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-update-button-pulls-when-the-command-says-it-does": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-venue-leads-when-there-is-no-organisation": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-wait-flushes-what-it-says": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-window-is-clamped-into-the-screen": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-window-is-watched-after-it-opens": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-window-listens-for-readings-taken-by-a-run": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-window-re-asks-about-the-code-folder": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-window-re-reads-when-the-app-comes-forward": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-window-refresh-is-the-read-that-can-skip": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-windows-minimum-is-taken-back": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-wordmark-check-follows-the-wordmark": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-work-owners-come-from-one-list": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-work-scan-actually-finds-running-work": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "the-working-mark-is-never-drawn-on-nothing": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "title-card-type-is-drawn-light": {
-      "run": "33870420536",
+      "run": "33962482053",
+      "scale": 1.0
+    },
+    "todays-proposal-is-built-on-not-forced-over": {
+      "run": "33962482053",
       "scale": 1.0
     },
     "two-photographs-may-not-share-one-label": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "two-repair-rows-do-not-share-an-id": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "type-colour-is-never-drawn-raw": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "typing-a-number-does-not-erase-the-fetch": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "unnamed-fill-through-a-ternary": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "vacuous-assertion-caught": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "vercel-plugin-stays-disabled": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "vision-thinness-parity": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "watching-checkout-readings-twice-leaves-one-subscription": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "web-performer-failure-is-not-an-empty-page": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     },
     "wordmark-required-cover": {
-      "run": "33870420536",
+      "run": "33962482053",
       "scale": 1.0
     }
   },
-  "measured_from_run": "33870420536",
-  "measured_on": "2026-09-04",
+  "measured_from_run": "33962482053",
+  "measured_on": "2026-09-05",
   "re_measure_with": "tools/record_guard_costs.py --from-run <the newest guards.yml run whose shards actually swept>",
+  "runs": 1,
   "seconds": {
-    "a-background-verdict-does-not-interrupt-the-form": 32.2,
-    "a-bad-saved-handle-is-still-listed": 35.85,
-    "a-banner-cannot-set-the-windows-minimum-height": 25.94,
-    "a-blank-organisation-is-not-a-handle-book-key": 27.49,
-    "a-border-is-a-named-surface": 1.31,
-    "a-branch-behind-main-is-not-merged": 1.6,
-    "a-bumped-version-carries-the-day-it-changed": 0.87,
-    "a-bundle-read-never-falls-back-to-the-transcript": 1.57,
-    "a-caption-alt-text-outside-its-band-is-reported": 2.34,
-    "a-caption-alt-text-that-infers-a-feeling-is-reported": 1.75,
-    "a-caption-moved-one-pixel-is-caught": 6.52,
-    "a-checkout-notice-alone-shows-the-window-inset": 41.61,
-    "a-checkout-read-seconds-after-the-last-is-skipped": 24.96,
-    "a-checkout-that-moved-and-came-back-is-news-again": 32.09,
-    "a-clean-main-takes-the-checkout-notice-away": 30.37,
-    "a-cleared-outage-is-stated": 2.19,
-    "a-code-folder-that-came-back-takes-the-warning-away": 22.28,
-    "a-collaborator-candidate-is-in-the-post": 43.67,
-    "a-comment-is-not-a-definition-of-the-test-only-flag": 0.79,
-    "a-commit-landing-mid-wait-is-said-out-loud": 0.51,
-    "a-compiling-job-prepares-its-project": 0.48,
-    "a-condensed-reel-alt-is-caught-by-its-own-word-floor": 1.48,
+    "a-background-verdict-does-not-interrupt-the-form": 43.06,
+    "a-bad-saved-handle-is-still-listed": 47.3,
+    "a-banner-cannot-set-the-windows-minimum-height": 45.37,
+    "a-blank-organisation-is-not-a-handle-book-key": 34.69,
+    "a-border-is-a-named-surface": 1.18,
+    "a-branch-behind-main-is-not-merged": 1.92,
+    "a-bumped-version-carries-the-day-it-changed": 1.11,
+    "a-bundle-read-never-falls-back-to-the-transcript": 0.75,
+    "a-caption-alt-text-outside-its-band-is-reported": 1.21,
+    "a-caption-alt-text-that-infers-a-feeling-is-reported": 2.66,
+    "a-caption-husk-is-refused-by-the-shared-gate": 1.97,
+    "a-caption-moved-one-pixel-is-caught": 9.86,
+    "a-caption-rewrite-must-clear-the-rule-that-selected-it": 1.31,
+    "a-checkout-notice-alone-shows-the-window-inset": 30.86,
+    "a-checkout-read-seconds-after-the-last-is-skipped": 33.3,
+    "a-checkout-that-moved-and-came-back-is-news-again": 28.75,
+    "a-clean-main-takes-the-checkout-notice-away": 23.32,
+    "a-cleared-outage-is-stated": 0.75,
+    "a-code-folder-that-came-back-takes-the-warning-away": 23.76,
+    "a-collaborator-candidate-is-in-the-post": 47.78,
+    "a-comment-is-not-a-definition-of-the-test-only-flag": 0.84,
+    "a-commit-landing-mid-wait-is-said-out-loud": 1.03,
+    "a-compiling-job-prepares-its-project": 0.89,
+    "a-condensed-reel-alt-is-caught-by-its-own-word-floor": 1.16,
     "a-contraction-rewrite-keeps-its-marker": 1.21,
-    "a-count-of-items-is-not-a-measure-of-work": 0.83,
-    "a-counted-total-beats-the-models-number": 1.23,
-    "a-crashed-runner-is-not-a-bad-test-path": 0.7,
-    "a-day-already-rebuilding-is-refused": 39.74,
-    "a-day-of-held-back-accounts-is-not-a-day-that-tags-nobody": 45.9,
-    "a-day-rebuild-starts-under-a-full-run": 22.55,
-    "a-day-that-went-out-is-not-work": 28.49,
-    "a-day-with-nothing-to-rank-is-not-an-empty-ranking": 30.92,
-    "a-days-failure-is-not-anothers": 35.09,
-    "a-dead-handle-is-told-apart-by-instagrams-error-route": 1.47,
-    "a-deleted-alt-text-is-still-a-finding": 1.21,
-    "a-design-change-is-not-read-as-a-codec-change": 0.52,
-    "a-design-change-refuses-an-unbumped-template": 0.79,
-    "a-dismissal-lands-only-on-the-alert-it-named": 34.13,
-    "a-dismissed-checkout-notice-stays-dismissed": 24.76,
-    "a-dismissed-out-of-date-sheet-stays-dismissed": 28.42,
-    "a-dismissed-sheet-records-which-verdict-it-was": 27.01,
-    "a-displaced-sheet-is-kept-rather-than-thrown-away": 28.72,
-    "a-divider-drag-respects-the-cell-floor": 26.32,
-    "a-dragged-layout-is-judged-against-the-posted-photos": 24.54,
-    "a-drift-reading-says-where-the-pixels-are": 2.32,
-    "a-failed-analysis-keeps-its-reason": 30.67,
-    "a-failed-fetch-is-due-another-attempt": 30.72,
-    "a-failed-frame-names-its-ffmpeg": 3.89,
-    "a-failed-permission-request-is-not-a-refusal": 25.53,
-    "a-failed-rebuild-keeps-its-reason": 25.12,
-    "a-failed-run-is-not-silent": 2.38,
-    "a-failing-fetch-is-bounded": 31.25,
-    "a-fetch-failure-is-not-the-books-recovery-note": 29.37,
-    "a-figure-sent-back-unchanged-keeps-its-provenance": 39.66,
-    "a-fold-matching-two-files-repairs-neither": 0.97,
-    "a-frame-that-moved-by-design-is-refused-the-third-door": 2.5,
-    "a-full-run-records-why-a-day-failed": 41.14,
-    "a-full-run-starts-over-a-day-rebuild": 32.48,
-    "a-grant-does-not-clear-an-unrelated-refusal": 26.1,
-    "a-half-claimed-pair-starts-nothing": 26.5,
-    "a-hand-check-step-names-files-that-exist": 0.99,
-    "a-hand-written-decoder-reads-every-field": 2.06,
-    "a-handle-that-changed-hands-is-not-merged-across": 23.09,
-    "a-hanging-gui-test-is-given-a-deadline": 0.76,
-    "a-hidden-like-count-says-something-of-its-own": 33.58,
-    "a-job-at-another-commit-is-not-an-answer": 0.83,
-    "a-large-dead-audience-is-held-out-by-the-floor": 29.67,
-    "a-launch-that-counted-nobody-does-not-read-as-success": 31.66,
-    "a-layout-clears-every-surface-it-is-seen-on": 0.78,
-    "a-leg-that-ran-nothing-is-refused": 0.43,
-    "a-link-raised-sheet-is-not-the-default-action": 26.13,
-    "a-lock-nobody-holds-is-loud": 2.54,
-    "a-log-that-will-not-come-does-not-take-the-check-down": 1.57,
-    "a-measured-frame-nobody-kept-is-refused": 1.78,
-    "a-merge-github-refused-is-not-a-merge": 0.46,
-    "a-missing-python-environment-is-refused-by-name": 27.4,
-    "a-missing-source-is-not-a-copy-to-retry": 29.41,
-    "a-missing-suite-count-record-is-refused": 0.78,
-    "a-model-payload-names-a-real-swift-type": 0.81,
-    "a-moved-figure-is-only-explained-when-the-mix-moved": 25.25,
-    "a-name-in-the-handle-field-is-not-a-handle": 28.69,
-    "a-negative-duration-is-never-a-reading": 0.52,
-    "a-one-clip-reel-is-not-encoded-fast": 5.37,
-    "a-one-photo-collage-day-is-called-a-carousel": 0.65,
-    "a-partial-paste-cannot-be-saved-over-a-key": 24.64,
-    "a-partial-work-series-does-not-normalise": 0.44,
-    "a-per-frame-reel-alt-is-reported": 1.73,
-    "a-percentile-interpolates-between-its-neighbours": 0.46,
-    "a-permanent-gh-failure-is-still-bounded": 0.77,
-    "a-permission-is-not-both-required-and-absent": 0.99,
-    "a-personal-post-is-not-an-uncontrolled-observation": 1.35,
-    "a-perturbed-render-cannot-become-the-reference-frame": 2.7,
-    "a-pipeline-marker-is-not-wrapped-in-prose": 27.17,
-    "a-private-account-does-not-take-a-collaborator-slot": 23.29,
-    "a-private-account-is-not-asked-for-figures-it-cannot-have": 30.39,
-    "a-proof-is-not-fresh-forever": 0.59,
-    "a-python-only-sweep-does-not-build-the-app": 0.97,
-    "a-quit-with-work-running-asks-first": 20.72,
-    "a-raises-block-must-decide-about-recording": 0.45,
-    "a-rebuilding-days-clips-are-not-editable": 23.56,
-    "a-recoloured-element-is-not-read-as-a-codec-change": 0.71,
-    "a-recorded-change-names-its-own-version": 0.66,
-    "a-red-gated-job-stays-in-the-duration-series": 0.62,
-    "a-red-suite-is-not-recorded-past-its-own-guard": 1.12,
-    "a-redraw-is-claimed-after-the-event-is-changed": 0.5,
-    "a-redraw-refreshes-nothing-outside-the-review-screen": 25.19,
-    "a-reel-band-is-judged-on-the-reels-own-frames": 33.7,
-    "a-reel-is-not-told-about-a-first-photo": 26.19,
-    "a-reel-prompt-is-told-the-reels-size": 1.04,
-    "a-reel-seed-is-minted-on-first-render": 5.51,
-    "a-reel-suggestion-is-checked-against-who-is-on-screen": 26.49,
-    "a-refusal-is-not-swallowed-by-another-notice": 35.51,
-    "a-refused-account-does-not-get-an-engagement-rate": 0.87,
-    "a-refused-analytics-write-is-not-shown-as-an-import": 28.27,
-    "a-refused-band-write-is-reported": 25.47,
-    "a-refused-lookup-names-the-one-holding-the-list": 19.46,
-    "a-refused-marker-move-is-reported": 0.95,
-    "a-refused-rebuild-says-which-day": 31.41,
-    "a-refused-write-leaves-the-stored-key-alone": 32.69,
-    "a-render-is-pinned-to-the-apps-appearance": 25.23,
-    "a-render-test-cannot-open-the-live-history": 1.39,
-    "a-reorder-hiding-inside-a-reword-is-caught": 2.87,
-    "a-repair-may-not-add-a-finding": 0.87,
-    "a-repair-may-not-reorder-the-markers": 0.4,
-    "a-repair-panel-shows-one-posts-records": 21.11,
-    "a-reply-is-not-shown-against-the-wrong-concern": 30.93,
-    "a-retry-estimate-grows-with-its-markers": 18.79,
-    "a-review-pass-cannot-rewrite-a-reel-alt": 2.29,
-    "a-review-pass-may-not-change-the-alt-text-count": 1.62,
-    "a-revision-drops-the-photos-its-alt-texts-describe": 1.56,
-    "a-rewrite-may-not-gut-the-description": 0.36,
-    "a-rewritten-reel-alt-is-reported": 1.49,
-    "a-run-at-another-commit-is-not-an-answer": 0.58,
-    "a-run-still-in-flight-is-never-green": 0.88,
-    "a-scale-of-one-is-a-claim-not-a-default": 0.75,
-    "a-scratch-suite-opens-empty": 33.47,
-    "a-screen-shows-the-layout-with-no-way-to-change-it": 0.4,
-    "a-second-definition-of-the-test-only-flag-is-caught": 0.39,
-    "a-second-insights-analysis-is-refused": 27.0,
-    "a-second-notes-search-is-refused": 30.64,
-    "a-second-person-rewrite-keeps-its-marker": 1.14,
-    "a-second-press-does-not-start-a-second-update": 20.11,
-    "a-second-reflow-on-one-program-is-refused": 28.03,
-    "a-secrets-warning-names-its-own-prefix": 28.01,
-    "a-sentinel-behind-a-link-is-not-an-account": 23.02,
-    "a-shard-with-nothing-to-prove-is-not-a-duration": 0.7,
-    "a-sheet-command-opens-the-window": 33.88,
-    "a-short-duration-window-is-not-called-steady": 0.54,
-    "a-short-frame-stream-is-refused": 1.01,
-    "a-short-page-of-runs-or-jobs-is-refused": 0.56,
-    "a-side-crop-reading-names-its-surface": 0.87,
-    "a-silenced-guard-is-refused-at-load": 0.65,
-    "a-silent-run-erases-nothing": 26.42,
-    "a-skipped-gated-job-leaves-the-duration-series": 0.86,
-    "a-skipped-sweep-is-not-a-proof": 0.52,
-    "a-slot-that-failed-says-so": 32.57,
-    "a-spent-allowance-is-said-out-loud": 25.34,
-    "a-spent-meta-allowance-is-not-retried": 0.63,
-    "a-stalled-insights-analysis-becomes-an-error": 30.68,
-    "a-stalled-notes-search-becomes-an-error": 25.94,
-    "a-starting-prover-is-not-a-dead-one": 0.35,
-    "a-stored-band-that-matches-no-post-is-shown": 21.63,
-    "a-successful-fetch-clears-the-failure-count": 23.02,
-    "a-swift-leg-that-ran-half-is-refused": 1.48,
-    "a-switch-rebuilds-every-day-again": 0.84,
-    "a-symbol-name-that-draws-nothing": 31.88,
-    "a-symlinked-root-still-names-its-files": 25.95,
-    "a-tagged-company-is-not-dropped": 35.52,
-    "a-taken-handle-is-not-suggested-again": 22.46,
-    "a-test-that-fails-every-time-is-not-a-flake": 0.85,
-    "a-thin-report-says-out-of-how-many": 26.96,
-    "a-third-layout-is-described-as-the-second": 26.58,
-    "a-title-card-muxes-to-the-name-its-callers-pass": 1.41,
-    "a-transient-failure-never-becomes-a-scrape": 0.86,
-    "a-tried-finding-is-its-own-row": 21.19,
-    "a-typed-name-does-not-reach-the-tag-list": 0.42,
-    "a-typed-name-is-credited-not-mentioned": 28.87,
-    "a-typed-note-survives-the-web-search": 27.43,
-    "a-value-that-is-no-account-is-not-a-candidate": 26.1,
-    "a-value-that-is-nobody-gets-no-link": 33.8,
-    "a-venv-inside-an-app-bundle-is-refused": 0.74,
-    "a-view-does-not-own-long-work": 26.88,
-    "a-warning-names-no-cause-it-cannot-know": 28.76,
-    "a-waved-away-code-folder-warning-stays-away": 41.14,
-    "a-wedged-test-still-has-a-deadline": 0.78,
-    "a-withheld-like-count-is-not-a-measured-zero": 23.31,
-    "accent-as-text-clears-the-text-level": 44.13,
-    "accent-is-never-drawn-unnamed": 1.31,
-    "accent-is-never-drawn-unnamed-in-a-wrapped-ternary": 0.8,
-    "accent-tint-is-never-drawn-unnamed": 1.13,
-    "accepting-a-suggestion-tells-the-fetch": 23.58,
-    "account-book-keeps-generations": 27.0,
-    "account-book-names-a-refusal": 24.69,
-    "account-book-sets-a-bad-file-aside": 27.45,
-    "adding-a-file-does-not-rewrite-the-record": 0.8,
-    "an-absent-secret-is-not-exported-as-blank": 24.59,
-    "an-account-marked-never-to-invite-takes-no-slot": 24.83,
-    "an-account-nobody-looked-at-is-still-not-scored": 31.88,
-    "an-account-that-keeps-refusing-stops-taking-a-slot": 26.26,
-    "an-added-test-file-must-be-measured": 0.94,
-    "an-alt-text-is-paired-with-its-neighbour": 25.31,
-    "an-assumed-account-is-not-told-to-add-likes": 24.58,
-    "an-assumed-rate-is-labelled-wherever-it-renders": 32.61,
-    "an-edited-test-file-does-not-owe-a-measurement": 0.67,
-    "an-empty-caption-alt-text-is-reported": 0.99,
-    "an-export-folder-belongs-to-one-show": 36.59,
-    "an-export-that-fails-is-not-silent": 1.88,
-    "an-exported-day-is-not-claimed-to-have-been-seen": 26.83,
-    "an-idle-worker-can-take-work-from-a-busy-one": 0.91,
-    "an-installing-job-caches-its-wheels": 0.34,
-    "an-uncertain-answer-runs-the-job": 0.87,
-    "an-undecided-reel-layout-is-not-pre-rendered": 37.35,
-    "an-unfinished-job-has-no-duration": 0.5,
-    "an-unknown-check-conclusion-is-not-a-pass": 0.47,
-    "an-unknown-outcome-does-not-destroy-the-book": 24.24,
-    "an-unmeasured-ffmpeg-major-is-refused": 0.85,
-    "an-unmeasured-report-does-not-claim-zero": 35.2,
-    "an-unmeasured-surface-is-refused-not-answered-zero": 0.44,
-    "an-unnormalisable-move-is-not-called-slower": 0.62,
-    "an-unreachable-checkout-is-said-at-launch": 22.51,
-    "an-unread-log-is-not-a-run-that-passed": 0.42,
-    "an-unreadable-branch-point-is-not-a-clean-branch": 0.46,
-    "an-unreadable-finish-time-is-not-a-fresh-proof": 0.72,
-    "an-unreadable-follower-count-is-not-zero-followers": 0.4,
-    "an-unreadable-module-is-not-cached-as-empty": 0.92,
-    "an-unreadable-quota-header-is-not-a-low-reading": 0.53,
-    "an-unreadable-repair-record-is-not-an-empty-one": 29.52,
-    "an-unreadable-report-is-not-a-clean-run": 0.62,
-    "an-unreadable-sweep-history-still-runs-the-sweep": 0.44,
-    "an-unrenderable-collage-layout-is-not-drawn": 0.54,
-    "an-unrenderable-collage-layout-is-not-saved": 22.01,
-    "an-unresolved-concern-is-not-tidied-away": 26.99,
-    "an-unseen-warning-is-not-recorded-as-waved-away": 38.02,
-    "an-unstamped-asset-older-than-its-design-change-is-badged": 0.62,
-    "an-unstamped-caption-is-called-an-edit": 30.37,
-    "an-untitled-reel-reaches-the-day-not-just-the-console": 8.29,
-    "an-untouched-marker-may-not-move-a-byte": 0.42,
-    "analytics-file-exists-precheck": 23.21,
-    "analytics-save-gate": 22.4,
-    "appkit-wrapper-lifetime": 21.66,
-    "archive-note-not-satisfied-by-a-comment": 38.18,
-    "archive-note-wraps": 23.11,
-    "audit-log-refuses-to-rewrite": 26.16,
-    "bake-reads-the-live-event": 30.72,
-    "banner-action-reads-against-its-fill": 21.15,
-    "blocking-waits-stay-off-the-shared-pool": 0.43,
-    "blog-heading-by-hand": 20.34,
-    "both-design-change-doors-in-one-section": 0.68,
-    "brand-hashtag-put-back": 1.4,
-    "caption-findings-count-clears-its-wash": 39.45,
-    "catching-the-stand-down-is-not-being-silenced": 0.56,
-    "catching-up-takes-the-out-of-date-warning-away": 20.26,
-    "checkout-banner-is-drawn-from-the-live-notice": 18.99,
-    "checkout-notice-is-quiet-on-a-clean-main": 20.2,
-    "checkout-notice-names-the-branch": 19.72,
-    "checkout-read-has-a-deadline": 55.89,
-    "checkout-reads-in-tests-name-their-own-deadline": 0.72,
-    "ci-builds-one-architecture": 0.62,
-    "ci-builds-the-app": 0.44,
-    "ci-builds-the-shipping-configuration": 0.4,
-    "ci-selects-the-recorded-xcode": 1.56,
-    "ci-unit-scheme": 0.42,
-    "cloudflare-plugin-stays-disabled": 0.4,
-    "collaborator-sort-default": 36.29,
-    "collage-design-version-parity": 0.78,
-    "collapsed-group-sweep-armed": 29.1,
-    "colour-exemption-has-something-to-exempt": 0.73,
-    "colour-sweep-sees-a-branching-helper": 0.46,
-    "colour-used-as-a-view-is-a-fill": 1.71,
-    "compiling-the-gui-suite-is-not-running-it": 0.42,
-    "contract-covers-every-manifest-the-bridge-builds": 0.43,
-    "copy-acknowledgment-goes-stale": 19.97,
-    "crashed-export-debris-is-swept": 19.08,
-    "crop-anchor-python-parity": 0.58,
-    "crop-anchor-swift-parity": 0.53,
-    "crop-confidence-has-a-reader": 26.67,
-    "dead-tuning-control": 5.95,
-    "delete-reclaims-the-preview-folder": 20.17,
-    "derived-data-actually-built-into": 1.34,
-    "design-fingerprint-moves": 1.26,
-    "design-stamp-filename-parity": 0.61,
-    "discarded-write-allowlist": 23.92,
-    "discarded-write-through-a-wrapper": 20.46,
-    "docs-ai-cost-honest": 1.29,
-    "drift-collection-is-scoped-to-its-shard": 1.64,
-    "drift-publishing-is-scoped-to-its-shard": 0.87,
-    "drift-publishing-survives-a-red-run": 1.89,
-    "duration-drift-ignores-run-to-run-noise": 0.78,
-    "each-secret-is-stored-under-its-own-account": 28.91,
-    "each-secret-reaches-the-subprocess-under-its-own-carrier": 18.21,
-    "each-suite-leg-counts-what-it-ran": 0.59,
-    "empty-segment-is-not-a-search-miss": 21.81,
-    "event-row-draws-from-the-named-pairs": 18.47,
-    "event-row-reaches-the-screen": 21.52,
-    "every-alert-button-is-named-by-the-ui-tests": 0.7,
-    "every-alert-has-a-ui-test-quoting-it": 0.54,
-    "every-check-code-resolves-to-something": 1.77,
-    "every-checkout-reading-announces-itself": 28.79,
-    "every-ci-job-carries-a-deadline": 0.75,
-    "every-declared-owner-is-actually-injected": 29.29,
-    "every-font-gated-file-is-in-a-shard": 0.44,
-    "every-hand-check-step-names-its-files": 0.81,
-    "every-make-target-is-in-the-readme": 0.32,
-    "every-make-target-is-phony": 0.38,
-    "every-manifest-sender-has-a-contract-entry": 0.39,
-    "every-owner-of-background-work-can-say-so": 29.39,
-    "every-posting-day-names-its-invites": 18.69,
-    "every-progress-file-has-a-reader": 31.82,
-    "every-review-surface-still-renders": 26.86,
-    "every-text-field-states-its-style": 33.99,
-    "every-ui-job-carries-a-deadline": 0.62,
-    "export-old-folder-survives-a-failed-run": 24.6,
-    "failed-downloads-are-not-no-matches": 0.46,
-    "failed-restore-is-reported": 0.76,
-    "failure-is-read-from-the-process-not-the-launcher": 25.76,
-    "failure-names-the-work-that-failed": 22.48,
-    "failure-needle-has-a-producer": 0.35,
-    "failure-screen-heading-reaches-the-screen": 32.17,
-    "failure-screen-way-back-reaches-the-screen": 28.98,
-    "faint-label-dresses-a-switched-off-control": 1.61,
-    "faint-tone-is-never-drawn-at-a-call-site": 1.01,
-    "fast-subset-deselects": 0.41,
-    "ffmpeg-cache-fallback": 0.34,
-    "ffmpeg-version-recorded": 0.43,
-    "field-placeholder-clears-its-field": 31.99,
-    "field-text-trims-newlines": 32.38,
-    "figma-plugin-stays-disabled": 0.51,
-    "findings-panel-is-one-labelled-group": 31.15,
-    "fingerprint-record-refuses-a-dirty-reference": 2.1,
-    "fingerprint-record-refuses-a-skip": 1.99,
-    "fingerprint-record-refuses-an-unphotographed-template": 1.53,
-    "fingerprint-record-refuses-when-git-cannot-answer": 1.51,
-    "fingerprint-record-requires-every-check-to-report": 1.58,
-    "followers-only-is-not-never-counted": 27.02,
-    "friday-photos-count-as-content": 20.03,
-    "full-export-rebuilds-from-scratch": 26.24,
-    "full-local-run-includes-the-fast-tests": 0.69,
-    "full-local-run-includes-the-slow-files": 0.52,
-    "full-local-run-stays-parallel": 0.84,
-    "gap-follows-the-pages-when-they-move": 20.94,
-    "gated-steps-ask-the-gate-the-safe-way": 0.72,
-    "generate-week-keeps-its-own-copy-of-the-post-type-rule": 1.2,
-    "generation-journals-the-markers-it-moved": 0.41,
-    "generation-runs-the-repair-under-a-deadline": 1.3,
-    "gone-file-is-missing-not-loading": 23.92,
-    "green-run-log-survives-without-xcbeautify": 2.63,
-    "green-run-log-survives-xcbeautify": 1.57,
-    "guard-job-has-the-pinned-xcode": 0.41,
-    "guard-sweep-expensive-steps-are-gated": 0.42,
-    "guard-sweep-not-on-every-push": 0.36,
-    "guard-sweep-reports-even-when-it-skips": 0.49,
-    "guards-reproved-on-a-schedule": 0.87,
-    "guessed-handle-is-marked": 25.45,
-    "handle-matches-its-profile": 1.29,
-    "hashtag-gate-prompt": 0.36,
-    "hidden-scrollbar-draws-its-edge": 21.37,
-    "history-priced-at-its-own-rate": 0.39,
-    "horizontal-strip-shows-its-edge": 26.68,
-    "hover-off-the-derivation-path": 24.34,
-    "icon-only-control-named": 21.95,
-    "import-notice-not-a-success": 21.61,
-    "insights-metrics-have-no-emoji": 27.41,
-    "insights-names-the-account-not-an-organisation": 18.19,
-    "install-gate-fast-subset": 0.63,
-    "install-gate-uses-one-spelling": 0.58,
-    "install-script-portability": 0.38,
-    "interrupted-sweep-restores-the-tree": 1.69,
-    "keychain-delete-reports-refusal": 26.86,
-    "legacy-store-absent-both-spellings": 22.9,
-    "lightbox-names-the-missing-file": 22.78,
-    "linux-pr-cancellation-scoped": 0.34,
-    "load-bearing-plugins-stay-enabled": 0.75,
-    "local-work-has-its-own-stall-threshold": 32.04,
-    "mac-leg-blocks-pull-requests": 0.38,
-    "macos-concurrency-group-per-commit": 0.83,
-    "macos-halves-stay-separate-jobs": 0.35,
-    "macos-pr-cancellation-scoped": 0.34,
-    "make-test-runs-both-suites": 0.46,
-    "manager-says-what-work-it-started": 18.19,
-    "manifest-day-rule-copy": 22.52,
-    "measured-states-put-their-words-on-the-page": 38.87,
-    "migration-skips-on-content-not-existence": 23.6,
-    "missing-checkout-is-not-a-missing-photo": 22.01,
-    "missing-model-is-not-an-outage": 36.03,
-    "nested-code-is-signed-before-the-wrapper": 2.16,
-    "new-event-refusal-drawn": 0.34,
-    "new-event-refusal-not-satisfied-by-a-comment": 0.56,
-    "no-control-drawn-as-a-glyph": 28.46,
-    "no-dead-swift-build-cache": 0.69,
-    "no-file-is-run-by-two-shards": 0.84,
-    "no-image-across-an-actor-boundary": 24.35,
-    "no-makespan-beats-the-work": 0.54,
-    "no-organisation-is-never-an-empty-prompt-value": 1.7,
-    "no-paths-filter-narrows-the-macos-checks": 0.47,
-    "no-second-swift-job": 0.34,
-    "no-system-colour-as-type": 0.78,
-    "no-test-builds-a-live-app-state": 0.61,
-    "no-update-outcome-is-not-a-successful-update": 25.08,
-    "not-found-rule-one-copy": 17.48,
-    "nothing-is-written-against-a-blank-organisation": 22.27,
-    "ocr-silence-is-not-slowness": 23.16,
-    "one-bad-alt-text-does-not-discard-the-others": 1.2,
-    "one-build-at-a-time-on-the-shared-cache": 1.08,
-    "one-findings-panel": 24.95,
-    "one-job-finishing-does-not-clear-the-dock": 22.56,
-    "one-lightbox": 25.96,
-    "one-rate-limit-is-not-reported-as-an-outage": 26.01,
-    "one-thursday-editor-build-at-a-time": 22.48,
-    "one-transient-gh-failure-does-not-end-the-wait": 0.93,
-    "only-a-green-check-is-a-proof": 0.57,
-    "only-the-locks-state-readers-govern-a-skip": 1.12,
-    "only-the-pull-requests-own-runs-are-the-bar": 0.76,
-    "paid-action-ink": 29.06,
-    "painted-fills-are-named": 1.01,
-    "painted-fills-named-outside-the-notices": 1.47,
-    "palette-mirror-parity": 0.4,
-    "parallelism-stays-off-the-shared-scheme": 0.42,
-    "parity-guard-not-satisfied-by-a-comment": 0.39,
-    "permission-is-not-asked-before-launch": 0.4,
-    "picker-storage-not-satisfied-by-a-comment": 32.04,
-    "picker-storage-route": 25.9,
-    "pip-wheels-cached": 0.44,
-    "prd-status-honest": 0.54,
-    "pre-corruption-backups-protected": 20.25,
-    "preflight-refuses-an-unreachable-checkout": 21.67,
-    "prepush-icloud-checker": 0.56,
-    "project-root-is-recorded-not-guessed": 18.94,
-    "prose-in-the-event-field-is-not-one-account": 23.54,
-    "python-answers-the-real-account-question-once": 0.43,
-    "pythons-real-account-check-reads-both-halves": 0.54,
-    "pythons-sentinel-list-is-the-shared-one": 0.34,
-    "quiet-mark-never-dresses-words": 1.32,
-    "read-failure-screen-not-headed-in-jargon": 29.0,
-    "read-screens-draw-their-words-from-one-place": 27.86,
-    "reading-screen-reaches-the-screen": 20.99,
-    "recurring-banner-control": 24.1,
-    "reel-audio-fallback-is-reported": 0.96,
-    "reference-frame-shards-stay-balanced": 0.59,
-    "reference-frames-parallel": 0.63,
-    "refusal-note-ink": 30.05,
-    "rescan-keeps-what-was-already-read": 0.61,
-    "rescan-label-reads-against-its-fill": 28.0,
-    "rescan-merges-into-the-stored-result": 27.04,
-    "rescan-merges-on-position": 0.99,
-    "rescan-refusal-tells-denied-from-missing": 22.97,
-    "rescan-sends-the-pages-it-placed": 22.72,
-    "restore-offers-a-pre-corruption-backup": 28.79,
-    "restore-unreadable-folder-is-not-no-backup": 21.91,
-    "review-draft-takes-up-the-rescan": 31.01,
-    "review-sheet-covers-the-main-screens": 20.54,
-    "review-sheet-covers-the-stage-pills": 24.1,
-    "review-sheet-covers-the-tag-fields": 23.55,
-    "review-sheet-rotation-is-per-group": 26.65,
-    "review-staleness-refresh": 23.33,
-    "run-header-is-not-the-process-speaking": 18.81,
-    "run-log-names-the-commit-that-ran": 17.54,
-    "safe-swap-keeps-the-old-file": 23.92,
-    "save-failure-banner-offers-retry": 22.53,
-    "save-failure-surfaced": 22.11,
-    "schedule-liveness-is-reported": 0.57,
-    "scoped-re-export-clears-its-own-days": 22.9,
-    "screen-reel-dark-mark": 1.48,
-    "secondary-text-clears-the-deeper-page": 53.32,
-    "seeding-refuses-a-folder-with-no-photographs": 0.84,
-    "selected-pill-measured-under-the-pinned-appearance": 24.03,
-    "sentence-rule-copy": 16.82,
-    "sentinel-is-not-a-page-number": 1.61,
-    "settings-form-draws-from-the-named-pair": 31.96,
-    "settings-secondary-text-is-readable": 24.3,
-    "shards-are-actually-run": 0.45,
-    "shoot-type-parity": 0.52,
-    "single-line-fields-keep-no-line-breaks": 24.68,
-    "some-template-is-still-held-to-a-side-band": 1.1,
-    "something-actually-runs-the-gui-suite": 0.67,
-    "source-tree-guard-armed": 0.69,
-    "speculative-reel-outlives-the-screen": 25.44,
-    "stage-pill-draws-its-label": 19.47,
-    "stage-pill-label-clears-its-wash": 30.68,
-    "stage-strip-refusal-drawn": 0.68,
-    "stale-note-names-its-subject": 22.78,
-    "staleness-ignores-code-that-is-not-in-the-app": 37.05,
-    "staleness-notice-actually-draws": 24.85,
-    "state-labels-are-readable": 44.43,
-    "store-refusal-has-its-own-sentence": 33.01,
-    "stripe-plugin-stays-disabled": 0.65,
-    "subfolder-decision-ink": 22.68,
-    "subscription-env-parity": 0.51,
-    "suite-cost-numbers-agree-with-each-other": 0.35,
-    "suite-cost-runner-matches-the-job": 0.96,
-    "suite-run-keeps-the-sheet-baseline": 0.52,
-    "sweep-narrows-only-on-the-test-that-moved": 1.4,
-    "sweep-reuses-one-build-cache": 0.56,
-    "sweep-says-how-far-it-has-got": 0.61,
-    "sweep-says-when-it-cannot-reuse-a-cache": 0.79,
-    "swifts-sentinel-list-is-the-shared-one": 33.12,
-    "tagged-handles-stamped-on-success": 43.91,
-    "tertiary-text-clears-the-text-level": 41.91,
-    "test-seam-stays-out": 1.1,
-    "the-alert-is-told-which-alert-it-is-showing": 29.7,
-    "the-alt-text-block-covers-the-posted-photos": 35.87,
-    "the-app-and-python-agree-on-what-the-phone-covers": 0.73,
-    "the-app-declares-one-window-not-a-group": 25.21,
-    "the-app-is-built-once-before-the-loop": 0.83,
-    "the-app-joins-the-lookup-to-the-fetch": 22.25,
-    "the-app-target-must-not-define-the-test-only-flag": 0.35,
-    "the-archive-backfill-does-not-become-a-launch-sweep": 29.72,
-    "the-assumed-rate-comes-from-the-comparable-band": 0.33,
-    "the-audience-measurement-reaches-the-report": 1.92,
-    "the-banners-do-not-cover-the-content": 22.58,
-    "the-blog-pin-comes-from-the-payload": 22.03,
-    "the-branded-strip-is-not-draggable": 24.1,
-    "the-caption-alt-text-checks-reach-the-review-screen": 1.62,
-    "the-class-index-reads-what-the-scan-read": 6.45,
-    "the-collaborator-panel-draws-the-shared-sentence": 25.68,
-    "the-deadline-lets-the-rest-of-the-run-finish": 0.33,
-    "the-deadline-rule-reads-the-workflow-directory": 0.53,
-    "the-delivered-reel-reference-is-not-the-titled-one": 1.29,
-    "the-dock-shows-work-that-is-running": 22.65,
-    "the-duration-series-is-actually-taken": 0.68,
-    "the-effective-count-ignores-what-is-assigned": 0.4,
-    "the-encode-reference-throws-nothing-away": 0.58,
-    "the-entry-point-exemption-names-a-reviewer": 0.35,
-    "the-event-account-ranks-under-the-people-in-the-photos": 20.66,
-    "the-export-sentence-is-written-by-hand-again": 0.48,
-    "the-fast-run-boundary-is-a-real-gap": 0.6,
-    "the-ffmpeg-note-reads-the-patch-level": 1.29,
-    "the-ffmpeg-version-parser-refuses-a-spelling-it-cannot-read": 1.2,
-    "the-findings-keep-their-rule-major-order": 0.61,
-    "the-frame-kept-is-the-frame-that-was-rendered": 1.34,
-    "the-frames-can-see-a-moved-element": 1.12,
-    "the-frames-name-the-ffmpeg-that-judged-them": 0.87,
-    "the-freshness-fixture-stamps-its-commits": 31.06,
-    "the-gate-never-fires-on-a-pull-request": 0.4,
-    "the-gui-suite-declares-its-launches": 0.37,
-    "the-gui-suite-launches-the-app-once": 0.41,
-    "the-hand-check-counts-its-own-steps": 0.38,
-    "the-hand-check-only-deletes-what-it-made": 0.38,
-    "the-handle-book-does-not-learn-a-name": 18.98,
-    "the-handles-screen-is-not-a-way-to-write-a-bad-one": 44.96,
-    "the-joined-reel-is-not-encoded-fast": 5.21,
-    "the-layout-control-draws-its-own-spinner": 1.31,
-    "the-live-preference-is-not-compiled-into-the-tests": 1.3,
-    "the-live-preferences-are-not-written-under-test": 1.07,
-    "the-live-store-is-not-compiled-into-the-tests": 0.99,
-    "the-liveliness-floor-comes-from-the-population": 0.4,
-    "the-lock-probe-asks-only-for-what-it-uses": 0.33,
-    "the-lookup-lock-is-not-every-case-of-the-enum": 20.99,
-    "the-mac-leg-does-not-re-render-the-shards-work": 0.37,
-    "the-mac-legs-skip-list-is-derived-not-spelled": 0.62,
-    "the-manifest-keeps-the-plist-ordering-edge": 0.38,
-    "the-matrix-and-the-shard-argument-agree": 0.34,
-    "the-measured-table-names-what-really-ships": 0.72,
-    "the-merge-is-of-the-commit-that-was-judged": 0.7,
-    "the-merge-prompts-the-hand-check": 0.37,
-    "the-meta-doc-names-every-permission-the-token-needs": 0.46,
-    "the-meta-doc-pins-the-codes-api-version": 0.39,
-    "the-noise-anchor-is-a-reading": 1.02,
-    "the-notice-stack-cannot-bury-the-captions": 23.59,
-    "the-notification-banner-is-on-the-review-sheet": 26.49,
-    "the-numbers-form-states-its-requirement": 19.59,
-    "the-organisation-and-venue-can-be-suggested-at-all": 28.54,
-    "the-out-of-date-verdict-is-taken-again": 22.85,
-    "the-performer-lookups-outlive-their-section": 22.68,
-    "the-performers-editor-is-told-why-it-cannot-look-up": 23.86,
-    "the-permission-seam-still-asks": 0.52,
-    "the-photographs-outlive-the-checks": 0.99,
-    "the-placement-result-cannot-be-unpacked-into-two": 0.69,
+    "a-count-of-items-is-not-a-measure-of-work": 0.64,
+    "a-counted-total-beats-the-models-number": 2.13,
+    "a-cramped-window-is-opened-out": 34.67,
+    "a-crashed-runner-is-not-a-bad-test-path": 0.76,
+    "a-day-already-rebuilding-is-refused": 20.46,
+    "a-day-of-held-back-accounts-is-not-a-day-that-tags-nobody": 35.14,
+    "a-day-rebuild-starts-under-a-full-run": 27.07,
+    "a-day-that-went-out-is-not-work": 28.1,
+    "a-day-with-nothing-to-rank-is-not-an-empty-ranking": 22.25,
+    "a-days-failure-is-not-anothers": 27.43,
+    "a-dead-handle-is-told-apart-by-instagrams-error-route": 0.71,
+    "a-deadline-is-judged-against-the-tests-its-job-runs": 0.71,
+    "a-deleted-alt-text-is-still-a-finding": 0.75,
+    "a-design-change-is-not-read-as-a-codec-change": 0.33,
+    "a-design-change-refuses-an-unbumped-template": 0.48,
+    "a-dismissal-lands-only-on-the-alert-it-named": 24.16,
+    "a-dismissed-checkout-notice-stays-dismissed": 31.05,
+    "a-dismissed-out-of-date-sheet-stays-dismissed": 20.78,
+    "a-dismissed-sheet-records-which-verdict-it-was": 31.18,
+    "a-displaced-sheet-is-kept-rather-than-thrown-away": 20.03,
+    "a-divider-drag-respects-the-cell-floor": 19.96,
+    "a-dragged-layout-is-judged-against-the-posted-photos": 31.17,
+    "a-drift-reading-says-where-the-pixels-are": 2.43,
+    "a-failed-analysis-keeps-its-reason": 36.93,
+    "a-failed-fetch-is-due-another-attempt": 25.28,
+    "a-failed-frame-names-its-ffmpeg": 1.82,
+    "a-failed-permission-request-is-not-a-refusal": 29.45,
+    "a-failed-rebuild-keeps-its-reason": 26.04,
+    "a-failed-rules-run-that-named-nothing-is-not-a-pass": 0.51,
+    "a-failed-run-is-not-silent": 2.1,
+    "a-failing-fetch-is-bounded": 21.41,
+    "a-failure-banner-stays-silent-in-front": 35.88,
+    "a-fetch-failure-is-not-the-books-recovery-note": 24.24,
+    "a-figure-sent-back-unchanged-keeps-its-provenance": 29.52,
+    "a-fold-matching-two-files-repairs-neither": 2.16,
+    "a-frame-that-moved-by-design-is-refused-the-third-door": 1.2,
+    "a-full-run-records-why-a-day-failed": 32.95,
+    "a-full-run-starts-over-a-day-rebuild": 28.21,
+    "a-grant-does-not-clear-an-unrelated-refusal": 30.08,
+    "a-half-claimed-pair-starts-nothing": 25.22,
+    "a-hand-check-step-names-files-that-exist": 0.75,
+    "a-hand-written-decoder-reads-every-field": 0.84,
+    "a-handle-on-screen-offers-its-checked-address": 1.21,
+    "a-handle-that-changed-hands-is-not-merged-across": 31.24,
+    "a-hanging-gui-test-is-given-a-deadline": 0.64,
+    "a-hidden-like-count-says-something-of-its-own": 23.88,
+    "a-job-at-another-commit-is-not-an-answer": 0.49,
+    "a-large-dead-audience-is-held-out-by-the-floor": 24.14,
+    "a-launch-that-counted-nobody-does-not-read-as-success": 20.2,
+    "a-layout-clears-every-surface-it-is-seen-on": 0.42,
+    "a-leg-that-ran-nothing-is-refused": 0.65,
+    "a-link-raised-sheet-is-not-the-default-action": 18.72,
+    "a-lock-nobody-holds-is-loud": 4.61,
+    "a-log-that-will-not-come-does-not-take-the-check-down": 0.88,
+    "a-measured-frame-nobody-kept-is-refused": 2.37,
+    "a-merge-github-refused-is-not-a-merge": 0.49,
+    "a-missing-python-environment-is-refused-by-name": 23.77,
+    "a-missing-source-is-not-a-copy-to-retry": 18.83,
+    "a-missing-suite-count-record-is-refused": 0.4,
+    "a-model-payload-names-a-real-swift-type": 1.26,
+    "a-moved-figure-is-only-explained-when-the-mix-moved": 18.92,
+    "a-name-in-the-handle-field-is-not-a-handle": 25.29,
+    "a-negative-duration-is-never-a-reading": 0.63,
+    "a-one-clip-reel-is-not-encoded-fast": 7.08,
+    "a-one-photo-collage-day-is-called-a-carousel": 1.21,
+    "a-partial-paste-cannot-be-saved-over-a-key": 31.68,
+    "a-partial-work-series-does-not-normalise": 0.79,
+    "a-per-frame-reel-alt-is-reported": 1.46,
+    "a-percentile-interpolates-between-its-neighbours": 1.07,
+    "a-permanent-gh-failure-is-still-bounded": 0.88,
+    "a-permission-is-not-both-required-and-absent": 0.47,
+    "a-personal-post-is-not-an-uncontrolled-observation": 0.81,
+    "a-perturbed-render-cannot-become-the-reference-frame": 1.82,
+    "a-pipeline-marker-is-not-wrapped-in-prose": 31.1,
+    "a-private-account-does-not-take-a-collaborator-slot": 19.32,
+    "a-private-account-is-not-asked-for-figures-it-cannot-have": 24.73,
+    "a-proof-is-not-fresh-forever": 0.61,
+    "a-python-only-sweep-does-not-build-the-app": 0.46,
+    "a-quit-with-work-running-asks-first": 17.81,
+    "a-raises-block-must-decide-about-recording": 0.64,
+    "a-rebuilding-days-clips-are-not-editable": 17.03,
+    "a-recoloured-element-is-not-read-as-a-codec-change": 0.49,
+    "a-recorded-change-names-its-own-version": 0.56,
+    "a-recording-that-disagrees-with-the-bar-is-refused": 0.96,
+    "a-red-gated-job-stays-in-the-duration-series": 0.44,
+    "a-red-pull-request-is-not-a-recording": 0.44,
+    "a-red-suite-is-not-recorded-past-its-own-guard": 0.38,
+    "a-redraw-is-claimed-after-the-event-is-changed": 0.63,
+    "a-redraw-refreshes-nothing-outside-the-review-screen": 25.94,
+    "a-reel-band-is-judged-on-the-reels-own-frames": 34.58,
+    "a-reel-is-not-told-about-a-first-photo": 21.88,
+    "a-reel-prompt-is-told-the-reels-size": 2.25,
+    "a-reel-seed-is-minted-on-first-render": 2.65,
+    "a-reel-suggestion-is-checked-against-who-is-on-screen": 25.89,
+    "a-refusal-is-not-swallowed-by-another-notice": 21.26,
+    "a-refused-account-does-not-get-an-engagement-rate": 0.29,
+    "a-refused-analytics-write-is-not-shown-as-an-import": 25.59,
+    "a-refused-band-write-is-reported": 26.13,
+    "a-refused-lookup-names-the-one-holding-the-list": 29.45,
+    "a-refused-marker-move-is-reported": 0.93,
+    "a-refused-rebuild-says-which-day": 27.25,
+    "a-refused-write-leaves-the-stored-key-alone": 21.96,
+    "a-render-is-pinned-to-the-apps-appearance": 27.93,
+    "a-render-test-cannot-open-the-live-history": 2.13,
+    "a-reorder-hiding-inside-a-reword-is-caught": 2.32,
+    "a-repair-may-not-add-a-finding": 0.52,
+    "a-repair-may-not-reorder-the-markers": 0.62,
+    "a-repair-panel-shows-one-posts-records": 17.0,
+    "a-reply-is-not-shown-against-the-wrong-concern": 24.37,
+    "a-retry-estimate-grows-with-its-markers": 20.38,
+    "a-review-pass-cannot-rewrite-a-reel-alt": 1.62,
+    "a-review-pass-may-not-change-the-alt-text-count": 2.02,
+    "a-revision-drops-the-photos-its-alt-texts-describe": 2.09,
+    "a-rewrite-may-not-gut-the-description": 0.35,
+    "a-rewritten-reel-alt-is-reported": 1.16,
+    "a-run-at-another-commit-is-not-an-answer": 0.43,
+    "a-run-still-in-flight-is-never-green": 0.44,
+    "a-scale-of-one-is-a-claim-not-a-default": 0.37,
+    "a-scratch-suite-opens-empty": 33.56,
+    "a-screen-shows-the-layout-with-no-way-to-change-it": 0.9,
+    "a-second-definition-of-the-test-only-flag-is-caught": 0.46,
+    "a-second-insights-analysis-is-refused": 28.81,
+    "a-second-notes-search-is-refused": 22.19,
+    "a-second-person-rewrite-keeps-its-marker": 1.01,
+    "a-second-press-does-not-start-a-second-update": 30.93,
+    "a-second-producer-of-one-shape-is-noticed": 4.25,
+    "a-second-reflow-on-one-program-is-refused": 23.13,
+    "a-secrets-warning-names-its-own-prefix": 16.78,
+    "a-sentinel-behind-a-link-is-not-an-account": 32.28,
+    "a-shard-with-nothing-to-prove-is-not-a-duration": 0.71,
+    "a-shared-file-still-stops-the-merge": 1.17,
+    "a-sheet-command-opens-the-window": 21.2,
+    "a-short-duration-window-is-not-called-steady": 0.57,
+    "a-short-frame-stream-is-refused": 0.91,
+    "a-short-page-of-runs-or-jobs-is-refused": 0.72,
+    "a-side-crop-reading-names-its-surface": 0.29,
+    "a-silenced-guard-is-refused-at-load": 0.77,
+    "a-silent-run-erases-nothing": 29.85,
+    "a-skipped-gated-job-leaves-the-duration-series": 0.51,
+    "a-skipped-sweep-is-not-a-proof": 1.49,
+    "a-slot-that-failed-says-so": 17.74,
+    "a-spent-allowance-is-said-out-loud": 19.48,
+    "a-spent-meta-allowance-is-not-retried": 1.36,
+    "a-stalled-insights-analysis-becomes-an-error": 22.2,
+    "a-stalled-notes-search-becomes-an-error": 21.9,
+    "a-starting-prover-is-not-a-dead-one": 1.13,
+    "a-stored-band-that-matches-no-post-is-shown": 29.49,
+    "a-successful-fetch-clears-the-failure-count": 27.34,
+    "a-swift-leg-that-ran-half-is-refused": 0.84,
+    "a-switch-rebuilds-every-day-again": 0.77,
+    "a-symbol-name-that-draws-nothing": 31.7,
+    "a-symlinked-root-still-names-its-files": 21.38,
+    "a-tagged-company-is-not-dropped": 29.72,
+    "a-taken-handle-is-not-suggested-again": 30.24,
+    "a-test-that-fails-every-time-is-not-a-flake": 0.82,
+    "a-thin-report-says-out-of-how-many": 28.56,
+    "a-third-layout-is-described-as-the-second": 19.11,
+    "a-title-card-muxes-to-the-name-its-callers-pass": 1.91,
+    "a-title-over-the-ceiling-is-refused": 0.62,
+    "a-transient-failure-never-becomes-a-scrape": 1.11,
+    "a-tried-finding-is-its-own-row": 27.51,
+    "a-typed-name-does-not-reach-the-tag-list": 0.5,
+    "a-typed-name-is-credited-not-mentioned": 28.63,
+    "a-typed-note-survives-the-web-search": 22.21,
+    "a-value-that-is-no-account-is-not-a-candidate": 27.46,
+    "a-value-that-is-nobody-gets-no-link": 16.95,
+    "a-venv-inside-an-app-bundle-is-refused": 0.59,
+    "a-view-does-not-own-long-work": 30.95,
+    "a-warning-names-no-cause-it-cannot-know": 19.62,
+    "a-waved-away-code-folder-warning-stays-away": 19.65,
+    "a-wedged-test-still-has-a-deadline": 0.8,
+    "a-withheld-like-count-is-not-a-measured-zero": 26.86,
+    "a-workflow-that-cannot-be-read-is-not-an-empty-one": 0.59,
+    "accent-as-text-clears-the-text-level": 26.61,
+    "accent-is-never-drawn-unnamed": 1.25,
+    "accent-is-never-drawn-unnamed-in-a-wrapped-ternary": 0.97,
+    "accent-tint-is-never-drawn-unnamed": 2.09,
+    "accepting-a-suggestion-tells-the-fetch": 20.14,
+    "account-book-keeps-generations": 30.22,
+    "account-book-names-a-refusal": 27.73,
+    "account-book-sets-a-bad-file-aside": 19.46,
+    "adding-a-file-does-not-rewrite-the-record": 0.63,
+    "an-absent-secret-is-not-exported-as-blank": 26.34,
+    "an-account-marked-never-to-invite-takes-no-slot": 21.03,
+    "an-account-nobody-looked-at-is-still-not-scored": 26.65,
+    "an-account-that-keeps-refusing-stops-taking-a-slot": 21.43,
+    "an-added-test-file-must-be-measured": 0.5,
+    "an-alt-text-is-paired-with-its-neighbour": 31.68,
+    "an-assumed-account-is-not-told-to-add-likes": 30.28,
+    "an-assumed-rate-is-labelled-wherever-it-renders": 27.62,
+    "an-at-sign-is-a-claim-about-an-account": 2.13,
+    "an-edited-handle-drops-its-check": 31.29,
+    "an-edited-test-file-does-not-owe-a-measurement": 1.0,
+    "an-empty-caption-alt-text-is-reported": 1.38,
+    "an-empty-tag-list-is-not-a-tagged-photo": 31.75,
+    "an-export-folder-belongs-to-one-show": 30.75,
+    "an-export-that-fails-is-not-silent": 1.98,
+    "an-exported-day-is-not-claimed-to-have-been-seen": 31.97,
+    "an-idle-worker-can-take-work-from-a-busy-one": 0.75,
+    "an-installing-job-caches-its-wheels": 0.84,
+    "an-uncertain-answer-runs-the-job": 0.31,
+    "an-undecided-reel-layout-is-not-pre-rendered": 17.9,
+    "an-unfinished-job-has-no-duration": 0.78,
+    "an-unknown-check-conclusion-is-not-a-pass": 0.73,
+    "an-unknown-outcome-does-not-destroy-the-book": 17.51,
+    "an-unmeasured-ffmpeg-major-is-refused": 1.12,
+    "an-unmeasured-report-does-not-claim-zero": 22.19,
+    "an-unmeasured-surface-is-refused-not-answered-zero": 0.3,
+    "an-unnormalisable-move-is-not-called-slower": 0.42,
+    "an-unreachable-checkout-is-said-at-launch": 29.44,
+    "an-unread-log-is-not-a-run-that-passed": 0.5,
+    "an-unreadable-branch-point-is-not-a-clean-branch": 0.86,
+    "an-unreadable-file-list-is-not-disjoint": 0.39,
+    "an-unreadable-finish-time-is-not-a-fresh-proof": 0.4,
+    "an-unreadable-follower-count-is-not-zero-followers": 0.66,
+    "an-unreadable-log-is-not-a-run-that-proved-nothing": 0.79,
+    "an-unreadable-module-is-not-cached-as-empty": 1.15,
+    "an-unreadable-quota-header-is-not-a-low-reading": 0.5,
+    "an-unreadable-repair-record-is-not-an-empty-one": 31.5,
+    "an-unreadable-report-is-not-a-clean-run": 0.79,
+    "an-unreadable-sweep-history-still-runs-the-sweep": 0.42,
+    "an-unrenderable-collage-layout-is-not-drawn": 0.39,
+    "an-unrenderable-collage-layout-is-not-saved": 20.97,
+    "an-unresolved-concern-is-not-tidied-away": 33.04,
+    "an-unseen-warning-is-not-recorded-as-waved-away": 23.26,
+    "an-unstamped-asset-older-than-its-design-change-is-badged": 0.56,
+    "an-unstamped-caption-is-called-an-edit": 19.32,
+    "an-untitled-reel-reaches-the-day-not-just-the-console": 7.38,
+    "an-untouched-marker-may-not-move-a-byte": 0.89,
+    "analytics-file-exists-precheck": 34.75,
+    "analytics-save-gate": 32.55,
+    "appkit-wrapper-lifetime": 31.05,
+    "archive-note-not-satisfied-by-a-comment": 25.66,
+    "archive-note-wraps": 18.38,
+    "audit-log-refuses-to-rewrite": 25.43,
+    "bake-reads-the-live-event": 19.28,
+    "banner-action-reads-against-its-fill": 26.18,
+    "blocking-waits-stay-off-the-shared-pool": 0.42,
+    "blog-heading-by-hand": 20.88,
+    "both-design-change-doors-in-one-section": 0.74,
+    "brand-hashtag-put-back": 0.38,
+    "caption-findings-count-clears-its-wash": 19.13,
+    "catching-the-stand-down-is-not-being-silenced": 1.23,
+    "catching-up-takes-the-out-of-date-warning-away": 18.09,
+    "checkout-banner-is-drawn-from-the-live-notice": 26.92,
+    "checkout-notice-is-quiet-on-a-clean-main": 25.84,
+    "checkout-notice-names-the-branch": 28.64,
+    "checkout-read-has-a-deadline": 53.54,
+    "checkout-reads-in-tests-name-their-own-deadline": 0.55,
+    "ci-builds-one-architecture": 0.83,
+    "ci-builds-the-app": 0.77,
+    "ci-builds-the-shipping-configuration": 0.82,
+    "ci-selects-the-recorded-xcode": 0.44,
+    "ci-unit-scheme": 0.53,
+    "cloudflare-plugin-stays-disabled": 0.5,
+    "collaborator-sort-default": 19.27,
+    "collage-design-version-parity": 0.59,
+    "collapsed-group-sweep-armed": 26.39,
+    "colour-exemption-has-something-to-exempt": 0.41,
+    "colour-sweep-sees-a-branching-helper": 0.42,
+    "colour-used-as-a-view-is-a-fill": 0.83,
+    "compiling-the-gui-suite-is-not-running-it": 0.33,
+    "contract-covers-every-manifest-the-bridge-builds": 0.74,
+    "copy-acknowledgment-goes-stale": 25.56,
+    "crashed-export-debris-is-swept": 24.44,
+    "crop-anchor-python-parity": 0.49,
+    "crop-anchor-swift-parity": 0.66,
+    "crop-confidence-has-a-reader": 33.72,
+    "dead-tuning-control": 5.59,
+    "delete-reclaims-the-preview-folder": 19.64,
+    "derived-data-actually-built-into": 0.38,
+    "design-fingerprint-moves": 0.87,
+    "design-stamp-filename-parity": 0.42,
+    "discarded-write-allowlist": 30.84,
+    "discarded-write-through-a-wrapper": 25.96,
+    "docs-ai-cost-honest": 1.08,
+    "drift-collection-is-scoped-to-its-shard": 2.14,
+    "drift-publishing-is-scoped-to-its-shard": 0.79,
+    "drift-publishing-survives-a-red-run": 1.58,
+    "duration-drift-ignores-run-to-run-noise": 0.69,
+    "each-secret-is-stored-under-its-own-account": 20.87,
+    "each-secret-reaches-the-subprocess-under-its-own-carrier": 25.8,
+    "each-suite-leg-counts-what-it-ran": 0.76,
+    "empty-segment-is-not-a-search-miss": 24.08,
+    "event-row-draws-from-the-named-pairs": 23.72,
+    "event-row-reaches-the-screen": 19.18,
+    "every-alert-button-is-named-by-the-ui-tests": 0.5,
+    "every-alert-has-a-ui-test-quoting-it": 0.37,
+    "every-check-code-resolves-to-something": 1.21,
+    "every-checkout-reading-announces-itself": 34.05,
+    "every-ci-job-carries-a-deadline": 0.59,
+    "every-declared-owner-is-actually-injected": 24.25,
+    "every-font-gated-file-is-in-a-shard": 0.66,
+    "every-hand-check-step-names-its-files": 0.51,
+    "every-make-target-is-in-the-readme": 0.51,
+    "every-make-target-is-phony": 0.29,
+    "every-manifest-sender-has-a-contract-entry": 0.31,
+    "every-owner-of-background-work-can-say-so": 21.68,
+    "every-path-into-the-repairer-refuses-a-collision": 3.08,
+    "every-posting-day-names-its-invites": 22.52,
+    "every-progress-file-has-a-reader": 27.24,
+    "every-review-surface-still-renders": 27.8,
+    "every-text-field-states-its-style": 27.9,
+    "every-ui-job-carries-a-deadline": 0.77,
+    "export-old-folder-survives-a-failed-run": 23.62,
+    "failed-downloads-are-not-no-matches": 0.93,
+    "failed-restore-is-reported": 0.86,
+    "failure-is-read-from-the-process-not-the-launcher": 18.33,
+    "failure-names-the-work-that-failed": 20.26,
+    "failure-needle-has-a-producer": 0.44,
+    "failure-screen-heading-reaches-the-screen": 24.82,
+    "failure-screen-way-back-reaches-the-screen": 27.03,
+    "faint-label-dresses-a-switched-off-control": 1.0,
+    "faint-tone-is-never-drawn-at-a-call-site": 0.79,
+    "fast-subset-deselects": 1.02,
+    "ffmpeg-cache-fallback": 0.91,
+    "ffmpeg-version-recorded": 0.62,
+    "field-placeholder-clears-its-field": 53.19,
+    "field-text-trims-newlines": 30.42,
+    "figma-plugin-stays-disabled": 0.98,
+    "findings-panel-is-one-labelled-group": 29.0,
+    "fingerprint-record-refuses-a-dirty-reference": 1.21,
+    "fingerprint-record-refuses-a-skip": 1.37,
+    "fingerprint-record-refuses-an-unphotographed-template": 1.39,
+    "fingerprint-record-refuses-when-git-cannot-answer": 2.36,
+    "fingerprint-record-requires-every-check-to-report": 2.71,
+    "followers-only-is-not-never-counted": 16.97,
+    "friday-photos-count-as-content": 32.29,
+    "full-export-rebuilds-from-scratch": 19.95,
+    "full-local-run-includes-the-fast-tests": 0.34,
+    "full-local-run-includes-the-slow-files": 0.33,
+    "full-local-run-stays-parallel": 0.32,
+    "gap-follows-the-pages-when-they-move": 38.94,
+    "gated-steps-ask-the-gate-the-safe-way": 1.09,
+    "generate-week-keeps-its-own-copy-of-the-post-type-rule": 1.91,
+    "generation-journals-the-markers-it-moved": 0.62,
+    "generation-runs-the-repair-under-a-deadline": 1.55,
+    "gone-file-is-missing-not-loading": 32.79,
+    "green-run-log-survives-without-xcbeautify": 1.7,
+    "green-run-log-survives-xcbeautify": 2.51,
+    "guard-job-has-the-pinned-xcode": 0.36,
+    "guard-sweep-expensive-steps-are-gated": 1.05,
+    "guard-sweep-not-on-every-push": 0.35,
+    "guard-sweep-reports-even-when-it-skips": 0.57,
+    "guards-reproved-on-a-schedule": 0.36,
+    "guessed-handle-is-marked": 21.43,
+    "handle-matches-its-profile": 1.9,
+    "hashtag-gate-prompt": 0.66,
+    "hidden-scrollbar-draws-its-edge": 21.2,
+    "history-priced-at-its-own-rate": 0.54,
+    "horizontal-strip-shows-its-edge": 24.08,
+    "hover-off-the-derivation-path": 17.09,
+    "icon-only-control-named": 25.95,
+    "import-notice-not-a-success": 24.06,
+    "insights-metrics-have-no-emoji": 19.95,
+    "insights-names-the-account-not-an-organisation": 30.21,
+    "install-gate-fast-subset": 0.46,
+    "install-gate-uses-one-spelling": 0.83,
+    "install-script-portability": 0.69,
+    "interrupted-sweep-restores-the-tree": 1.35,
+    "keychain-delete-reports-refusal": 19.95,
+    "legacy-store-absent-both-spellings": 15.71,
+    "lightbox-names-the-missing-file": 20.87,
+    "linux-pr-cancellation-scoped": 0.52,
+    "load-bearing-plugins-stay-enabled": 1.01,
+    "local-work-has-its-own-stall-threshold": 22.72,
+    "mac-leg-blocks-pull-requests": 0.44,
+    "macos-concurrency-group-per-commit": 0.43,
+    "macos-halves-stay-separate-jobs": 0.57,
+    "macos-pr-cancellation-scoped": 0.33,
+    "make-test-runs-both-suites": 0.32,
+    "manager-says-what-work-it-started": 20.45,
+    "manifest-day-rule-copy": 17.29,
+    "measured-states-put-their-words-on-the-page": 46.49,
+    "migration-skips-on-content-not-existence": 23.18,
+    "missing-checkout-is-not-a-missing-photo": 18.81,
+    "missing-model-is-not-an-outage": 25.05,
+    "nested-code-is-signed-before-the-wrapper": 4.17,
+    "new-event-refusal-drawn": 0.33,
+    "new-event-refusal-not-satisfied-by-a-comment": 0.41,
+    "no-control-drawn-as-a-glyph": 19.18,
+    "no-dead-swift-build-cache": 0.61,
+    "no-file-is-run-by-two-shards": 1.05,
+    "no-image-across-an-actor-boundary": 20.27,
+    "no-makespan-beats-the-work": 0.65,
+    "no-organisation-is-never-an-empty-prompt-value": 1.0,
+    "no-paths-filter-narrows-the-macos-checks": 0.85,
+    "no-second-swift-job": 0.37,
+    "no-system-colour-as-type": 1.42,
+    "no-test-builds-a-live-app-state": 0.45,
+    "no-update-outcome-is-not-a-successful-update": 31.25,
+    "not-found-rule-one-copy": 19.75,
+    "nothing-is-written-against-a-blank-organisation": 21.24,
+    "ocr-silence-is-not-slowness": 19.79,
+    "one-bad-alt-text-does-not-discard-the-others": 1.08,
+    "one-build-at-a-time-on-the-shared-cache": 1.56,
+    "one-findings-panel": 17.33,
+    "one-job-finishing-does-not-clear-the-dock": 21.57,
+    "one-lightbox": 26.19,
+    "one-rate-limit-is-not-reported-as-an-outage": 16.47,
+    "one-thursday-editor-build-at-a-time": 25.54,
+    "one-transient-gh-failure-does-not-end-the-wait": 0.41,
+    "only-a-green-check-is-a-proof": 0.33,
+    "only-the-locks-state-readers-govern-a-skip": 1.26,
+    "only-the-pull-requests-own-runs-are-the-bar": 0.43,
+    "paid-action-ink": 17.01,
+    "painted-fills-are-named": 0.68,
+    "painted-fills-named-outside-the-notices": 0.94,
+    "palette-mirror-parity": 0.74,
+    "parallelism-stays-off-the-shared-scheme": 0.48,
+    "parity-guard-not-satisfied-by-a-comment": 0.34,
+    "permission-is-not-asked-before-launch": 0.33,
+    "picker-storage-not-satisfied-by-a-comment": 27.01,
+    "picker-storage-route": 23.22,
+    "pip-wheels-cached": 0.36,
+    "prd-status-honest": 0.5,
+    "pre-corruption-backups-protected": 22.43,
+    "preflight-refuses-an-unreachable-checkout": 26.53,
+    "prepush-icloud-checker": 0.87,
+    "project-root-is-recorded-not-guessed": 20.49,
+    "prose-in-the-event-field-is-not-one-account": 22.67,
+    "python-answers-the-real-account-question-once": 0.58,
+    "pythons-real-account-check-reads-both-halves": 0.37,
+    "pythons-sentinel-list-is-the-shared-one": 1.09,
+    "quiet-mark-never-dresses-words": 1.28,
+    "read-failure-screen-not-headed-in-jargon": 25.44,
+    "read-screens-draw-their-words-from-one-place": 22.1,
+    "reading-screen-reaches-the-screen": 31.78,
+    "recurring-banner-control": 24.41,
+    "reel-audio-fallback-is-reported": 0.47,
+    "reference-frame-shards-stay-balanced": 0.45,
+    "reference-frames-parallel": 0.77,
+    "refusal-note-ink": 43.37,
+    "rescan-keeps-what-was-already-read": 0.37,
+    "rescan-label-reads-against-its-fill": 24.42,
+    "rescan-merges-into-the-stored-result": 26.3,
+    "rescan-merges-on-position": 0.93,
+    "rescan-refusal-tells-denied-from-missing": 29.36,
+    "rescan-sends-the-pages-it-placed": 19.44,
+    "restore-offers-a-pre-corruption-backup": 20.7,
+    "restore-unreadable-folder-is-not-no-backup": 20.7,
+    "review-draft-takes-up-the-rescan": 20.65,
+    "review-sheet-covers-the-main-screens": 19.5,
+    "review-sheet-covers-the-stage-pills": 22.2,
+    "review-sheet-covers-the-tag-fields": 17.87,
+    "review-sheet-rotation-is-per-group": 19.94,
+    "review-staleness-refresh": 23.08,
+    "run-header-is-not-the-process-speaking": 31.44,
+    "run-log-names-the-commit-that-ran": 21.1,
+    "safe-swap-keeps-the-old-file": 26.18,
+    "save-failure-banner-offers-retry": 19.64,
+    "save-failure-surfaced": 26.0,
+    "schedule-liveness-is-reported": 1.03,
+    "scoped-re-export-clears-its-own-days": 31.43,
+    "screen-reel-dark-mark": 1.3,
+    "secondary-text-clears-the-deeper-page": 32.56,
+    "seeding-refuses-a-folder-with-no-photographs": 0.72,
+    "selected-pill-measured-under-the-pinned-appearance": 19.92,
+    "sentence-rule-copy": 34.85,
+    "sentinel-is-not-a-page-number": 1.11,
+    "settings-form-draws-from-the-named-pair": 19.15,
+    "settings-secondary-text-is-readable": 25.72,
+    "shards-are-actually-run": 0.69,
+    "shoot-type-parity": 0.43,
+    "single-line-fields-keep-no-line-breaks": 19.02,
+    "some-template-is-still-held-to-a-side-band": 0.46,
+    "something-actually-runs-the-gui-suite": 0.96,
+    "source-tree-guard-armed": 0.68,
+    "speculative-reel-outlives-the-screen": 23.74,
+    "stage-pill-draws-its-label": 20.99,
+    "stage-pill-label-clears-its-wash": 58.31,
+    "stage-strip-refusal-drawn": 0.65,
+    "stale-note-names-its-subject": 17.75,
+    "staleness-ignores-code-that-is-not-in-the-app": 34.4,
+    "staleness-notice-actually-draws": 49.38,
+    "state-labels-are-readable": 38.62,
+    "store-refusal-has-its-own-sentence": 19.99,
+    "stripe-plugin-stays-disabled": 1.12,
+    "subfolder-decision-ink": 20.29,
+    "subscription-env-parity": 0.76,
+    "suite-cost-numbers-agree-with-each-other": 0.61,
+    "suite-cost-runner-matches-the-job": 0.95,
+    "suite-run-keeps-the-sheet-baseline": 1.52,
+    "sweep-narrows-only-on-the-test-that-moved": 0.94,
+    "sweep-reuses-one-build-cache": 0.58,
+    "sweep-says-how-far-it-has-got": 0.84,
+    "sweep-says-when-it-cannot-reuse-a-cache": 1.05,
+    "swifts-sentinel-list-is-the-shared-one": 27.15,
+    "tagged-handles-stamped-on-success": 18.31,
+    "tertiary-text-clears-the-text-level": 29.71,
+    "test-seam-stays-out": 0.63,
+    "the-alert-is-told-which-alert-it-is-showing": 19.02,
+    "the-alt-text-block-covers-the-posted-photos": 36.43,
+    "the-app-and-python-agree-on-what-the-phone-covers": 0.56,
+    "the-app-declares-one-window-not-a-group": 33.14,
+    "the-app-is-built-once-before-the-loop": 0.78,
+    "the-app-joins-the-lookup-to-the-fetch": 27.62,
+    "the-app-target-must-not-define-the-test-only-flag": 0.63,
+    "the-archive-backfill-does-not-become-a-launch-sweep": 25.04,
+    "the-assumed-rate-comes-from-the-comparable-band": 0.36,
+    "the-audience-measurement-reaches-the-report": 0.69,
+    "the-badge-counts-only-what-was-missed": 21.48,
+    "the-banners-do-not-cover-the-content": 20.54,
+    "the-bar-follows-the-commit-being-judged": 0.72,
+    "the-blog-pin-comes-from-the-payload": 42.79,
+    "the-branded-strip-is-not-draggable": 21.92,
+    "the-caption-alt-text-checks-reach-the-review-screen": 2.29,
+    "the-class-index-reads-what-the-scan-read": 6.07,
+    "the-collaborator-panel-draws-the-shared-sentence": 25.53,
+    "the-deadline-lets-the-rest-of-the-run-finish": 0.35,
+    "the-deadline-rule-reads-the-workflow-directory": 0.77,
+    "the-delivered-reel-reference-is-not-the-titled-one": 1.49,
+    "the-dock-shows-work-that-is-running": 21.55,
+    "the-duration-series-is-actually-taken": 0.39,
+    "the-effective-count-ignores-what-is-assigned": 0.63,
+    "the-encode-reference-throws-nothing-away": 0.34,
+    "the-entry-point-exemption-names-a-reviewer": 0.9,
+    "the-event-account-ranks-under-the-people-in-the-photos": 17.22,
+    "the-export-sentence-is-written-by-hand-again": 0.41,
+    "the-fast-run-boundary-is-a-real-gap": 0.36,
+    "the-ffmpeg-note-reads-the-patch-level": 0.91,
+    "the-ffmpeg-version-parser-refuses-a-spelling-it-cannot-read": 1.1,
+    "the-findings-keep-their-rule-major-order": 0.69,
+    "the-frame-kept-is-the-frame-that-was-rendered": 1.27,
+    "the-frames-can-see-a-moved-element": 1.19,
+    "the-frames-name-the-ffmpeg-that-judged-them": 1.6,
+    "the-freshness-fixture-stamps-its-commits": 19.86,
+    "the-gate-never-fires-on-a-pull-request": 0.48,
+    "the-gui-suite-declares-its-launches": 0.36,
+    "the-gui-suite-launches-the-app-once": 0.37,
+    "the-hand-check-counts-its-own-steps": 0.37,
+    "the-hand-check-only-deletes-what-it-made": 0.43,
+    "the-handle-book-does-not-learn-a-name": 19.29,
+    "the-handles-screen-is-not-a-way-to-write-a-bad-one": 16.7,
+    "the-joined-reel-is-not-encoded-fast": 4.38,
+    "the-layout-control-draws-its-own-spinner": 0.35,
+    "the-live-preference-is-not-compiled-into-the-tests": 1.12,
+    "the-live-preferences-are-not-written-under-test": 1.37,
+    "the-live-store-is-not-compiled-into-the-tests": 1.08,
+    "the-liveliness-floor-comes-from-the-population": 0.32,
+    "the-lock-probe-asks-only-for-what-it-uses": 0.57,
+    "the-lookup-lock-is-not-every-case-of-the-enum": 28.0,
+    "the-mac-leg-does-not-re-render-the-shards-work": 0.29,
+    "the-mac-legs-skip-list-is-derived-not-spelled": 0.42,
+    "the-manifest-keeps-the-plist-ordering-edge": 0.47,
+    "the-matrix-and-the-shard-argument-agree": 0.6,
+    "the-measured-table-names-what-really-ships": 0.52,
+    "the-merge-is-of-the-commit-that-was-judged": 0.5,
+    "the-merge-prompts-the-hand-check": 0.29,
+    "the-meta-doc-names-every-permission-the-token-needs": 0.39,
+    "the-meta-doc-pins-the-codes-api-version": 0.37,
+    "the-noise-anchor-is-a-reading": 1.01,
+    "the-notice-stack-cannot-bury-the-captions": 25.84,
+    "the-notification-banner-is-on-the-review-sheet": 28.22,
+    "the-numbers-form-states-its-requirement": 23.81,
+    "the-organisation-and-venue-can-be-suggested-at-all": 19.32,
+    "the-out-of-date-verdict-is-taken-again": 20.93,
+    "the-performer-lookups-outlive-their-section": 28.42,
+    "the-performers-editor-is-told-why-it-cannot-look-up": 22.14,
+    "the-permission-seam-still-asks": 0.88,
+    "the-photographs-outlive-the-checks": 0.67,
+    "the-placement-result-cannot-be-unpacked-into-two": 0.5,
     "the-profile-title-is-read-through-its-escaping": 0.49,
-    "the-prompt-does-not-ask-for-a-counted-total": 1.11,
-    "the-re-record-door-actually-saves-the-frame": 1.07,
-    "the-record-says-how-each-reading-was-taken": 0.47,
-    "the-recorder-follows-only-the-sweep": 0.44,
-    "the-recorder-names-the-real-sweep": 0.49,
-    "the-reference-frame-job-records-its-ffmpeg": 1.07,
-    "the-reflow-outlives-the-row-that-started-it": 25.13,
-    "the-refusal-to-open-the-store-cannot-be-waved-away": 26.59,
-    "the-refusal-to-open-the-store-takes-the-screen": 22.42,
-    "the-reminder-is-not-word-split": 0.74,
-    "the-retry-budget-scales-with-the-timeout": 0.82,
-    "the-retry-pauses-back-off": 0.44,
-    "the-returning-accounts-banner-is-about-this-event": 22.69,
-    "the-returning-accounts-sentence-carries-its-scope": 27.12,
-    "the-runner-reads-its-own-test-count": 0.46,
-    "the-save-button-does-not-reach-for-the-store": 19.32,
-    "the-scratch-suite-is-not-the-apps-own-domain": 0.55,
-    "the-seeded-event-can-reach-the-generation-screen": 25.79,
-    "the-seeded-store-is-written-as-the-app-reads-it": 22.32,
-    "the-settings-screen-is-on-the-review-sheet": 22.03,
-    "the-setup-is-not-copied-back-into-a-workflow": 0.48,
-    "the-share-memo-is-keyed-by-width": 53.54,
-    "the-shipped-build-stays-universal": 0.39,
-    "the-split-is-measured-not-apportioned": 0.62,
-    "the-step-split-adds-up": 0.56,
-    "the-suggestion-line-says-what-is-missing": 25.03,
-    "the-suite-runs-on-a-mac": 0.45,
-    "the-suite-still-runs-on-a-mac": 0.7,
-    "the-suites-account-book-is-the-real-one": 1.06,
-    "the-swap-runs-the-repair-under-a-deadline": 1.27,
-    "the-sweep-is-sized-against-its-deadline": 0.48,
-    "the-sweep-knows-every-progress-file": 22.34,
-    "the-sweep-leaves-a-running-export-alone": 22.53,
-    "the-swift-count-comes-from-the-result-bundle": 0.39,
-    "the-swift-half-reads-the-file-date-too": 0.48,
-    "the-swift-suite-runs-in-parallel": 0.43,
-    "the-swift-tag-list-gates-a-typed-name-too": 58.84,
-    "the-swift-walk-refuses-an-empty-scan": 0.59,
-    "the-swift-workers-are-sized-on-the-machine": 0.36,
-    "the-tag-sheet-says-who-is-left-out": 23.78,
-    "the-test-seam-says-where-it-points": 0.83,
-    "the-text-shaper-is-named-not-inherited": 0.62,
-    "the-title-card-pass-uses-no-fast-preset": 0.57,
-    "the-tuesday-photo-strip-scrolls": 35.62,
-    "the-ui-tests-wait-for-titles-that-exist": 0.56,
-    "the-update-button-pulls-when-the-command-says-it-does": 22.14,
-    "the-venue-leads-when-there-is-no-organisation": 23.51,
-    "the-wait-flushes-what-it-says": 0.43,
-    "the-window-is-clamped-into-the-screen": 27.6,
-    "the-window-is-watched-after-it-opens": 20.16,
-    "the-window-listens-for-readings-taken-by-a-run": 22.69,
-    "the-window-re-asks-about-the-code-folder": 20.14,
-    "the-window-re-reads-when-the-app-comes-forward": 23.2,
-    "the-window-refresh-is-the-read-that-can-skip": 21.55,
-    "the-windows-minimum-is-taken-back": 20.49,
-    "the-wordmark-check-follows-the-wordmark": 1.22,
-    "the-work-owners-come-from-one-list": 24.97,
-    "the-work-scan-actually-finds-running-work": 23.72,
-    "the-working-mark-is-never-drawn-on-nothing": 22.46,
-    "title-card-type-is-drawn-light": 1.6,
-    "two-photographs-may-not-share-one-label": 1.22,
-    "two-repair-rows-do-not-share-an-id": 20.78,
-    "type-colour-is-never-drawn-raw": 0.83,
-    "typing-a-number-does-not-erase-the-fetch": 20.52,
-    "unnamed-fill-through-a-ternary": 0.74,
-    "vacuous-assertion-caught": 0.91,
-    "vercel-plugin-stays-disabled": 0.38,
-    "vision-thinness-parity": 0.69,
-    "watching-checkout-readings-twice-leaves-one-subscription": 22.06,
-    "web-performer-failure-is-not-an-empty-page": 26.54,
-    "wordmark-required-cover": 0.99
-  },
-  "_sample": "Every figure here comes from ONE sweep, run 33870420536, so runs is 1. The shard field on each cold entry says which shard it ran on, not how many times it was measured (#1328).",
-  "runs": 1
+    "the-prompt-does-not-ask-for-a-counted-total": 1.16,
+    "the-re-record-door-actually-saves-the-frame": 0.67,
+    "the-record-says-how-each-reading-was-taken": 0.43,
+    "the-recorder-follows-only-the-sweep": 0.9,
+    "the-recorder-names-the-real-sweep": 0.29,
+    "the-reference-frame-job-records-its-ffmpeg": 1.95,
+    "the-reflow-outlives-the-row-that-started-it": 21.43,
+    "the-refusal-to-open-the-store-cannot-be-waved-away": 28.63,
+    "the-refusal-to-open-the-store-takes-the-screen": 23.88,
+    "the-reminder-is-not-word-split": 0.69,
+    "the-retry-budget-scales-with-the-timeout": 1.02,
+    "the-retry-pauses-back-off": 0.36,
+    "the-returning-accounts-banner-is-about-this-event": 18.79,
+    "the-returning-accounts-sentence-carries-its-scope": 19.84,
+    "the-runner-reads-its-own-test-count": 0.53,
+    "the-save-button-does-not-reach-for-the-store": 22.58,
+    "the-scratch-suite-is-not-the-apps-own-domain": 0.56,
+    "the-seeded-event-can-reach-the-generation-screen": 27.66,
+    "the-seeded-store-is-written-as-the-app-reads-it": 21.78,
+    "the-settings-screen-is-on-the-review-sheet": 33.96,
+    "the-setup-is-not-copied-back-into-a-workflow": 0.66,
+    "the-share-memo-is-keyed-by-width": 74.75,
+    "the-shipped-build-stays-universal": 1.23,
+    "the-split-is-measured-not-apportioned": 0.29,
+    "the-step-split-adds-up": 0.29,
+    "the-suggestion-line-says-what-is-missing": 21.9,
+    "the-suite-runs-on-a-mac": 0.87,
+    "the-suite-still-runs-on-a-mac": 0.31,
+    "the-suites-account-book-is-the-real-one": 1.12,
+    "the-swap-runs-the-repair-under-a-deadline": 0.64,
+    "the-sweep-is-sized-against-its-deadline": 0.43,
+    "the-sweep-knows-every-progress-file": 16.55,
+    "the-sweep-leaves-a-running-export-alone": 20.06,
+    "the-swift-count-comes-from-the-result-bundle": 0.4,
+    "the-swift-half-reads-the-file-date-too": 0.72,
+    "the-swift-suite-runs-in-parallel": 0.55,
+    "the-swift-tag-list-gates-a-typed-name-too": 29.42,
+    "the-swift-walk-refuses-an-empty-scan": 0.37,
+    "the-swift-workers-are-sized-on-the-machine": 0.79,
+    "the-tag-sheet-says-who-is-left-out": 18.13,
+    "the-test-seam-says-where-it-points": 0.36,
+    "the-text-shaper-is-named-not-inherited": 0.63,
+    "the-title-card-pass-uses-no-fast-preset": 0.34,
+    "the-tuesday-photo-strip-scrolls": 26.69,
+    "the-ui-tests-wait-for-titles-that-exist": 0.37,
+    "the-update-button-pulls-when-the-command-says-it-does": 19.99,
+    "the-venue-leads-when-there-is-no-organisation": 75.17,
+    "the-wait-flushes-what-it-says": 0.76,
+    "the-window-is-clamped-into-the-screen": 18.68,
+    "the-window-is-watched-after-it-opens": 18.22,
+    "the-window-listens-for-readings-taken-by-a-run": 19.42,
+    "the-window-re-asks-about-the-code-folder": 17.19,
+    "the-window-re-reads-when-the-app-comes-forward": 18.84,
+    "the-window-refresh-is-the-read-that-can-skip": 19.69,
+    "the-windows-minimum-is-taken-back": 29.93,
+    "the-wordmark-check-follows-the-wordmark": 0.81,
+    "the-work-owners-come-from-one-list": 23.35,
+    "the-work-scan-actually-finds-running-work": 23.09,
+    "the-working-mark-is-never-drawn-on-nothing": 18.91,
+    "title-card-type-is-drawn-light": 1.17,
+    "todays-proposal-is-built-on-not-forced-over": 1.99,
+    "two-photographs-may-not-share-one-label": 2.43,
+    "two-repair-rows-do-not-share-an-id": 17.48,
+    "type-colour-is-never-drawn-raw": 1.14,
+    "typing-a-number-does-not-erase-the-fetch": 18.83,
+    "unnamed-fill-through-a-ternary": 0.85,
+    "vacuous-assertion-caught": 1.12,
+    "vercel-plugin-stays-disabled": 0.51,
+    "vision-thinness-parity": 0.59,
+    "watching-checkout-readings-twice-leaves-one-subscription": 18.79,
+    "web-performer-failure-is-not-an-empty-page": 23.88,
+    "wordmark-required-cover": 0.53
+  }
 }

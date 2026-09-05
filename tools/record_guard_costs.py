@@ -290,8 +290,37 @@ def _refuse_a_partial_sweep(paths: list[Path]) -> None:
             "was written.")
 
 
+#: How many readings each figure in this record came from (#1328).
+#:
+#: A sweep measures each entry ONCE, so 1 is the honest answer everywhere here,
+#: and `runs: 1` is a fine one: the point is not that a figure was taken many
+#: times, it is that a reader can tell one reading from a median of six.
+RUNS_PER_FIGURE = 1
+
+#: Said by the tool that writes the record, never added to the file afterwards.
+#:
+#: `write` rewrites the record whole in BOTH modes, so a hand edit does not
+#: survive the next recording. #1332 added `runs` and `_sample` to this fixture
+#: by hand and updated only `tools/record_test_durations.py`; the next scheduled
+#: sweep dropped them and the sample guard went red on the recording PR, which
+#: is L379 exactly: doing by hand what a tool normally does performs the visible
+#: change and omits the tool's other writes.
+#:
+#: It deliberately does NOT name a run. "Every figure here comes from ONE sweep,
+#: run <id>" is true of a `--from` record and false the moment `--add` folds a
+#: second run in, and a note is read as a measurement, so it may only claim what
+#: holds in both modes (L210). Which run each reading came from is already
+#: recorded per entry under `measured`.
+SAMPLE_NOTE = (
+    "Every figure here is ONE reading: a sweep measures each entry once, so "
+    "runs is 1. Which run a reading came from is under `measured`, and the "
+    "`shard` on a cold entry says which shard it ran on, not how many times it "
+    "was measured (#1328).")
+
+
 def write(record: dict, path: Path) -> None:
-    path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n",
+    stated = {**record, "runs": RUNS_PER_FIGURE, "_sample": SAMPLE_NOTE}
+    path.write_text(json.dumps(stated, indent=2, sort_keys=True) + "\n",
                     encoding="utf-8")
 
 
