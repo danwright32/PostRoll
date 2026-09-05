@@ -1,8 +1,8 @@
 {
   "name": "blog-heading-by-hand",
   "file": "PostRollApp/Sources/Services/EventExporter.swift",
-  "find": "let md = BlogDraftText.copyText(title: blog.title, body: blog.body) + \"\\n\"",
-  "replace": "let md = \"# \\(blog.title)\\n\\n\\(blog.body)\" + \"\\n\"",
+  "find": "                let md = BlogDraftText.copyText(\n                    title: blog.title,\n                    body: BlogDraftText.renamingPhotos(in: blog.body, to: exportedNames)\n                ) + \"\\n\"",
+  "replace": "                let md = \"# \\(blog.title)\\n\\n\\(blog.body)\" + \"\\n\"",
   "test": "PostRollTests/BlogDraftTextContractTests/testNoScreenBuildsTheHeadingByHand",
-  "breaks": "a screen assembles the blog heading by hand instead of the shared renderer"
+  "breaks": "a screen assembles the blog heading by hand instead of the shared renderer, and since #1142 the same call is what renames each marker to the file the export actually writes, so the exported draft would name files that are not in the folder again"
 }

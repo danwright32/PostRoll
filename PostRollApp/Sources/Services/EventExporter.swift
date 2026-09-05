@@ -149,7 +149,25 @@ struct EventExporter {
                 // reaches all three (#282). This copy used to concatenate
                 // unconditionally, so a body already carrying its heading got
                 // a second one.
-                let md = BlogDraftText.copyText(title: blog.title, body: blog.body) + "\n"
+                // ONE mapping, used by the draft below and by the copy loop
+                // beneath it (#1142). The two used to walk `blogPhotoPaths`
+                // separately: the photographs were renumbered on the way out
+                // and the draft kept the original filenames, so every marker
+                // in the exported draft named a file that is not in the
+                // export, and every file in the export was named by nothing.
+                // The export folder is the deliverable, and somebody pasting
+                // that draft had to work out which photograph each marker
+                // meant by opening them in order and hoping the order matched.
+                let exportedNames = Dictionary(
+                    uniqueKeysWithValues: event.blogPhotoPaths.enumerated().map {
+                        ($1.lastPathComponent,
+                         "photo_\(String(format: "%02d", $0 + 1)).\($1.pathExtension)")
+                    })
+
+                let md = BlogDraftText.copyText(
+                    title: blog.title,
+                    body: BlogDraftText.renamingPhotos(in: blog.body, to: exportedNames)
+                ) + "\n"
                 try md.write(to: blogDir.appendingPathComponent("draft.md"),
                              atomically: true, encoding: .utf8)
 
@@ -162,9 +180,14 @@ struct EventExporter {
                            atomically: true, encoding: .utf8)
 
                 for (i, photo) in event.blogPhotoPaths.enumerated() {
-                    let ext = photo.pathExtension
-                    let dest = blogDir.appendingPathComponent("photo_\(String(format: "%02d", i + 1)).\(ext)")
-                    copy(photo, to: dest, label: "blog photo \(i + 1)")
+                    // The name the draft above already used for this file.
+                    // Falling back would mean the two disagreed again, so an
+                    // absent entry is impossible by construction: the mapping
+                    // is built from this same list.
+                    let name = exportedNames[photo.lastPathComponent]
+                        ?? "photo_\(String(format: "%02d", i + 1)).\(photo.pathExtension)"
+                    copy(photo, to: blogDir.appendingPathComponent(name),
+                         label: "blog photo \(i + 1)")
                 }
             }
 
