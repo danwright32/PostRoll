@@ -183,3 +183,58 @@ def test_the_checkout_step_reader_stops_at_the_next_step():
 
     assert PROPOSING_TOKEN not in _checkout_step(described), (
         "a token belonging to a later step is being read as the checkout's")
+
+
+# ── a recorder records MAIN, so it must only be woken by main (#1398) ────────
+
+
+#: How a workflow woken by another one can establish that main is what ran.
+#:
+#: Two spellings, both real and both sufficient, rather than one required form.
+#: `record-suite-count.yml` is woken by the macOS suite, which runs on every
+#: pull request too, so it has to name the branch. `record-guard-costs.yml` is
+#: woken by the guard sweep and filters on the EVENT being `schedule`, and a
+#: scheduled run only ever runs on the default branch, so it gets there another
+#: way. Demanding one exact spelling would fail a workflow that is already
+#: correct, and demanding neither is what let 61 needless runs happen in a day.
+ONLY_MAIN = ("head_branch == 'main'", "workflow_run.event == 'schedule'")
+
+
+def woken_by_another_workflow() -> list[tuple[str, str]]:
+    """The proposers that run on another workflow finishing."""
+    return [(name, text) for name, text in proposers()
+            if "workflow_run:" in text]
+
+
+def test_the_sweep_finds_the_woken_recorders():
+    """The positive control. A sweep matching nothing reports every recorder as
+    correctly scoped, which is the reading this file's predecessor produced
+    when the line it keyed on moved (L98, L100)."""
+    names = [name for name, _ in woken_by_another_workflow()]
+
+    assert len(names) >= 2, f"only {names} are woken by another workflow"
+
+
+@pytest.mark.parametrize("name,text", woken_by_another_workflow(),
+                         ids=lambda v: v if isinstance(v, str) and v.endswith(".yml") else "")
+def test_it_only_wakes_for_a_run_of_main(name: str, text: str):
+    """A recorder records a number ABOUT main, so a branch's run must not wake
+    it.
+
+    `workflow_run` fires for every run of the named workflow, including a pull
+    request's. Measured 2026-09-05: 73 macOS runs that day, 47 on pull
+    requests, and `record-suite-count.yml` woke and ran 61 times because its
+    condition asked only whether the run went green. `record-guard-costs.yml`
+    skipped 40 of its 41 wake-ups, which is this rule already working.
+
+    A job is billed a whole minute whatever it does (L310), and the repository
+    is going private where those minutes are capped, so this is real cost. The
+    worse half is that the run it then READS may be a branch's (#1398).
+    """
+    condition = text[text.index("if:"):] if "if:" in text else ""
+
+    assert any(spelling in condition for spelling in ONLY_MAIN), (
+        f"{name} wakes on any run of the workflow it watches, including a pull "
+        f"request's, so it records a number about main from whichever branch "
+        f"finished last and bills a minute every time (#1398). Name the branch, "
+        f"or filter the event to `schedule` the way record-guard-costs.yml does")

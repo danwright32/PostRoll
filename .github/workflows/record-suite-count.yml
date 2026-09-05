@@ -45,9 +45,17 @@ jobs:
     # after (L182). A dispatched run carries no `workflow_run` context at all,
     # so it is admitted by its own name, or the manual trigger would be a
     # control that does nothing (L109).
+    #
+    # And only a run of MAIN. `workflow_run` fires for every run of the watched
+    # workflow, including a pull request's, so without this it woke and ran 61
+    # times on 2026-09-05 while record-guard-costs.yml skipped 40 of its 41,
+    # which is the same rule already working over there through the EVENT
+    # (#1398). A job bills a whole minute whatever it does (L310), and the
+    # number this records is a claim about main, so a branch must not supply it.
     if: >-
       github.event_name == 'workflow_dispatch'
-      || github.event.workflow_run.conclusion == 'success'
+      || (github.event.workflow_run.conclusion == 'success'
+          && github.event.workflow_run.head_branch == 'main')
     # A job without a deadline cannot fail, it can only hang (L110, L313). This
     # reads one log and writes one file.
     timeout-minutes: 20

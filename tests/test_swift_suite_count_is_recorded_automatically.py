@@ -92,6 +92,31 @@ def test_it_records_from_the_newest_green_run_of_the_swift_suite() -> None:
         "after (L182)")
 
 
+def test_it_only_reads_a_run_of_main() -> None:
+    """The floor is a claim about MAIN, so it may not be measured on a branch.
+
+    The query had no branch, so it took the newest successful Swift run from
+    anywhere. Measured 2026-09-05, the proposals on suite-count/2026-09-05
+    recorded main's floor at commits 9fb5981, ecd2210 and c0fd193, every one of
+    them a pull request head and not one of them main. The count agreed each
+    time by luck: those branches added only Python tests.
+
+    A branch that legitimately REMOVES Swift tests measures a smaller suite,
+    and this would propose that smaller number as main's floor, recalibrating
+    the guard downwards by the very kind of change it exists to notice (L182).
+    "The newest run" names a position rather than the thing being measured, so
+    it reads whichever branch finished last (L237).
+    """
+    gh = _gh(RUNS)
+
+    newest_green_swift_run(run=gh)
+
+    asked = " ".join(gh.asked[0])
+    assert "--branch" in asked and "main" in asked, (
+        f"the run was chosen without naming a branch, so main's floor is "
+        f"whatever a pull request measured last: {asked}")
+
+
 def test_gh_failing_is_not_the_same_as_there_being_no_run() -> None:
     # A job that reported "nothing to record" on a broken token would say it
     # every day and read as a record that is up to date (L11, L98).
