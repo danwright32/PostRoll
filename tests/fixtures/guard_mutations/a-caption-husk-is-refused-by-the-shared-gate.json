@@ -1,0 +1,8 @@
+{
+  "name": "a-caption-husk-is-refused-by-the-shared-gate",
+  "file": "postroll/ai/caption_repair.py",
+  "find": "        harm = alt_text_damage(alt, candidate, program=program, venue=venue,\n                               photo_filenames=list(outcome.names))",
+  "replace": "        harm = []",
+  "test": "tests/test_caption_alt_text_repair.py::test_a_husk_is_refused_by_the_damage_gate",
+  "breaks": "a caption alt text gutted to a rule satisfying husk is accepted, which is the failure the retention floor was measured for: it clears every rule while describing nothing the camera recorded, and alt text is what a screen reader user gets instead of the photograph (#1155, #1133)"
+}

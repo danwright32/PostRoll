@@ -45,6 +45,7 @@ import json
 import re
 import shutil
 import sys
+import time
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -65,7 +66,9 @@ from .caption_credits import (
     norm_handle,
     rewrite_lost_a_credit,
 )
-from .caption_quality import check_caption_alt_texts, problems_in, REWRITE_PROMPT
+from .caption_quality import (REWRITE_PROMPT, check_caption_alt_texts,
+                             problems_in)
+from .caption_repair import repair_caption_alt_texts
 from . import org_prompt
 from .performer_hashtags import ensure_brand_hashtag, strip_performer_hashtags
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
@@ -877,6 +880,11 @@ def generate_caption(
     humanizer_path: str | Path | None = None,
     skip_humanizer: bool = False,
     skip_voice_pass: bool = False,
+    #: When the alt text repair pass must stop, ABSOLUTE on `time.time()`'s
+    #: scale (#1155). None means the pass does not run, which is what a caller
+    #: with no budget to share gets: a pass with no deadline is the one route
+    #: able to carry a week run past the process ceiling (L227, L522).
+    repair_deadline: float | None = None,
 ) -> dict[str, Any]:
     """Generate caption + hashtags + per-photo alt text for one post.
 
@@ -1255,6 +1263,36 @@ def generate_caption(
         strip_em_dashes(data.get("caption", "").strip()),
         tag_handles=tag_handles, name_mentions=name_mentions))
 
+    # The alt text checks repair themselves, the way the blog's do (#1155).
+    #
+    # Only the ones that BREAK a rule are sent, one call each, and every
+    # rewrite has to clear the rule that selected it and the shared damage gate
+    # before it is kept. Silent by the same rule the blog pass follows: what it
+    # tried is carried on the findings that survive, and the panel is where
+    # that is read.
+    #
+    # After the alt texts are final and BEFORE the findings, so the findings
+    # describe the text that ships.
+    alt_repair = repair_caption_alt_texts(
+        shipped_alt_texts,
+        band=_alt_word_band(post_type),
+        photo_paths=[str(p) for p in original_paths],
+        photo_names=[Path(p).name for p in original_paths],
+        program=program, venue=venue,
+        # This path's own runner, read here rather than left to the repairer's
+        # default, so the pass goes through whatever this module is using and a
+        # test that stubs the caption path stubs the repair with it (L196).
+        runner=run_json_prompt,
+        now=time.time, deadline=repair_deadline)
+    shipped_alt_texts = alt_repair.alt_texts
+    if alt_repair.ran:
+        print(f"[generate_captions] {day}: alt text repair selected "
+              f"{len(alt_repair.selected)}, "
+              + ", ".join(f"{state.value} {sum(1 for s in alt_repair.states.values() if s is state)}"
+                          for state in sorted({*alt_repair.states.values()},
+                                              key=lambda s: s.value)),
+              flush=True, file=sys.stderr)
+
     return {
         "caption": final_caption,
         # Deterministic backstop, not a second ask of the model: the prompt
@@ -1286,7 +1324,9 @@ def generate_caption(
         # the right one by anything here, and Dan reads the caption before it
         # is posted.
         "findings": [
-            finding_entry(f) for f in (
+            # What the pass did about this one, or never-attempted where it
+            # never selected it, which renders exactly as it did before #1155.
+            finding_entry(f, repair=alt_repair.repair_for(f)) for f in (
                 credit_findings(final_caption, tag_handles=tag_handles,
                                 name_mentions=name_mentions)
                 + per_frame_findings

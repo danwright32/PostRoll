@@ -251,6 +251,65 @@ def _introduced_names(prior_span: str, revised_span: str, *,
     return out
 
 
+def alt_text_damage(
+        before: str,
+        after: str,
+        *,
+        program: dict[str, Any] | None = None,
+        venue: str = "",
+        venue_context: str = "",
+        org: str = "",
+        photo_filenames: list[str] | None = None,
+) -> list[str]:
+    """The reasons ONE rewritten alt text is worse than the one it replaces.
+
+    The three rules in `blog_repair_damage` that are about a single alt text
+    against its predecessor, reachable without a body of markers (#1155): the
+    caption paths hold their alt texts in a list and have no markers at all, so
+    a caption repairer would otherwise need a second set of rules that reads
+    the same and drifts (L263, L370).
+
+    The constants are the ones measured on 55 of Dan's own corrections and are
+    shared rather than chosen again. What is deliberately NOT here is anything
+    that needs the surrounding post: the finding counts, the prose paragraph
+    rules and the credit sweep all ask their questions over a whole body, and a
+    caption has no body for them to ask about.
+
+    Length is the caller's, not this gate's. Each post type states its own word
+    band and `check_caption_alt_texts` applies it, so a floor here would be a
+    second answer to a question already asked (L41).
+    """
+    known = _identity_tokens(program, venue, venue_context, org, photo_filenames)
+    reasons: list[str] = []
+
+    share, kept, total = _retained_share(before, after, drop=known)
+    gutted = total >= _RETENTION_MIN_WORDS and (
+        share < _RETENTION_FLOOR
+        or (total >= _RETENTION_LONG_ENOUGH and kept < _RETENTION_MIN_KEPT))
+    if gutted:
+        reasons.append(
+            f"the rewritten alt text kept {kept} of the {total} things the "
+            f"original said about the photograph ({share:.0%}), below the floor "
+            "measured on Dan's own corrections: it describes the picture less "
+            "than the text it replaced")
+
+    introduced = _introduced_names(before, after, known=known)
+    if introduced:
+        reasons.append(
+            "the rewritten alt text names " + ", ".join(sorted(set(introduced)))
+            + ", which is not in the programme, the venue or the text it "
+            "replaced, so nothing here can say who that is")
+
+    marks = sorted(set(_DASHES_AND_EMOJI.findall(after))
+                   - set(_DASHES_AND_EMOJI.findall(before)))
+    if marks:
+        reasons.append(
+            "the rewritten alt text introduced a dash or emoji that Dan's "
+            f"writing rules forbid: {' '.join(marks)}")
+
+    return reasons
+
+
 def blog_repair_damage(
         prior: str,
         revised: str,

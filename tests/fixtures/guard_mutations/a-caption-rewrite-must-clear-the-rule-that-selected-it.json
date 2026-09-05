@@ -1,0 +1,8 @@
+{
+  "name": "a-caption-rewrite-must-clear-the-rule-that-selected-it",
+  "file": "postroll/ai/caption_repair.py",
+  "find": "        remaining = check_one_alt_text(candidate, band=band, where=name)\n        if remaining:",
+  "replace": "        remaining = []\n        if remaining:",
+  "test": "tests/test_caption_alt_text_repair.py::test_a_rewrite_that_still_breaks_the_rule_is_refused",
+  "breaks": "a rewritten caption alt text is accepted without re-running the rules that selected it, so a rewrite that still breaks the rule replaces the original and the finding it was supposed to clear survives against text nobody chose (#1155, L263)"
+}
