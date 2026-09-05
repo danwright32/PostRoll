@@ -1,0 +1,8 @@
+{
+  "name": "an-at-sign-is-a-claim-about-an-account",
+  "file": "PostRollApp/Sources/Views/PhotoAssignmentView.swift",
+  "find": "                if PythonBridge.isRealHandle(performer.handle) {\n                    Text(performer.handle.hasPrefix(\"@\") ? performer.handle : \"@\\(performer.handle)\")",
+  "replace": "                if !performer.handle.isEmpty {\n                    Text(performer.handle.hasPrefix(\"@\") ? performer.handle : \"@\\(performer.handle)\")",
+  "test": "tests/test_an_at_sign_is_a_claim_about_an_account.py::test_every_mention_asks_whether_the_value_is_an_account",
+  "breaks": "a surface goes back to the emptiness test the shared check replaced, so a sentinel the pipeline wrote when a search found nobody, or a company's display name, is drawn with an @ in front of it as though it were an account. Ten call sites were fixed one issue at a time before anything checked that the eleventh asks (#1112, #981, #926, #917, #899)"
+}

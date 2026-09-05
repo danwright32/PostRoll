@@ -1,1435 +1,1440 @@
 {
   "seconds": {
-    "test_a_handle_on_screen_offers_its_checked_address.py": 2.6599999999999997,
+    "test_a_handle_on_screen_offers_its_checked_address.py": 0.84,
     "test_a_move_keeps_the_posts_spacing.py": 0.0,
-    "test_a_new_test_file_is_measured.py": 1.1800000000000002,
-    "test_a_pull_request_fits_the_runner_limit.py": 0.09,
+    "test_a_new_test_file_is_measured.py": 0.8600000000000001,
+    "test_a_pull_request_fits_the_runner_limit.py": 0.04,
     "test_a_quiet_day_costs_no_mac.py": 0.0,
-    "test_a_refusal_and_a_failure_are_visible.py": 4.33,
-    "test_a_wedged_test_names_itself.py": 27.990000000000002,
-    "test_account_numbers.py": 0.0,
-    "test_ai_claude_client.py": 2.2599999999999993,
-    "test_ai_enrichment.py": 0.52,
-    "test_ai_generators.py": 0.6900000000000004,
-    "test_ai_learn_from_edits.py": 0.04,
-    "test_ai_review_loop.py": 0.08,
-    "test_ai_tells.py": 0.18000000000000005,
+    "test_a_refusal_and_a_failure_are_visible.py": 1.23,
+    "test_a_wedged_test_names_itself.py": 22.42,
+    "test_account_numbers.py": 0.02,
+    "test_ai_claude_client.py": 0.87,
+    "test_ai_enrichment.py": 0.6200000000000001,
+    "test_ai_generators.py": 1.0500000000000003,
+    "test_ai_learn_from_edits.py": 0.0,
+    "test_ai_review_loop.py": 0.15000000000000002,
+    "test_ai_tells.py": 0.25000000000000006,
     "test_alt_text_call_timing.py": 0.0,
     "test_alt_text_group_shots.py": 0.0,
-    "test_alt_text_photo_anchor.py": 4.159999999999999,
-    "test_analyze_posts.py": 0.0,
-    "test_audio.py": 2.01,
+    "test_alt_text_photo_anchor.py": 2.3899999999999997,
+    "test_an_at_sign_is_a_claim_about_an_account.py": 0.74,
+    "test_analyze_posts.py": 0.01,
+    "test_audio.py": 2.0199999999999996,
     "test_audio_cache.py": 0.0,
     "test_audio_download_failures.py": 0.0,
-    "test_audio_fit.py": 1.6,
+    "test_audio_fit.py": 1.5,
     "test_backup_doc_inventory.py": 0.0,
-    "test_blocking_work_stays_off_the_cooperative_pool.py": 9.729999999999999,
+    "test_blocking_work_stays_off_the_cooperative_pool.py": 6.2299999999999995,
     "test_blog_backstop_splice.py": 0.0,
-    "test_blog_correction_fixtures.py": 0.13,
-    "test_blog_draft_text.py": 0.01,
-    "test_blog_empty_alt_text.py": 0.0,
-    "test_blog_filename_rules_on_every_path.py": 0.0,
+    "test_blog_correction_fixtures.py": 0.04,
+    "test_blog_draft_text.py": 0.02,
+    "test_blog_empty_alt_text.py": 0.03,
+    "test_blog_filename_rules_on_every_path.py": 0.03,
     "test_blog_finding_repair_state.py": 0.0,
     "test_blog_finding_targets.py": 0.0,
     "test_blog_findings_golden.py": 0.0,
-    "test_blog_findings_module_is_a_leaf.py": 0.01,
+    "test_blog_findings_module_is_a_leaf.py": 0.02,
     "test_blog_findings_pin_their_body.py": 0.01,
     "test_blog_marker_drift_measurement.py": 0.0,
-    "test_blog_marker_filenames.py": 0.05,
+    "test_blog_marker_filenames.py": 0.02,
     "test_blog_marker_near_miss_repair.py": 0.0,
-    "test_blog_marker_placement.py": 0.37,
-    "test_blog_marker_splice.py": 0.0,
-    "test_blog_meta.py": 0.01,
-    "test_blog_number_false_positives.py": 0.060000000000000005,
-    "test_blog_photo_filename_collision.py": 0.08,
-    "test_blog_photo_stamps.py": 0.03,
-    "test_blog_photo_stamps_reach_the_app.py": 0.01,
-    "test_blog_photo_subsampling.py": 0.5600000000000002,
-    "test_blog_photographs_outlive_the_checks.py": 0.01,
+    "test_blog_marker_placement.py": 0.18000000000000005,
+    "test_blog_marker_splice.py": 0.01,
+    "test_blog_meta.py": 0.0,
+    "test_blog_number_false_positives.py": 0.0,
+    "test_blog_photo_filename_collision.py": 0.0,
+    "test_blog_photo_stamps.py": 0.06,
+    "test_blog_photo_stamps_reach_the_app.py": 0.0,
+    "test_blog_photo_subsampling.py": 0.2500000000000001,
+    "test_blog_photographs_outlive_the_checks.py": 0.0,
     "test_blog_prose_predicates_are_a_leaf.py": 0.0,
-    "test_blog_quality_checks.py": 0.060000000000000005,
-    "test_blog_repair_budget.py": 0.15000000000000002,
-    "test_blog_repair_components.py": 0.15000000000000002,
-    "test_blog_repair_damage.py": 0.12999999999999998,
-    "test_blog_repair_examples.py": 0.01,
-    "test_blog_repair_is_a_leaf_of_the_checker.py": 0.27,
-    "test_blog_repair_log.py": 0.7400000000000001,
-    "test_blog_repair_on_every_path.py": 0.11,
-    "test_blog_repair_pass.py": 0.09,
-    "test_blog_repair_reaches_the_paths.py": 0.03,
-    "test_blog_repair_retry.py": 0.24000000000000002,
-    "test_blog_repair_shrinks_toward_the_correction.py": 3.049999999999999,
-    "test_blog_repairer_table.py": 0.21000000000000002,
-    "test_blog_revision_keeps_its_alt_text.py": 0.02,
+    "test_blog_quality_checks.py": 0.01,
+    "test_blog_repair_budget.py": 0.04,
+    "test_blog_repair_components.py": 0.01,
+    "test_blog_repair_damage.py": 0.08,
+    "test_blog_repair_examples.py": 0.0,
+    "test_blog_repair_is_a_leaf_of_the_checker.py": 0.13,
+    "test_blog_repair_log.py": 0.21,
+    "test_blog_repair_on_every_path.py": 0.04,
+    "test_blog_repair_pass.py": 0.02,
+    "test_blog_repair_reaches_the_paths.py": 0.01,
+    "test_blog_repair_retry.py": 0.09,
+    "test_blog_repair_shrinks_toward_the_correction.py": 0.8200000000000001,
+    "test_blog_repairer_table.py": 0.05,
+    "test_blog_revision_keeps_its_alt_text.py": 0.0,
     "test_blog_rewrite_keeps_inline_markers.py": 0.0,
-    "test_blog_side_paths_report_progress.py": 3.2299999999999995,
-    "test_blog_swap_keeps_what_it_can.py": 0.02,
-    "test_both_swift_runners_agree.py": 0.01,
+    "test_blog_side_paths_report_progress.py": 1.46,
+    "test_blog_swap_keeps_what_it_can.py": 0.01,
+    "test_both_swift_runners_agree.py": 0.0,
     "test_brand_hashtag_survives.py": 0.0,
-    "test_brand_text.py": 0.61,
+    "test_brand_text.py": 0.13,
     "test_brand_voice_path.py": 0.0,
-    "test_bridge_contract_covers_the_code.py": 0.060000000000000005,
-    "test_bridge_payload_contract.py": 1.4000000000000004,
-    "test_bridge_payload_keys.py": 0.01,
-    "test_bridge_twins.py": 3.1599999999999997,
-    "test_build_and_test_gates.py": 77.34,
-    "test_build_cache_location.py": 0.53,
-    "test_cap_signals.py": 0.05,
-    "test_cap_signals_never_touch_live_data.py": 0.08,
-    "test_caption_alt_text_checks.py": 1.3200000000000003,
-    "test_caption_backstops.py": 0.01,
-    "test_caption_blocks.py": 0.02,
+    "test_bridge_contract_covers_the_code.py": 0.0,
+    "test_bridge_payload_contract.py": 0.43000000000000016,
+    "test_bridge_payload_keys.py": 0.0,
+    "test_bridge_twins.py": 1.1600000000000001,
+    "test_build_and_test_gates.py": 45.800000000000004,
+    "test_build_cache_location.py": 0.33000000000000007,
+    "test_cap_signals.py": 0.02,
+    "test_cap_signals_never_touch_live_data.py": 0.01,
+    "test_caption_alt_text_checks.py": 0.44,
+    "test_caption_backstops.py": 0.0,
+    "test_caption_blocks.py": 0.0,
     "test_caption_credit_dedup.py": 0.0,
-    "test_caption_credit_enforcement.py": 0.07,
-    "test_caption_review_is_split.py": 0.21000000000000005,
-    "test_check_guards.py": 10.689999999999992,
-    "test_check_guards_reminder.py": 3.169999999999999,
+    "test_caption_credit_enforcement.py": 0.0,
+    "test_caption_review_is_split.py": 0.07,
+    "test_check_guards.py": 12.179999999999978,
+    "test_check_guards_reminder.py": 3.6199999999999997,
     "test_check_issue_figures.py": 0.0,
-    "test_ci_builds_one_architecture.py": 0.14,
+    "test_ci_builds_one_architecture.py": 0.04,
     "test_ci_caches_and_cancels.py": 0.0,
-    "test_ci_gates.py": 1.21,
-    "test_ci_log_patterns_read_a_real_log.py": 0.11999999999999998,
+    "test_ci_gates.py": 1.1099999999999999,
+    "test_ci_log_patterns_read_a_real_log.py": 0.060000000000000005,
     "test_ci_profile.py": 0.0,
-    "test_ci_runs_the_font_dependent_checks.py": 0.12000000000000001,
-    "test_clip_scorer.py": 19.380000000000003,
-    "test_closing_crossfade_legibility.py": 236.53999999999996,
-    "test_codec_fidelity.py": 0.01,
-    "test_collaborator_constants_match_the_population.py": 0.01,
-    "test_collaborator_metric.py": 0.03,
-    "test_collage_arrangement_sheet.py": 4.18,
+    "test_ci_runs_the_font_dependent_checks.py": 0.05,
+    "test_clip_scorer.py": 13.740000000000002,
+    "test_closing_crossfade_legibility.py": 211.63999999999996,
+    "test_codec_fidelity.py": 0.0,
+    "test_collaborator_constants_match_the_population.py": 0.0,
+    "test_collaborator_metric.py": 0.0,
+    "test_collage_arrangement_sheet.py": 1.5400000000000003,
     "test_collage_arrangements.py": 0.0,
     "test_collage_crop_budget_warning.py": 0.0,
-    "test_collage_design_version.py": 1.32,
+    "test_collage_design_version.py": 1.03,
     "test_collage_gutter_parity.py": 0.0,
-    "test_collage_layout_override_is_refused.py": 0.43,
+    "test_collage_layout_override_is_refused.py": 0.12,
     "test_collage_layout_validity.py": 0.0,
-    "test_collage_survives_the_phone_chrome.py": 0.0,
+    "test_collage_survives_the_phone_chrome.py": 0.09,
     "test_compare_transports.py": 0.0,
     "test_cover_photo_reuse.py": 0.0,
     "test_crop_geometry_parity.py": 0.0,
-    "test_debug_build_signs_nested_code.py": 2.82,
-    "test_default_argument_seams.py": 2.38,
+    "test_debug_build_signs_nested_code.py": 2.9699999999999998,
+    "test_default_argument_seams.py": 0.9300000000000002,
     "test_design_tokens.py": 0.0,
     "test_enrich_program_shapes.py": 0.0,
     "test_enrich_step_attribution.py": 0.0,
-    "test_event_manifest.py": 0.0,
+    "test_event_manifest.py": 0.02,
     "test_event_slug_parity.py": 0.0,
-    "test_every_tool_runs_as_a_script.py": 3.8199999999999985,
+    "test_every_tool_runs_as_a_script.py": 3.3599999999999994,
     "test_extract_json_strings.py": 0.0,
     "test_failure_needles_have_producers.py": 0.0,
-    "test_fast_subset_stays_honest.py": 0.24999999999999997,
-    "test_ffmpeg_prerequisite.py": 0.13,
-    "test_figures_say_their_sample.py": 0.11,
+    "test_fast_subset_stays_honest.py": 0.43000000000000005,
+    "test_ffmpeg_prerequisite.py": 0.16000000000000003,
+    "test_figures_say_their_sample.py": 0.11000000000000001,
     "test_font_loading.py": 0.0,
-    "test_frame_legibility.py": 126.88000000000002,
-    "test_frame_names_its_show.py": 13.27,
-    "test_gallery_alignment.py": 8.399999999999997,
-    "test_generate_before_after.py": 2.9899999999999984,
-    "test_generate_cover.py": 0.22,
-    "test_generate_media_cover.py": 49.059999999999995,
-    "test_generate_media_friday_clips.py": 57.169999999999995,
-    "test_generate_splices_its_markers_back.py": 0.03,
-    "test_generate_story.py": 3.5599999999999987,
-    "test_generate_title_card.py": 13.87,
-    "test_generate_week_friday_clips.py": 1.36,
+    "test_frame_legibility.py": 107.68000000000002,
+    "test_frame_names_its_show.py": 18.13,
+    "test_gallery_alignment.py": 7.199999999999999,
+    "test_generate_before_after.py": 1.3700000000000003,
+    "test_generate_cover.py": 0.25,
+    "test_generate_media_cover.py": 52.18999999999999,
+    "test_generate_media_friday_clips.py": 54.21999999999999,
+    "test_generate_splices_its_markers_back.py": 0.02,
+    "test_generate_story.py": 1.76,
+    "test_generate_title_card.py": 17.14,
+    "test_generate_week_friday_clips.py": 1.17,
     "test_generate_week_halt.py": 0.0,
-    "test_golden_drift_is_reported.py": 1.3400000000000003,
-    "test_golden_frames.py": 288.41999999999996,
-    "test_golden_recording_door.py": 0.11,
+    "test_golden_drift_is_reported.py": 0.8100000000000003,
+    "test_golden_frames.py": 256.42999999999984,
+    "test_golden_recording_door.py": 0.01,
     "test_guard_costs_are_recorded_automatically.py": 0.0,
-    "test_guard_entry_costs.py": 0.0,
-    "test_guard_mutation_registry.py": 17.220000000000027,
-    "test_guard_sweep_due.py": 0.11,
-    "test_guard_sweep_fits_its_deadline.py": 0.27,
-    "test_guard_sweep_freshness.py": 0.21,
-    "test_guard_work_line.py": 0.12000000000000001,
-    "test_guards_read_code_not_prose.py": 3.78,
+    "test_guard_entry_costs.py": 0.01,
+    "test_guard_mutation_registry.py": 5.549999999999999,
+    "test_guard_sweep_due.py": 0.06,
+    "test_guard_sweep_fits_its_deadline.py": 0.12000000000000001,
+    "test_guard_sweep_freshness.py": 0.01,
+    "test_guard_work_line.py": 0.09000000000000001,
+    "test_guards_read_code_not_prose.py": 0.84,
     "test_gui_launch_budget.py": 0.0,
     "test_gui_tests_cannot_hang_silently.py": 0.0,
     "test_hand_check_document.py": 0.0,
-    "test_hand_check_reminder.py": 0.5,
-    "test_hand_check_states.py": 3.2699999999999947,
+    "test_hand_check_reminder.py": 0.49,
+    "test_hand_check_states.py": 2.659999999999994,
     "test_handle_shape.py": 0.0,
-    "test_heic_staging.py": 0.81,
+    "test_heic_staging.py": 0.8799999999999999,
     "test_icloud_duplicates.py": 0.7,
-    "test_image_block_cache.py": 6.1099999999999985,
-    "test_import_meta_csv.py": 0.01,
-    "test_jamendo_outage_short_circuit.py": 0.0,
-    "test_jamendo_status_envelope.py": 0.09,
-    "test_job_duration_drift.py": 0.09,
+    "test_image_block_cache.py": 1.9300000000000002,
+    "test_import_meta_csv.py": 0.0,
+    "test_jamendo_outage_short_circuit.py": 0.01,
+    "test_jamendo_status_envelope.py": 0.01,
+    "test_job_duration_drift.py": 0.04,
     "test_layout_sidecar.py": 0.0,
     "test_mac_build_setup_is_shared.py": 0.0,
-    "test_make_test_runs_both_suites.py": 0.9099999999999999,
-    "test_manifest_contract.py": 0.09999999999999999,
+    "test_make_test_runs_both_suites.py": 0.72,
+    "test_manifest_contract.py": 0.11,
     "test_manifest_read_keys.py": 0.0,
     "test_markers_are_not_prose.py": 0.0,
     "test_measure_blog_calls.py": 0.0,
     "test_measure_clip_reel_encodes.py": 0.0,
     "test_measure_thursday_alt_text.py": 0.0,
-    "test_media_design_fingerprint.py": 4.6299999999999955,
-    "test_media_design_version.py": 1.62,
-    "test_media_generators.py": 5.080000000000002,
-    "test_media_probe.py": 0.06999999999999999,
-    "test_media_warnings.py": 2.179999999999999,
+    "test_media_design_fingerprint.py": 5.5,
+    "test_media_design_version.py": 1.3,
+    "test_media_generators.py": 4.49,
+    "test_media_probe.py": 0.0,
+    "test_media_warnings.py": 0.9100000000000001,
     "test_meta_app_doc.py": 0.0,
-    "test_missing_bw_photo.py": 3.1399999999999975,
+    "test_missing_bw_photo.py": 3.9199999999999973,
     "test_model_pinning.py": 0.0,
     "test_no_dead_build_cache.py": 0.0,
-    "test_no_dead_tuning_controls.py": 17.670000000000012,
-    "test_no_such_account_calibration.py": 0.07,
-    "test_ocr_batch_durability.py": 0.12999999999999998,
-    "test_ocr_batching.py": 10.959999999999997,
+    "test_no_dead_tuning_controls.py": 8.490000000000002,
+    "test_no_such_account_calibration.py": 0.0,
+    "test_ocr_batch_durability.py": 0.14,
+    "test_ocr_batching.py": 7.97,
     "test_ocr_rescan_merge.py": 0.0,
     "test_one_inferred_state_matcher.py": 0.0,
-    "test_one_list_joiner.py": 0.46,
-    "test_optional_organisation.py": 0.77,
-    "test_page_regions.py": 4.86,
+    "test_one_list_joiner.py": 0.28,
+    "test_optional_organisation.py": 0.4,
+    "test_page_regions.py": 5.069999999999999,
     "test_paid_default_path.py": 0.0,
-    "test_parallel_suite_assumptions.py": 0.11000000000000001,
-    "test_performer_hashtag_gate.py": 0.11,
-    "test_permission_is_asked_after_launch.py": 0.06,
-    "test_perturbation_lock.py": 0.36,
-    "test_phone_safe_area.py": 45.480000000000004,
-    "test_photo_coverage_registry.py": 40.940000000000005,
+    "test_parallel_suite_assumptions.py": 0.04,
+    "test_performer_hashtag_gate.py": 0.09,
+    "test_permission_is_asked_after_launch.py": 0.01,
+    "test_perturbation_lock.py": 0.32000000000000006,
+    "test_phone_safe_area.py": 25.159999999999997,
+    "test_photo_coverage_registry.py": 18.28,
     "test_photo_promotion_rate.py": 0.0,
     "test_posting_preset.py": 0.01,
-    "test_prd_matches_the_build.py": 0.27,
-    "test_print_rect.py": 0.16,
-    "test_progress_reporting.py": 1.2400000000000002,
-    "test_project_plugin_settings.py": 0.04,
+    "test_prd_matches_the_build.py": 0.13,
+    "test_print_rect.py": 0.2,
+    "test_progress_reporting.py": 0.8300000000000001,
+    "test_project_plugin_settings.py": 0.02,
     "test_project_root_recorded.py": 0.0,
     "test_prompts_do_not_show_the_dashes_they_ban.py": 0.0,
     "test_prune_merged_branches.py": 0.0,
-    "test_python_suite_runs_from_a_worktree.py": 1.0999999999999999,
-    "test_readme_documents_every_make_target.py": 0.01,
+    "test_python_suite_runs_from_a_worktree.py": 1.08,
+    "test_readme_documents_every_make_target.py": 0.0,
     "test_real_handle.py": 0.04,
-    "test_record_codec_change.py": 51.539999999999985,
-    "test_record_design_change.py": 0.6499999999999999,
-    "test_record_design_fingerprints.py": 47.959999999999994,
+    "test_record_codec_change.py": 32.89000000000001,
+    "test_record_design_change.py": 0.55,
+    "test_record_design_fingerprints.py": 25.740000000000002,
     "test_record_guard_costs.py": 0.0,
-    "test_record_suite_count.py": 0.35,
-    "test_record_test_durations.py": 1.85,
-    "test_recorded_change_is_proposed.py": 15.03,
-    "test_recorded_timings_name_their_machine.py": 0.06,
+    "test_record_suite_count.py": 0.34,
+    "test_record_test_durations.py": 1.24,
+    "test_recorded_change_is_proposed.py": 13.120000000000001,
+    "test_recorded_timings_name_their_machine.py": 0.07,
     "test_recorders_survive_their_own_proposal.py": 0.0,
-    "test_reel_alt_text_describes_the_reel.py": 2.4599999999999977,
-    "test_reel_audio_failure.py": 3.049999999999999,
-    "test_reel_audio_fallback.py": 4.21,
-    "test_reel_easing.py": 0.02,
-    "test_reel_layout_seed_is_required.py": 9.23,
-    "test_reel_photo_selection_batching.py": 0.20000000000000007,
-    "test_reel_scroll_motion.py": 1.22,
-    "test_reel_scroll_render_path.py": 4.53,
-    "test_reel_scroll_viewport.py": 19.39,
+    "test_reel_alt_text_describes_the_reel.py": 2.179999999999997,
+    "test_reel_audio_failure.py": 3.039999999999999,
+    "test_reel_audio_fallback.py": 7.37,
+    "test_reel_easing.py": 0.0,
+    "test_reel_layout_seed_is_required.py": 9.84,
+    "test_reel_photo_selection_batching.py": 0.16,
+    "test_reel_scroll_motion.py": 0.5,
+    "test_reel_scroll_render_path.py": 3.01,
+    "test_reel_scroll_viewport.py": 10.12,
     "test_reel_style_default.py": 0.0,
-    "test_reference_frame_shards_are_balanced.py": 0.0,
-    "test_reference_frames_are_safe_to_parallelise.py": 0.01,
-    "test_render_clip_reel.py": 33.66,
-    "test_render_friday_override.py": 12.690000000000001,
+    "test_reference_frame_shards_are_balanced.py": 0.05,
+    "test_reference_frames_are_safe_to_parallelise.py": 0.060000000000000005,
+    "test_render_clip_reel.py": 35.019999999999996,
+    "test_render_friday_override.py": 12.0,
     "test_repair_journal_keys_on_the_event.py": 0.0,
     "test_repair_record_wording.py": 0.0,
     "test_resolve_reel_audio.py": 0.0,
     "test_revise_caption_backstops.py": 0.0,
-    "test_safe_area_tokens.py": 0.03,
-    "test_say_when_ci_goes_red.py": 0.01,
-    "test_scene_labels_stay_in_step.py": 2.8,
-    "test_screen_reel_logo_contrast.py": 0.06,
-    "test_screens_draw_from_named_colours.py": 9.88,
-    "test_screens_take_their_stores.py": 1.2200000000000002,
+    "test_safe_area_tokens.py": 0.02,
+    "test_say_when_ci_goes_red.py": 0.0,
+    "test_scene_labels_stay_in_step.py": 1.03,
+    "test_screen_reel_logo_contrast.py": 0.0,
+    "test_screens_draw_from_named_colours.py": 3.53,
+    "test_screens_take_their_stores.py": 0.66,
     "test_scroll_reel_timing_parity.py": 0.0,
-    "test_select_cover_photo.py": 0.0,
-    "test_select_reel_clips.py": 0.3,
-    "test_sibling_payloads_agree.py": 0.09,
+    "test_select_cover_photo.py": 0.02,
+    "test_select_reel_clips.py": 0.26,
+    "test_sibling_payloads_agree.py": 0.17,
     "test_side_crop_readings.py": 0.0,
-    "test_slider_program_plate.py": 49.589999999999996,
-    "test_source_reads_happen_once.py": 0.12,
-    "test_source_text.py": 0.02,
-    "test_source_tree_is_read_only.py": 0.0,
-    "test_stitch_notes.py": 0.02,
-    "test_stored_types_round_trip.py": 0.8000000000000003,
-    "test_story_title_clamp.py": 7.35,
-    "test_style_backlog_is_measured.py": 3.82,
+    "test_slider_program_plate.py": 37.16,
+    "test_source_reads_happen_once.py": 0.0,
+    "test_source_text.py": 0.01,
+    "test_source_tree_is_read_only.py": 0.05,
+    "test_stitch_notes.py": 0.01,
+    "test_stored_types_round_trip.py": 0.9500000000000004,
+    "test_story_title_clamp.py": 3.9799999999999995,
+    "test_style_backlog_is_measured.py": 1.7,
     "test_subscription_transport.py": 0.0,
-    "test_suite_hygiene.py": 3.71,
-    "test_swap_blog_photos.py": 0.01,
-    "test_swap_reel_audio_result.py": 0.07,
-    "test_swift_count_from_result_bundle.py": 0.04,
-    "test_swift_leg_meets_its_floor.py": 0.44000000000000006,
-    "test_swift_suite_cost_names_its_machine.py": 0.01,
+    "test_suite_hygiene.py": 1.1400000000000001,
+    "test_swap_blog_photos.py": 0.04,
+    "test_swap_reel_audio_result.py": 0.02,
+    "test_swift_count_from_result_bundle.py": 0.0,
+    "test_swift_leg_meets_its_floor.py": 0.26,
+    "test_swift_suite_cost_names_its_machine.py": 0.0,
     "test_swift_suite_count_is_recorded_automatically.py": 0.0,
     "test_swift_test_target_covers_sources.py": 0.0,
-    "test_swift_tests_never_reach_live_data.py": 6.02,
-    "test_the_layout_control_is_the_one_way_to_switch.py": 0.33,
-    "test_the_pr_guard_job_has_a_deadline.py": 0.01,
-    "test_the_suite_spreads_its_slowest_work.py": 0.01,
-    "test_the_sweep_runs_only_the_due_shards.py": 0.09999999999999999,
-    "test_the_test_target_stays_self_contained.py": 2.07,
-    "test_the_two_sweep_windows_are_one_rule.py": 0.01,
-    "test_thursday_reel_legibility.py": 149.40999999999997,
-    "test_toolchain_matches_ci.py": 0.08,
+    "test_swift_tests_never_reach_live_data.py": 2.2199999999999998,
+    "test_the_layout_control_is_the_one_way_to_switch.py": 0.12,
+    "test_the_pr_guard_job_has_a_deadline.py": 0.0,
+    "test_the_suite_spreads_its_slowest_work.py": 0.0,
+    "test_the_sweep_runs_only_the_due_shards.py": 0.07,
+    "test_the_test_target_stays_self_contained.py": 0.62,
+    "test_the_two_sweep_windows_are_one_rule.py": 0.0,
+    "test_thursday_reel_legibility.py": 127.97,
+    "test_toolchain_matches_ci.py": 0.14,
     "test_top_anchored_crop.py": 0.01,
-    "test_transport_is_reported.py": 0.05,
-    "test_transport_seam.py": 0.05,
-    "test_tree_already_checked.py": 0.03,
+    "test_transport_is_reported.py": 0.0,
+    "test_transport_seam.py": 0.0,
+    "test_tree_already_checked.py": 0.0,
     "test_ui_tests_quote_the_real_alerts.py": 0.0,
     "test_unread_page_identity.py": 0.0,
-    "test_unreadable_photo_skip.py": 11.09,
-    "test_update_wrapper.py": 14.2,
-    "test_url_scheme_registered.py": 0.04,
-    "test_url_scheme_registrations.py": 0.26,
-    "test_usage_log.py": 0.0,
+    "test_unreadable_photo_skip.py": 2.3899999999999983,
+    "test_update_wrapper.py": 13.950000000000001,
+    "test_url_scheme_registered.py": 0.05,
+    "test_url_scheme_registrations.py": 0.35,
+    "test_usage_log.py": 0.03,
     "test_usage_log_stays_off_the_live_file.py": 0.0,
-    "test_usage_log_timestamps.py": 0.02,
-    "test_usage_recorded_on_sdk_calls.py": 0.0,
-    "test_view_file_manager_isolation.py": 0.02,
-    "test_vision_cross_check.py": 0.02,
-    "test_wait_for_checks.py": 1.0100000000000005,
+    "test_usage_log_timestamps.py": 0.0,
+    "test_usage_recorded_on_sdk_calls.py": 0.01,
+    "test_view_file_manager_isolation.py": 0.01,
+    "test_vision_cross_check.py": 0.0,
+    "test_wait_for_checks.py": 0.4600000000000002,
     "test_week_tag_cap.py": 0.0,
-    "test_wordmark_required.py": 2.7299999999999986
+    "test_wordmark_required.py": 0.7
   },
   "measured": {
     "test_a_handle_on_screen_offers_its_checked_address.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_a_move_keeps_the_posts_spacing.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_a_new_test_file_is_measured.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_a_pull_request_fits_the_runner_limit.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_a_quiet_day_costs_no_mac.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_a_refusal_and_a_failure_are_visible.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_a_wedged_test_names_itself.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_account_numbers.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_ai_claude_client.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_ai_enrichment.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_ai_generators.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_ai_learn_from_edits.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_ai_review_loop.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_ai_tells.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_alt_text_call_timing.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_alt_text_group_shots.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_alt_text_photo_anchor.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
+      "scale": 1.0
+    },
+    "test_an_at_sign_is_a_claim_about_an_account.py": {
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_analyze_posts.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_audio.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_audio_cache.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_audio_download_failures.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_audio_fit.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_backup_doc_inventory.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blocking_work_stays_off_the_cooperative_pool.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_backstop_splice.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_correction_fixtures.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_draft_text.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_empty_alt_text.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_filename_rules_on_every_path.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_finding_repair_state.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_finding_targets.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_findings_golden.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_findings_module_is_a_leaf.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_findings_pin_their_body.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_marker_drift_measurement.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_marker_filenames.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_marker_near_miss_repair.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_marker_placement.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_marker_splice.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_meta.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_number_false_positives.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_photo_filename_collision.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_photo_stamps.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_photo_stamps_reach_the_app.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_photo_subsampling.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_photographs_outlive_the_checks.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_prose_predicates_are_a_leaf.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_quality_checks.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_repair_budget.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_repair_components.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_repair_damage.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_repair_examples.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_repair_is_a_leaf_of_the_checker.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_repair_log.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_repair_on_every_path.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_repair_pass.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_repair_reaches_the_paths.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_repair_retry.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_repair_shrinks_toward_the_correction.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_repairer_table.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_revision_keeps_its_alt_text.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_rewrite_keeps_inline_markers.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_side_paths_report_progress.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_blog_swap_keeps_what_it_can.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_both_swift_runners_agree.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_brand_hashtag_survives.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_brand_text.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_brand_voice_path.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_bridge_contract_covers_the_code.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_bridge_payload_contract.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_bridge_payload_keys.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_bridge_twins.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_build_and_test_gates.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_build_cache_location.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_cap_signals.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_cap_signals_never_touch_live_data.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_caption_alt_text_checks.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_caption_backstops.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_caption_blocks.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_caption_credit_dedup.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_caption_credit_enforcement.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_caption_review_is_split.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_check_guards.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_check_guards_reminder.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_check_issue_figures.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_ci_builds_one_architecture.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_ci_caches_and_cancels.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_ci_gates.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_ci_log_patterns_read_a_real_log.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_ci_profile.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_ci_runs_the_font_dependent_checks.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_clip_scorer.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_closing_crossfade_legibility.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_codec_fidelity.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_collaborator_constants_match_the_population.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_collaborator_metric.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_collage_arrangement_sheet.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_collage_arrangements.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_collage_crop_budget_warning.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_collage_design_version.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_collage_gutter_parity.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_collage_layout_override_is_refused.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_collage_layout_validity.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_collage_survives_the_phone_chrome.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_compare_transports.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_cover_photo_reuse.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_crop_geometry_parity.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_debug_build_signs_nested_code.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_default_argument_seams.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_design_tokens.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_enrich_program_shapes.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_enrich_step_attribution.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_event_manifest.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_event_slug_parity.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_every_tool_runs_as_a_script.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_extract_json_strings.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_failure_needles_have_producers.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_fast_subset_stays_honest.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_ffmpeg_prerequisite.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_figures_say_their_sample.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_font_loading.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_frame_legibility.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_frame_names_its_show.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_gallery_alignment.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_generate_before_after.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_generate_cover.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_generate_media_cover.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_generate_media_friday_clips.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_generate_splices_its_markers_back.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_generate_story.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_generate_title_card.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_generate_week_friday_clips.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_generate_week_halt.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_golden_drift_is_reported.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_golden_frames.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_golden_recording_door.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_guard_costs_are_recorded_automatically.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_guard_entry_costs.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_guard_mutation_registry.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_guard_sweep_due.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_guard_sweep_fits_its_deadline.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_guard_sweep_freshness.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_guard_work_line.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_guards_read_code_not_prose.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_gui_launch_budget.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_gui_tests_cannot_hang_silently.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_hand_check_document.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_hand_check_reminder.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_hand_check_states.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_handle_shape.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_heic_staging.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_icloud_duplicates.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_image_block_cache.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_import_meta_csv.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_jamendo_outage_short_circuit.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_jamendo_status_envelope.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_job_duration_drift.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_layout_sidecar.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_mac_build_setup_is_shared.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_make_test_runs_both_suites.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_manifest_contract.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_manifest_read_keys.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_markers_are_not_prose.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_measure_blog_calls.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_measure_clip_reel_encodes.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_measure_thursday_alt_text.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_media_design_fingerprint.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_media_design_version.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_media_generators.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_media_probe.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_media_warnings.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_meta_app_doc.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_missing_bw_photo.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_model_pinning.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_no_dead_build_cache.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_no_dead_tuning_controls.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_no_such_account_calibration.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_ocr_batch_durability.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_ocr_batching.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_ocr_rescan_merge.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_one_inferred_state_matcher.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_one_list_joiner.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_optional_organisation.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_page_regions.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_paid_default_path.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_parallel_suite_assumptions.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_performer_hashtag_gate.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_permission_is_asked_after_launch.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_perturbation_lock.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_phone_safe_area.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_photo_coverage_registry.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_photo_promotion_rate.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_posting_preset.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_prd_matches_the_build.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_print_rect.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_progress_reporting.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_project_plugin_settings.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_project_root_recorded.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_prompts_do_not_show_the_dashes_they_ban.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_prune_merged_branches.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_python_suite_runs_from_a_worktree.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_readme_documents_every_make_target.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_real_handle.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_record_codec_change.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_record_design_change.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_record_design_fingerprints.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_record_guard_costs.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_record_suite_count.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_record_test_durations.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_recorded_change_is_proposed.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_recorded_timings_name_their_machine.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_recorders_survive_their_own_proposal.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_reel_alt_text_describes_the_reel.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_reel_audio_failure.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_reel_audio_fallback.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_reel_easing.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_reel_layout_seed_is_required.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_reel_photo_selection_batching.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_reel_scroll_motion.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_reel_scroll_render_path.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_reel_scroll_viewport.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_reel_style_default.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_reference_frame_shards_are_balanced.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_reference_frames_are_safe_to_parallelise.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_render_clip_reel.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_render_friday_override.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_repair_journal_keys_on_the_event.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_repair_record_wording.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_resolve_reel_audio.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_revise_caption_backstops.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_safe_area_tokens.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_say_when_ci_goes_red.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_scene_labels_stay_in_step.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_screen_reel_logo_contrast.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_screens_draw_from_named_colours.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_screens_take_their_stores.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_scroll_reel_timing_parity.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_select_cover_photo.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_select_reel_clips.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_sibling_payloads_agree.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_side_crop_readings.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_slider_program_plate.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_source_reads_happen_once.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_source_text.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_source_tree_is_read_only.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_stitch_notes.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_stored_types_round_trip.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_story_title_clamp.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_style_backlog_is_measured.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_subscription_transport.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_suite_hygiene.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_swap_blog_photos.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_swap_reel_audio_result.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_swift_count_from_result_bundle.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_swift_leg_meets_its_floor.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_swift_suite_cost_names_its_machine.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_swift_suite_count_is_recorded_automatically.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_swift_test_target_covers_sources.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_swift_tests_never_reach_live_data.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_the_layout_control_is_the_one_way_to_switch.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_the_pr_guard_job_has_a_deadline.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_the_suite_spreads_its_slowest_work.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_the_sweep_runs_only_the_due_shards.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_the_test_target_stays_self_contained.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_the_two_sweep_windows_are_one_rule.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_thursday_reel_legibility.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_toolchain_matches_ci.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_top_anchored_crop.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_transport_is_reported.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_transport_seam.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_tree_already_checked.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_ui_tests_quote_the_real_alerts.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_unread_page_identity.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_unreadable_photo_skip.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_update_wrapper.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_url_scheme_registered.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_url_scheme_registrations.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_usage_log.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_usage_log_stays_off_the_live_file.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_usage_log_timestamps.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_usage_recorded_on_sdk_calls.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_view_file_manager_isolation.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_vision_cross_check.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_wait_for_checks.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_week_tag_cap.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
     "test_wordmark_required.py": {
-      "run": "full-2026-09-05T02:11Z",
+      "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     }
   },
