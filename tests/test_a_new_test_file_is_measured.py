@@ -212,12 +212,37 @@ def test_this_branch_measures_every_test_file_it_adds():
         "`make test-python-fast` skips, and a file absent from it is read as "
         "free by everything downstream, so measure them here rather than "
         "leaving the cost to whoever later tips the worst case over (#1058).\n"
-        "Measure them beside files already in the record, in one run, so the "
-        "readings can be scaled into the record's own run rather than mixed "
-        "across runs (#1038, L224):\n"
-        "  POSTROLL_REQUIRE_FFMPEG=1 venv/bin/python -m pytest "
-        + " ".join(f"tests/{name}" for name in missing)
-        + " tests/test_build_cache_location.py tests/test_manifest_contract.py "
-          "-q -n auto --durations=0 --durations-min=0\n"
-        "then add the summed seconds per file to "
-        "tests/fixtures/test_file_durations.json.")
+        "One command, which measures them beside files already in the record, "
+        "in one run, scales the readings onto the record's own run and writes "
+        "down which run they came from (#1038, #1370, L224):\n"
+        "  venv/bin/python tools/record_test_durations.py --add "
+        + " ".join(f"tests/{name}" for name in missing) + "\n"
+        "Not `make record-test-durations`: that re-reads every file and "
+        "re-derives every share, so it rewrites readings nobody changed and "
+        "two branches each adding a test file then conflict over numbers "
+        "neither of them touched.")
+
+
+# ── the remedy it names (#1370) ─────────────────────────────────────────────
+
+
+def test_the_remedy_names_the_tool_rather_than_a_hand_edit():
+    """The message is the only instruction anybody reads at this moment.
+
+    It used to name a pytest invocation and then say to add the seconds to the
+    fixture by hand, while `--add` already did exactly that correctly: measured
+    beside the references, scaled onto the record's own run, provenance written
+    down. A guard that points past its own remedy gets the record edited by
+    hand, and a hand edit is how the record came to mix runs silently (#1038).
+
+    It must also NOT send anybody to the full re-record, which rewrites every
+    reading and is what makes two branches conflict over numbers neither
+    touched (#1370).
+    """
+    source = Path(__file__).read_text(encoding="utf-8")
+    remedy = source.split("assert not missing, (", 1)[1].split(")\n", 1)[0]
+
+    assert "record_test_durations.py --add" in remedy, remedy
+    assert "Not `make record-test-durations`" in remedy, (
+        "the message has to say which of the two commands is wrong here, "
+        "because the other one is the one in the Makefile's help")
