@@ -35,6 +35,11 @@
 
 set -euo pipefail
 
+# Our own directory, captured before anything else runs. `same_measurement.py`
+# sits beside this script and is found through here rather than through the
+# caller's working directory (L372).
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 record=""
 prefix=""
 title=""
@@ -91,7 +96,37 @@ fi
 cp "${kept}" "${record}"
 git add -- "${record}"
 
+# Whether this run measured anything NEW, asked of the MEASUREMENT and not of
+# the file (#1392). Every recorder stamps which run produced the reading and
+# when, and those fields move on every run whether the number did or not, so
+# `git diff` alone answers yes every time. The proposal was then recommitted
+# and its head moved away from the commit its checks belonged to: measured
+# 2026-09-05 on PR #1383, three commits in half an hour all recording 3175.
+#
+# The byte comparison is still asked FIRST, because it is free and it is the
+# common case. Only a file that genuinely differs is worth reading as JSON.
+carries_it=false
 if git diff --cached --quiet; then
+  carries_it=true
+elif at_head="$(mktemp)" && git show "HEAD:${record}" > "${at_head}" 2>/dev/null; then
+  # Three outcomes, not two. The caller reads "different" as commit and push,
+  # so a record that could not be READ must take neither branch by accident
+  # (L11, L98).
+  set +e
+  python3 "${here}/same_measurement.py" "${record}" "${at_head}"
+  verdict=$?
+  set -e
+  case "${verdict}" in
+    0) carries_it=true ;;
+    1) carries_it=false ;;
+    *) echo "propose_recorded_change: ${record} could not be compared against" \
+            "the copy on ${branch}, so whether this run measured anything new" \
+            "could not be established. Nothing was written." >&2
+       exit 2 ;;
+  esac
+fi
+
+if [ "${carries_it}" = "true" ]; then
   if [ "${on_remote}" != "true" ]; then
     # The caller runs this only when the record MOVED, so a record equal to
     # what the base already holds, with no branch to explain it, means the
@@ -101,7 +136,7 @@ if git diff --cached --quiet; then
          "exists, so there is nothing to propose" >&2
     exit 1
   fi
-  echo "today's proposal on ${branch} already carries this record; nothing pushed"
+  echo "today's proposal on ${branch} already carries this record's measurement; nothing pushed"
 else
   git commit -q -m "${title}"
   git push -q origin "${branch}"

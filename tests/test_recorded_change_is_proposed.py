@@ -373,3 +373,114 @@ def test_the_gh_arguments_are_real(tmp_path):
     assert 'pr list --head "${branch}" --state open --json number' in body, (
         "the script no longer asks gh the question these flags were checked "
         "for, so this test is guarding a call that is not made")
+
+
+# ── provenance is not a measurement (#1392) ──────────────────────────────────
+
+
+def _reading(count: int, *, run: str, commit: str) -> dict:
+    """A record shaped the way the real one is: a measurement, plus the fields
+    saying WHICH run measured it and WHEN. Every real recorder writes those,
+    and they move on every run whether the number did or not."""
+    return {"count": count, "measured_on": DAY,
+            "measured_at_commit": commit, "measured_from_run": run,
+            "measured_from": f"{count} tests, no failures, read from run {run}",
+            "re_measure_with": "venv/bin/python tools/record_suite_count.py"}
+
+
+def test_a_rerun_measuring_the_same_number_does_not_recommit(tmp_path):
+    """The whole of #1392.
+
+    The script asks whether there is anything to add with `git diff --cached`
+    over the WHOLE record, and every recorder stamps which run measured it. So
+    a re-run that measured the identical number still writes a different file
+    and still commits, and the open proposal's head moves away from the commit
+    its checks belong to.
+
+    Measured 2026-09-05 on PR #1383: three commits in half an hour, all
+    recording 3175, differing only in `measured_at_commit` and
+    `measured_from_run`. One green was refused at the merge because the branch
+    had moved under it.
+    """
+    remote = make_remote(tmp_path)
+    first = make_checkout(tmp_path, remote, "first")
+    gh, _ = make_gh_stub(tmp_path)
+    propose(first, gh, record_value=_reading(3175, run="111", commit="aaaaaaa"))
+    unchanged = git("rev-parse", BRANCH, cwd=remote).stdout.strip()
+
+    second = make_checkout(tmp_path, remote, "second")
+    gh_open, calls = make_gh_stub(tmp_path, open_heads=(BRANCH,), name="second")
+    done = propose(second, gh_open,
+                   record_value=_reading(3175, run="222", commit="bbbbbbb"))
+
+    assert git("rev-parse", BRANCH, cwd=remote).stdout.strip() == unchanged, (
+        "the proposal was recommitted for a run that measured the same number, "
+        "so its head moved away from the commit its checks belong to (#1392)")
+    assert "already carries this" in done.stdout
+    assert not any(call.startswith("pr create") for call in gh_calls(calls))
+
+
+def test_a_rerun_measuring_a_different_number_still_recommits(tmp_path):
+    """The positive control, in the SAME fixture (L159).
+
+    Without it, a script that never commits anything at all passes the test
+    above, and the two are indistinguishable from its result.
+    """
+    remote = make_remote(tmp_path)
+    first = make_checkout(tmp_path, remote, "first")
+    gh, _ = make_gh_stub(tmp_path)
+    propose(first, gh, record_value=_reading(3175, run="111", commit="aaaaaaa"))
+    before = git("rev-parse", BRANCH, cwd=remote).stdout.strip()
+
+    second = make_checkout(tmp_path, remote, "second")
+    gh_open, _ = make_gh_stub(tmp_path, open_heads=(BRANCH,), name="second")
+    propose(second, gh_open, record_value=_reading(3201, run="222", commit="bbbbbbb"))
+
+    assert git("rev-parse", BRANCH, cwd=remote).stdout.strip() != before, (
+        "a genuinely new number was not committed onto today's proposal")
+    assert remote_record(remote, BRANCH)["count"] == 3201
+
+
+def test_a_record_that_cannot_be_compared_is_refused_rather_than_pushed(tmp_path):
+    """The third outcome, which is the one that must not be guessed.
+
+    The script reads "different" as commit and push. A copy on the branch that
+    cannot be READ is neither the same measurement nor a different one, so
+    taking either branch would be a guess: one silently drops a real reading,
+    the other pushes on top of a corrupt file. It refuses instead, and says so
+    (L11, L98).
+    """
+    remote = make_remote(tmp_path)
+    first = make_checkout(tmp_path, remote, "first")
+    gh, _ = make_gh_stub(tmp_path)
+    propose(first, gh, record_value=_reading(3175, run="111", commit="aaaaaaa"))
+
+    # Corrupt the copy ON the branch, which is what the next run compares
+    # against. Done through a real commit rather than by editing the working
+    # tree, because the comparison reads `HEAD:<record>` and not the file.
+    breaker = make_checkout(tmp_path, remote, "breaker")
+    git("fetch", "-q", "origin",
+        f"+refs/heads/{BRANCH}:refs/remotes/origin/{BRANCH}", cwd=breaker)
+    git("checkout", "-q", "-B", BRANCH, f"refs/remotes/origin/{BRANCH}",
+        cwd=breaker)
+    (breaker / RECORD).write_text("{not json\n")
+    git("add", "--", RECORD, cwd=breaker)
+    git("commit", "-qm", "corrupt the record", cwd=breaker)
+    git("push", "-q", "origin", BRANCH, cwd=breaker)
+    corrupted = git("rev-parse", BRANCH, cwd=remote).stdout.strip()
+
+    second = make_checkout(tmp_path, remote, "second")
+    gh_open, calls = make_gh_stub(tmp_path, open_heads=(BRANCH,), name="second")
+    refused = propose(second, gh_open,
+                      record_value=_reading(3201, run="222", commit="bbbbbbb"),
+                      check=False)
+
+    assert refused.returncode == 2, (
+        f"an uncomparable record did not refuse: {refused.stdout} "
+        f"{refused.stderr}")
+    assert "could not be compared" in refused.stderr, (
+        f"the refusal does not say what it could not do, so it reads like any "
+        f"other failure (L11): {refused.stderr}")
+    assert git("rev-parse", BRANCH, cwd=remote).stdout.strip() == corrupted, (
+        "the proposal was pushed on top of a record nothing could read")
+    assert not any(call.startswith("pr create") for call in gh_calls(calls))
