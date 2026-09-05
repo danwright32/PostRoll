@@ -56,6 +56,9 @@ from tools.guard_sweep_history import (
 from tools.check_guard_sweep_due import (
     Due, Decision, SweepDecision, decide, decide_sweep)
 
+from pathlib import Path
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 NOW = datetime(2026, 8, 30, 7, 0, tzinfo=timezone.utc)
 WINDOW = timedelta(days=7)
 TREE = "a" * 40
@@ -384,3 +387,27 @@ def test_no_shards_at_all_is_refused_rather_than_read_as_nothing_to_do():
     shards to run, which is a broken workflow reading as a quiet day (L98)."""
     with pytest.raises(ValueError, match="shard"):
         sweep_call(proved_all(), shards=0)
+
+
+def test_the_removed_single_shard_spelling_is_refused_not_reinterpreted():
+    """#1356: `--shard N` meant "shard number N" and is gone.
+
+    argparse matches unambiguous prefixes, so with `--shard` removed it
+    accepted the old spelling as `--shards`, "a sweep N wide", and answered a
+    different question in silence. An old caller would have been told the whole
+    sweep was due rather than told its argument no longer exists.
+
+    An argument a tool can no longer honour is refused, never folded into a
+    neighbouring one (L320).
+    """
+    import subprocess
+    import sys
+
+    refused = subprocess.run(
+        [sys.executable, "tools/check_guard_sweep_due.py", "--shard", "3",
+         "--sha", TREE],
+        cwd=REPO_ROOT, capture_output=True, text=True)
+
+    assert refused.returncode != 0, (
+        f"the removed spelling was accepted and answered: {refused.stdout}")
+    assert "--shard" in refused.stderr, refused.stderr
