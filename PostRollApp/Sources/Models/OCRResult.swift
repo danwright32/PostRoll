@@ -128,6 +128,24 @@ struct Performer: Identifiable, Codable, Hashable, Sendable {
         case profileURL = "profile_url"
     }
 
+    /// Change the handle, and drop a checked address that no longer describes
+    /// it (#1372).
+    ///
+    /// The address is a fact about ONE account. Editing the handle to a
+    /// different one leaves a mark saying this handle was checked against a
+    /// profile that belongs to somebody else, which is worse than no mark at
+    /// all: it is the app vouching for an account nobody looked at (L15, L92).
+    ///
+    /// A no-op edit keeps it, because retyping the same handle is not a change
+    /// of account, and case and the leading sigil are not either: `@Jenna` and
+    /// `jenna` are one username.
+    mutating func setHandle(_ newValue: String) {
+        let wasChecked = CaptionBlocks.bareUsername(handle).lowercased()
+        let becomes = CaptionBlocks.bareUsername(newValue).lowercased()
+        handle = newValue
+        if wasChecked != becomes { profileURL = nil }
+    }
+
     /// A short label for what this performer plays or does, shown next to their
     /// name when assigning performers. Prefers the instrument/voice; falls back
     /// to the role (e.g. "conductor" or a character name) when no instrument
