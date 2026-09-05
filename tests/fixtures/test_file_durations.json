@@ -230,6 +230,7 @@
     "test_revise_caption_backstops.py": 0.0,
     "test_safe_area_tokens.py": 0.0,
     "test_say_when_ci_goes_red.py": 0.0,
+    "test_scene_labels_stay_in_step.py": 0.53,
     "test_screen_reel_logo_contrast.py": 0.0,
     "test_screens_draw_from_named_colours.py": 2.5300000000000002,
     "test_screens_take_their_stores.py": 0.51,
@@ -1204,6 +1205,10 @@
     "test_say_when_ci_goes_red.py": {
       "run": "partial-2026-09-04T10:30Z",
       "scale": 1.327
+    },
+    "test_scene_labels_stay_in_step.py": {
+      "run": "partial-2026-09-04T23:49Z",
+      "scale": 0.957
     },
     "test_screen_reel_logo_contrast.py": {
       "run": "full-2026-09-04T03:02Z",

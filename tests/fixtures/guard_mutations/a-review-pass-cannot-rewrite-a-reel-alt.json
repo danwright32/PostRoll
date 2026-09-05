@@ -1,8 +1,8 @@
 {
   "name": "a-review-pass-cannot-rewrite-a-reel-alt",
   "file": "postroll/ai/generate_captions.py",
-  "find": "        data = dict(data, alt_texts=draft_alt_texts)",
+  "find": "        data = dict(data, alt_texts=draft_alt_texts,\n                    scene_labels=draft_scene_labels)",
   "replace": "        pass",
   "test": "tests/test_alt_text_photo_anchor.py::test_a_shape_fault_still_refuses_the_whole_list",
-  "breaks": "a shape fault is named on the review screen and then ignored, so a review pass that dropped an alt text ships its shortened list anyway and every description after the hole sits beside a different photograph. The refusal becomes a message with no effect (#1214, #1008)"
+  "breaks": "a shape fault is named on the review screen and then ignored, so a review pass that dropped an alt text ships its shortened list anyway and every description after the hole sits beside a different photograph. The refusal becomes a message with no effect (#1214, #1008). Since #1220 the same line restores the parallel scene labels, so breaking it strands those too"
 }
