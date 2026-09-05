@@ -314,6 +314,60 @@ def test_an_absent_journal_is_simply_empty(tmp_path):
     assert read_records(tmp_path / "never-written.jsonl") == []
 
 
+def test_a_journal_whose_every_line_is_corrupt_is_not_reported_as_empty(tmp_path):
+    """The aggregate of a rule that is right per line (#1399).
+
+    A line that will not parse is SKIPPED, deliberately, so one bad line does
+    not hide every good one. When EVERY line is bad that returns an empty list,
+    which is the same answer an untouched journal gives, and the two are
+    opposite facts: one means no pass has run, the other means the evidence of
+    every pass that did is gone (L10, L11, L215).
+    """
+    from postroll.ai.repair_log import RepairLogUnreadable
+
+    journal = tmp_path / "blog-repairs.jsonl"
+    journal.write_text("{not json\nalso not json\n", encoding="utf-8")
+
+    with pytest.raises(RepairLogUnreadable) as caught:
+        read_records(journal)
+
+    assert "2" in str(caught.value), (
+        "the refusal does not say how much it could not read")
+
+
+def test_one_bad_line_still_does_not_hide_the_good_ones(tmp_path):
+    """The control, and the rule being protected.
+
+    Without it, "raise when nothing parsed" could be widened to "raise when
+    anything failed to parse" and every test above would still pass, which is
+    the deliberate behaviour this module documents being quietly removed.
+    """
+    journal = tmp_path / "blog-repairs.jsonl"
+    journal.write_text(
+        '{"kind": "pass", "event": "E", "wording": "ran"}\n'
+        "{not json\n"
+        '{"kind": "pass", "event": "E", "wording": "ran again"}\n',
+        encoding="utf-8")
+
+    kept = read_records(journal)
+
+    assert [r["wording"] for r in kept] == ["ran", "ran again"]
+
+
+def test_the_reader_tells_a_corrupt_journal_from_an_empty_one(tmp_path, capsys):
+    """The consumer Dan actually opens. Repairs are silent, so this is the only
+    evidence one left, and "No repair records" about a corrupt journal is the
+    claim that nothing happened."""
+    from tools.read_repair_log import report
+
+    journal = tmp_path / "blog-repairs.jsonl"
+    journal.write_text("{not json\n", encoding="utf-8")
+
+    assert report(journal, event="E") == 2
+    printed = capsys.readouterr().err
+    assert "No repair records" not in printed
+
+
 def test_the_reader_says_the_journal_was_unreadable_rather_than_empty(tmp_path,
                                                                      capsys):
     from tools.read_repair_log import report

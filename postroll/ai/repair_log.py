@@ -257,17 +257,35 @@ def read_records(path: str | Path | None = None) -> list[dict]:
             f"{e}. This is the only record of what the app changed in a post, "
             f"so treat this as evidence missing rather than as no repairs.") from e
     out: list[dict] = []
+    unusable = 0
     for number, line in enumerate(raw.splitlines(), start=1):
         if not line.strip():
             continue
         try:
             record = json.loads(line)
         except ValueError:
+            unusable += 1
             print(f"warning: {target}:{number} is not readable JSON and was "
                   f"skipped", file=sys.stderr, flush=True)
             continue
         if isinstance(record, dict):
             out.append(record)
+        else:
+            # Valid JSON that is not a record. Counted with the unparsable
+            # ones, because it is equally not evidence of anything.
+            unusable += 1
+    if unusable and not out:
+        # Skipping a bad line is right PER LINE and wrong in the aggregate
+        # (#1399). Every line being unusable returns the same empty list an
+        # untouched journal gives, and those are opposite facts: one means no
+        # pass has run, the other means the evidence of every pass that did is
+        # gone. The warning above goes to stderr, which a caller redirecting
+        # output never sees, so it cannot carry this on its own (L11, L215).
+        raise RepairLogUnreadable(
+            f"the repair journal at {target} holds {unusable} line(s) and not "
+            f"one of them could be read as a record, so this says nothing "
+            f"about whether the app changed anything. Treat it as evidence "
+            f"missing rather than as no repairs.")
     return out
 
 
