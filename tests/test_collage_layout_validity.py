@@ -58,3 +58,60 @@ def test_a_layout_with_no_strip_is_not_accused_of_covering_one():
     cells = [{"photo_path": "a", "x": 0, "y": 0, "w": 1080, "h": 400}]
     assert layout_problems(cells, strip_y=None, strip_h=0) == []
     assert layout_problems(cells, strip_y=0, strip_h=0) == []
+
+
+# ── what an unseeded collage does (#1028) ───────────────────────────────────
+
+
+#: Six landscape frames, which is what a Wednesday collage is made of and, more
+#: to the point, a set several arrangements genuinely fit. A mixed set where
+#: nothing fits the crop budget falls back to one layout for every seed, and the
+#: control below would then be asserting about the fallback rather than about
+#: the planner (L48).
+RATIOS = [1.5] * 6
+
+
+def _plan(seed):
+    from postroll.media.generate_collage import plan_base_layout
+    return plan_base_layout(RATIOS, seed)
+
+
+def test_an_unseeded_collage_lays_out_the_same_way_every_time():
+    """`Event.swift` said a missing seed meant "random each time", and it does
+    not: `plan_base_layout` takes the first fitting arrangement rather than
+    drawing one, and its own docstring says so.
+
+    The comment is what a reader trusts, and #1010 had to decide whether
+    clearing a seed was neutral while the three places that answer this
+    disagreed. So the behaviour is asserted here rather than described (L32).
+    """
+    assert _plan(None) == _plan(None)
+
+
+def test_a_seeded_collage_lays_out_the_same_way_every_time():
+    """The other half of the same promise, and the one the app depends on:
+    adjusting a crop must not reshuffle the grid."""
+    assert _plan(4242) == _plan(4242)
+
+
+def test_the_seed_actually_chooses_the_arrangement():
+    """The positive control. Without it both assertions above are satisfied by
+    a planner that ignores the seed entirely and always returns one layout
+    (L159), which is exactly what "deterministic" would then mean."""
+    arrangements = {str(_plan(seed)[:2]) for seed in range(12)}
+
+    assert len(arrangements) > 1, (
+        "twelve seeds produced one arrangement, so the seed decides nothing "
+        f"and every collage is the same grid: {arrangements}")
+
+
+def test_the_unseeded_arrangement_is_one_a_seed_can_also_produce():
+    """The default is the FIRST fitting arrangement, not a thirteenth option
+    reachable only by having no seed. If it were, a day that gains a seed
+    could never be laid out the way it looked before it had one."""
+    unseeded = _plan(None)[:2]
+    seeded = {str(_plan(seed)[:2]) for seed in range(200)}
+
+    assert str(unseeded) in seeded, (
+        "the unseeded arrangement is one no seed produces, so the layout a day "
+        "had before it was seeded cannot be got back")

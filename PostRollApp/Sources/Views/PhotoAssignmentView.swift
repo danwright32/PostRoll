@@ -846,6 +846,15 @@ struct PhotoAssignmentView: View {
             }
             // Written for every collage day, not Wednesday alone.
             pd.collageSeed = dayCollageSeeds[day]
+            // The collage's layout is decided the moment its photos are, for
+            // the same reason the reel's is above (#1028, #1062). Every collage
+            // day gets its photographs here, so this is the earliest point they
+            // all pass through, and a day that reached a render with no seed
+            // was laid out by Python's deterministic default and then re-laid
+            // out the first time anything rebuilt it.
+            if event.effectivePostingPreset.isCollageCarousel(day) {
+                pd.ensureCollageSeed()
+            }
             ev.days[day.rawValue] = pd
         }
         // Blog photos auto-derived from Sunday + Monday + Wednesday
@@ -1954,7 +1963,11 @@ private struct CollageLayoutSection: View {
                             .foregroundStyle(PaintedSurfaces.secondaryText)
 
                         Button("New layout") {
-                            collageSeed = Int.random(in: 1...99999)
+                            // The same range every other mint uses (#1028).
+                            // This one drew from a range ten thousand times
+                            // smaller, which nothing depended on and nothing
+                            // said.
+                            collageSeed = Int.random(in: 1...999_999_999)
                         }
                         .buttonStyle(.plain)
                         .font(.system(size: 12))
