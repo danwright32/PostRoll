@@ -1,0 +1,8 @@
+{
+  "name": "a-second-producer-of-one-shape-is-noticed",
+  "file": "tests/fixtures/bridge_payload_contract.json",
+  "find": "        \"blog_output\",\n        \"revised_blog\",\n        \"swapped_blog\"",
+  "replace": "        \"blog_output\",\n        \"revised_blog\"",
+  "test": "tests/test_sibling_payloads_agree.py::test_every_pair_that_looks_like_one_shape_is_grouped_or_argued",
+  "breaks": "a payload shape with a third producer drops back to being a hand written list of two, and the producer left out is exempt from the key by key comparison that exists to catch a key one path carries and another drops (#1357, #1023, L96)"
+}
