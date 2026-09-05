@@ -48,6 +48,9 @@ import sys
 import textwrap
 from pathlib import Path
 
+from tests.source_text import python_without_comments, yaml_without_comments
+from tools.wait_for_checks import _job_blocks
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 REQUIREMENTS = REPO_ROOT / "requirements.txt"
@@ -202,30 +205,139 @@ def test_the_plugin_the_deadline_needs_is_pinned():
         "pin pytest-timeout, so every pytest run in every job fails to start.")
 
 
+#: A repository script a job runs, which may run pytest without saying so.
+SCRIPT = re.compile(r"\b((?:tools|tests)/[\w./-]+\.py)")
+
+
+def runs_python_tests(body: str) -> bool:
+    """Whether this job can reach pytest, directly or through a script it runs.
+
+    Derived rather than listed (L41, L96). `guards.yml`'s `full` job runs the
+    whole Python suite through `check_guards.py` and never writes the word
+    pytest, so a filter on that word alone would silently exempt the job the
+    rule most exists for; `record-durations` reaches it through
+    `record_test_durations.py` the same way. So a script the job runs is read,
+    and a script that mentions pytest at all counts.
+
+    The script is read as CODE, not as text. `check_job_durations.py` parses
+    pytest node ids out of a CI log and says so in three comments while running
+    none, so a match on the raw file put the `due` gate back in exactly the set
+    this change is removing it from: a guard satisfied by prose is
+    indistinguishable from one that works (L103).
+    """
+    if "pytest" in body:
+        return True
+    for name in SCRIPT.findall(body):
+        script = REPO_ROOT / name
+        if not script.is_file():
+            continue
+        if "pytest" in python_without_comments(script.read_text(encoding="utf-8")):
+            return True
+    return False
+
+
+def jobs_that_run_python_tests() -> list[tuple[str, str, int | None]]:
+    """(workflow, job, deadline in seconds) for every job that reaches pytest."""
+    found = []
+    for workflow in sorted(WORKFLOWS.glob("*.yml")):
+        text = yaml_without_comments(workflow.read_text(encoding="utf-8"))
+        for job, body in _job_blocks(text):
+            if not runs_python_tests(body):
+                continue
+            declared = re.search(r"timeout-minutes: (\d+)", body)
+            found.append((workflow.name, job,
+                          int(declared.group(1)) * 60 if declared else None))
+    return found
+
+
 def test_the_job_deadline_is_still_the_longer_of_the_two():
     """The job deadline is the backstop, so it has to outlast what it backs up.
 
     A per-test deadline longer than the job that runs it can never fire: the job
     is killed first, reporting only that it ran out of time, and the diagnostic
     added here goes quietly inert while still reading as configured (L170).
+
+    Judged per JOB since #1345. It used to scan a whole workflow FILE and demand
+    the rule of every deadline in it, including jobs that run no tests at all,
+    so a Linux gate job reading one page of run history had to carry a fifteen
+    minute deadline it will never use. The rule was right and its scope was not
+    (L135).
     """
-    deadlines = []
-    for workflow in sorted(WORKFLOWS.glob("*.yml")):
-        text = workflow.read_text(encoding="utf-8")
-        if "pytest" not in text:
-            continue
-        deadlines += [(workflow.name, int(minutes) * 60)
-                      for minutes in re.findall(r"timeout-minutes: (\d+)", text)]
+    deadlines = jobs_that_run_python_tests()
 
     assert deadlines, (
-        "no workflow that runs pytest declares a timeout-minutes, so #832's job "
-        "deadlines have gone and there is no backstop behind the per-test one.")
+        "no job in any workflow reaches pytest, so #832's job deadlines have "
+        "gone and there is no backstop behind the per-test one.")
 
-    too_short = [(name, seconds) for name, seconds in deadlines
-                 if seconds <= configured_deadline()]
+    missing = [(name, job) for name, job, seconds in deadlines if seconds is None]
+    assert not missing, (
+        f"these jobs run tests and declare no timeout-minutes at all, so a "
+        f"wedged run burns the platform default (L313): {missing}")
+
+    too_short = [(name, job, seconds) for name, job, seconds in deadlines
+                 if seconds is not None and seconds <= configured_deadline()]
     assert not too_short, (
         f"the per-test deadline is {configured_deadline():.0f}s and these jobs "
         f"are killed sooner, so it could never fire in them: {too_short}")
+
+
+def test_the_job_that_runs_the_suite_without_naming_pytest_is_judged():
+    """The positive control the scope change needs (#1345).
+
+    `guards.yml`'s `full` job runs the whole Python suite through
+    `check_guards.py` and the word pytest appears nowhere in it. A per-job
+    filter on that word would exempt the job this rule most exists for, and
+    nothing else here would notice.
+    """
+    judged = {(name, job) for name, job, _ in jobs_that_run_python_tests()}
+
+    assert ("guards.yml", "full") in judged, (
+        "the full guard sweep is no longer judged, so the job that runs every "
+        f"registered guard's pytest invocation is exempt: {sorted(judged)}")
+    assert ("record-durations.yml", "record") in judged, (
+        "the durations recorder is no longer judged, and it runs the whole "
+        "suite through record_test_durations.py")
+
+
+def test_a_job_that_runs_no_tests_is_not_judged():
+    """The other direction. A rule that judges every job in the file is what
+    put a fifteen minute deadline on a job that reads one page of run history
+    (#1259, #1345), and a scope that never says no is not a scope."""
+    judged = {(name, job) for name, job, _ in jobs_that_run_python_tests()}
+
+    assert ("guards.yml", "due") not in judged, (
+        "the `due` gate is judged as a test job. It decides whether the sweep "
+        "has anything to prove by reading run history, and it runs no tests.")
+    assert ("ui.yml", "hand-check-reminder") not in judged, (
+        "the hand check reminder is judged as a test job, and it posts a "
+        "comment")
+
+
+def test_a_job_reaching_pytest_only_through_a_script_is_still_judged():
+    """The predicate itself, on text this test controls, so the positive
+    controls above cannot be the only thing standing between this and a filter
+    that reads the word alone."""
+    assert runs_python_tests("      run: python tools/check_guards.py --changed")
+    assert not runs_python_tests("      run: gh pr comment 1 --body hello")
+
+
+def test_no_job_reaches_the_suite_through_make():
+    """The hole this derivation would have. A job running `make test` reaches
+    pytest through the Makefile, which is not a script this reads, so it would
+    be judged as running none. No job does that today; the day one does, this
+    says so rather than exempting it silently (L96).
+    """
+    using_make = []
+    for workflow in sorted(WORKFLOWS.glob("*.yml")):
+        text = yaml_without_comments(workflow.read_text(encoding="utf-8"))
+        for job, body in _job_blocks(text):
+            if re.search(r"^\s*(run:\s*)?make\s+\S", body, re.M):
+                using_make.append((workflow.name, job))
+
+    assert not using_make, (
+        f"these jobs run make, and this file decides whether a job runs tests "
+        f"by reading the scripts it names: {using_make}. Teach it to read the "
+        f"Makefile recipe, or the job is judged as running no tests.")
 
 
 # ── and it actually does what it is configured to do ──────────────────────────

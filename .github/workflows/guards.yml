@@ -288,17 +288,16 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     # A job without a deadline cannot fail, it can only hang (L110, L313). This
-    # reads a page of run history and writes one output, so 15 is generous.
+    # reads a page of run history, asks a few questions about it and writes one
+    # output, so 10 is generous.
     #
-    # It is 15 rather than 5 because tests/test_a_wedged_test_names_itself.py
-    # requires every job deadline in a workflow that runs pytest to outlast the
-    # 600 second per-test deadline: a job killed first reports only that it ran
-    # out of time, and the per-test diagnostic goes inert while still reading as
-    # configured. That rule is about the shards below, which do run tests, and
-    # it reads the whole FILE rather than the job (L135). Satisfying it here
-    # costs nothing real, since this is a backstop against a hang rather than a
-    # budget.
-    timeout-minutes: 15
+    # It was 15 for a reason that has gone (#1345): the per-test deadline rule
+    # in tests/test_a_wedged_test_names_itself.py read the whole workflow FILE
+    # and demanded every deadline in it outlast the 600 second per-test one,
+    # including jobs that run no tests (L135). It judges each job by the tests
+    # that job can actually reach now, so this one is sized by what it does
+    # rather than by a rule about its neighbours.
+    timeout-minutes: 10
     permissions:
       contents: read
       issues: write
