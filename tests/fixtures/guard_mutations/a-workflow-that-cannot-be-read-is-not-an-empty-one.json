@@ -1,0 +1,8 @@
+{
+  "name": "a-workflow-that-cannot-be-read-is-not-an-empty-one",
+  "file": "tools/wait_for_checks.py",
+  "find": "        if str(reply.get(\"encoding\")) != \"base64\" or not reply.get(\"content\"):",
+  "replace": "        if False:",
+  "test": "tests/test_wait_for_checks.py::test_a_workflow_that_could_not_be_read_refuses_rather_than_lowering_the_bar",
+  "breaks": "a workflow file the API would not hand over reads as a file with no jobs in it, so every check it declares drops silently out of the bar, and a check nobody waits for cannot block a merge. That is the defect this reading was written to fix, arriving by the path meant to fix it (#1342, L214, L98)"
+}

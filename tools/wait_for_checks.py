@@ -26,6 +26,15 @@ the bar with no edit to this file: a hand-written list would only ever check
 what somebody remembered to add, and the entries you remember are the ones
 already safe (L96).
 
+Those files are read AT THE COMMIT BEING JUDGED, over the API, rather than out
+of whatever working directory this runs in (#1342). Measured on #1341 on
+2026-09-04: run from the primary checkout, which sat on another branch, it
+derived 7 checks while the pull request reported 8, and a bar short by one is a
+check nobody waits for. It is re-derived whenever the head moves, because a
+push can add a job. That costs one listing call plus one per workflow file, on
+the first reading and on each move, and buys a bar that belongs to the commit
+rather than to the machine.
+
 Exit codes, all distinct, because "green", "red" and "nothing ever showed up"
 are three different things and only one of them may be merged on:
 
@@ -76,6 +85,7 @@ bar this cannot compute is not a bar of zero.
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 import subprocess
@@ -306,31 +316,29 @@ def _skips_on_pull_request(job: str, body: str) -> bool:
         "expected to skip is a check nobody waits for.")
 
 
-def expected_checks(workflows: Path | None = None) -> set[ExpectedCheck]:
-    """Every check a pull request will report, derived from the workflow files."""
-    if workflows is None:
-        workflows = WORKFLOWS
-    files = sorted(
-        path for path in workflows.glob("*.y*ml") if path.suffix in (".yml", ".yaml"))
-    if not files:
+def checks_in(texts: dict[str, str]) -> set[ExpectedCheck]:
+    """The bar, from workflow file name to that file's text.
+
+    One derivation, whether the text came off this disk or out of the pull
+    request being judged. Two readers with a copy each would be two bars to
+    keep in step, and the one nobody ran is the one that would be wrong (L41).
+    """
+    if not texts:
         raise UnreadableWorkflow(
-            f"no workflow files under {workflows}, so there is nothing to wait "
-            "for. That is a failure rather than an empty bar: an empty bar "
-            "makes every reply green, including no reply at all.")
+            "no workflow files, so there is nothing to wait for. That is a "
+            "failure rather than an empty bar: an empty bar makes every reply "
+            "green, including no reply at all.")
 
     expected: set[ExpectedCheck] = set()
-    for path in files:
-        text = path.read_text(encoding="utf-8")
+    for label, text in sorted(texts.items()):
         if not _triggers_on_pull_request(text):
             continue
         titled = re.search(r"^name:[ \t]*(.+?)[ \t]*$", text, re.M)
-        workflow = _unwrap(titled.group(1)) if titled else str(
-            path.relative_to(workflows.parent.parent)
-            if workflows.parent.parent in path.parents else path.name)
+        workflow = _unwrap(titled.group(1)) if titled else label
         jobs = _job_blocks(text)
         if not jobs:
             raise UnreadableWorkflow(
-                f"{path.name} runs on pull requests but no jobs could be read "
+                f"{label} runs on pull requests but no jobs could be read "
                 "out of it, so the bar silently drops by however many checks "
                 "it produces and the wait reports green having waited for none "
                 "of them")
@@ -341,7 +349,117 @@ def expected_checks(workflows: Path | None = None) -> set[ExpectedCheck]:
     return expected
 
 
+def expected_checks(workflows: Path | None = None) -> set[ExpectedCheck]:
+    """Every check a pull request will report, from the workflow files on disk.
+
+    The reading a caller wants when the question is about THIS checkout: what
+    `tests/test_a_pull_request_fits_the_runner_limit.py` asks, and what the
+    suite calibrates against. The wait itself reads the pull request's own head
+    instead (#1342).
+    """
+    if workflows is None:
+        workflows = WORKFLOWS
+    files = sorted(
+        path for path in workflows.glob("*.y*ml") if path.suffix in (".yml", ".yaml"))
+    if not files:
+        raise UnreadableWorkflow(
+            f"no workflow files under {workflows}, so there is nothing to wait "
+            "for. That is a failure rather than an empty bar: an empty bar "
+            "makes every reply green, including no reply at all.")
+    texts = {}
+    for path in files:
+        label = str(path.relative_to(workflows.parent.parent)
+                    if workflows.parent.parent in path.parents else path.name)
+        texts[label] = path.read_text(encoding="utf-8")
+    return checks_in(texts)
+
+
+#: Where a repository keeps them, which is fixed by GitHub rather than by us.
+WORKFLOW_DIRECTORY = ".github/workflows"
+
+
+def workflow_texts_at(repo: str, sha: str, *,
+                      api: Callable[[str], object] | None = None) -> dict[str, str]:
+    """Every workflow file as it stands AT `sha`, keyed by file name (#1342).
+
+    The bar used to be read from whatever working directory the tool ran in,
+    which is not necessarily the pull request under test. Measured on #1341 on
+    2026-09-04: run from the primary checkout, sitting on another branch, it
+    derived 7 checks while the pull request reported 8. A bar short by one is a
+    check nobody waits for, and a check nobody waits for cannot block a merge
+    (L98), so the direction it failed in was the silent one.
+
+    A file that cannot be read is a REFUSAL rather than a file with no jobs in
+    it. Skipping it would drop every check it declares out of the bar, which is
+    the same defect this exists to fix, arriving by the path meant to fix it
+    (L214).
+    """
+    if api is None:
+        api = gh_json_any
+    if not repo or not sha:
+        raise UnreadableWorkflow(
+            "the bar is read at one commit in one repository, and this reading "
+            f"named repository {repo!r} and commit {sha!r}, so there is "
+            "nothing to read it from")
+    listing = api(f"repos/{repo}/contents/{WORKFLOW_DIRECTORY}?ref={sha}")
+    if not isinstance(listing, list):
+        raise UnreadableWorkflow(
+            f"the workflow directory at {sha[:12]} came back as "
+            f"{type(listing).__name__}, not a listing, so nothing can say what "
+            "that commit triggers")
+
+    texts: dict[str, str] = {}
+    for entry in listing:
+        if not isinstance(entry, dict) or entry.get("type") != "file":
+            continue
+        name = str(entry.get("name") or "")
+        if not name.endswith((".yml", ".yaml")):
+            continue
+        path = str(entry.get("path") or f"{WORKFLOW_DIRECTORY}/{name}")
+        reply = api(f"repos/{repo}/contents/{path}?ref={sha}")
+        if not isinstance(reply, dict):
+            raise UnreadableWorkflow(
+                f"{name} at {sha[:12]} came back as {type(reply).__name__} "
+                "rather than a file, so its checks cannot be counted")
+        if str(reply.get("encoding")) != "base64" or not reply.get("content"):
+            raise UnreadableWorkflow(
+                f"{name} at {sha[:12]} came back with no readable content "
+                f"(encoding {reply.get('encoding')!r}), so the checks it "
+                "declares would silently drop out of the bar")
+        try:
+            texts[name] = base64.b64decode(str(reply["content"])).decode("utf-8")
+        except (ValueError, UnicodeDecodeError) as error:
+            raise UnreadableWorkflow(
+                f"{name} at {sha[:12]} could not be decoded ({error}), so the "
+                "checks it declares would silently drop out of the bar"
+            ) from error
+
+    if not texts:
+        raise UnreadableWorkflow(
+            f"no workflow files at {sha[:12]}, so there is nothing to wait "
+            "for. That is a failure rather than an empty bar: an empty bar "
+            "makes every reply green, including no reply at all.")
+    return texts
+
+
+def expected_checks_at(repo: str, sha: str, *,
+                       api: Callable[[str], object] | None = None
+                       ) -> set[ExpectedCheck]:
+    """The bar the pull request at `sha` will actually report against."""
+    return checks_in(workflow_texts_at(repo, sha, api=api))
+
+
 # ── asking about one commit ───────────────────────────────────────────────────
+
+
+def gh_json_any(path: str) -> object:
+    """One `gh api` call, whatever shape the endpoint answers in.
+
+    The contents endpoint answers a LIST for a directory and an object for a
+    file (#1342), so the shape check belongs to the caller that knows which it
+    asked for rather than here.
+    """
+    return _gh_reply(path)
 
 
 def gh_json(path: str) -> dict:
@@ -353,6 +471,15 @@ def gh_json(path: str) -> dict:
     here names a SHA or a run id, so a reply that is about another commit can be
     recognised as one.
     """
+    reply = _gh_reply(path)
+    if not isinstance(reply, dict):
+        raise GhUnusable(
+            f"gh api {path} returned {type(reply).__name__}, not an object")
+    return reply
+
+
+def _gh_reply(path: str) -> object:
+    """The one place a `gh api` call is made, and its silence told from a reply."""
     try:
         done = subprocess.run(
             ["gh", "api", "-H", "Accept: application/vnd.github+json", path],
@@ -366,15 +493,11 @@ def gh_json(path: str) -> dict:
             f"gh api {path} exited {done.returncode}: "
             f"{(done.stderr.strip() or body)[:200] or '(silence)'}")
     try:
-        reply = json.loads(body)
+        return json.loads(body)
     except json.JSONDecodeError as error:
         raise GhUnusable(
             f"gh api {path} printed something that is not JSON ({error}): "
             f"{body[:200]!r}") from error
-    if not isinstance(reply, dict):
-        raise GhUnusable(
-            f"gh api {path} returned {type(reply).__name__}, not an object")
-    return reply
 
 
 #: How this repository's pull requests land. Every commit on main is a squash
@@ -626,6 +749,10 @@ class Poll:
     head_sha: str
     rows: list[dict] = field(default_factory=list)
     unfinished: list[str] = field(default_factory=list)
+    #: The repository the head was read from, carried so the bar can be read at
+    #: that commit without a second lookup deciding which repository is meant
+    #: (#1342, L70).
+    repo: str = ""
 
 
 def _all_of(reply: dict, key: str, path: str) -> list[dict]:
@@ -701,7 +828,7 @@ def poll_checks(number: str, *, api: Callable[[str], dict] | None = None) -> Pol
                 "bucket": bucket_of(str(job.get("status") or ""),
                                     job.get("conclusion")),
             })
-    return Poll(head_sha=head_sha, rows=rows, unfinished=unfinished)
+    return Poll(head_sha=head_sha, rows=rows, unfinished=unfinished, repo=repo)
 
 
 # ── judging it ────────────────────────────────────────────────────────────────
@@ -917,6 +1044,20 @@ def ask(
     raise last
 
 
+def _head_now(number: str, poll: Callable[[str], Poll]) -> str | None:
+    """The head as it stands right now, or None when that cannot be read.
+
+    Only ever asked on a path that is already ending, so a failure here must
+    not lose the message that path was carrying. None rather than "" because
+    the caller SAYS which of the two happened: "the branch moved" and "I could
+    not find out whether it moved" are different things to be told (L11).
+    """
+    try:
+        return poll(number).head_sha
+    except GhUnusable:
+        return None
+
+
 def main(
     argv: Sequence[str],
     *,
@@ -925,11 +1066,11 @@ def main(
     base: Callable[[str, str], BaseStanding] | None = None,
     now: Callable[[], float] | None = None,
     sleep: Callable[[float], None] | None = None,
-    workflows: Path | None = None,
+    bar: Callable[[str, str], set[ExpectedCheck]] | None = None,
     out: Callable[[str], None] | None = None,
 ) -> int:
-    if workflows is None:
-        workflows = WORKFLOWS
+    if bar is None:
+        bar = expected_checks_at
     if poll is None:
         poll = poll_checks
     if merge is None:
@@ -945,18 +1086,17 @@ def main(
 
     try:
         arguments = parse_arguments(argv)
-        expected = expected_checks(workflows)
     except (UnreadableWorkflow, GhUnusable) as error:
         out(f"cannot say what to wait for: {error}")
         return EXIT_UNUSABLE
 
     number, timeout, interval = (
         arguments.number, arguments.timeout, arguments.interval)
-    out(f"waiting on {len(expected)} checks for pull request {number}, "
-        f"up to {timeout:.0f}s")
+    out(f"waiting for pull request {number}, up to {timeout:.0f}s")
     started = now()
     deadline = started + timeout
-    answer = Verdict(state="missing", missing=sorted(expected))
+    expected: set[ExpectedCheck] = set()
+    answer = Verdict(state="missing")
     judged = ""
 
     while True:
@@ -974,6 +1114,22 @@ def main(
         if judged and reading.head_sha != judged:
             out(f"  head moved from {judged[:12]} to {reading.head_sha[:12]}, "
                 "so everything before this judged another commit")
+
+        # The bar comes from the commit being judged, not from the working
+        # directory this happens to run in (#1342). Re-derived when the head
+        # moves, because a push can ADD a job: measured on #1341, a bar read
+        # from a checkout sitting on another branch was 7 checks against the 8
+        # the pull request reported, and a check nobody waits for cannot block
+        # a merge (L98).
+        if reading.head_sha != judged or not expected:
+            try:
+                expected = bar(reading.repo, reading.head_sha)
+            except (UnreadableWorkflow, GhUnusable) as error:
+                out(f"cannot say what to wait for at "
+                    f"{reading.head_sha[:12]}: {error}")
+                return EXIT_UNUSABLE
+            out(f"  the bar at {reading.head_sha[:12]} is "
+                f"{len(expected)} checks")
         judged = reading.head_sha
 
         answer = verdict(expected, reading.rows, reading.unfinished)
@@ -1040,7 +1196,26 @@ def main(
             try:
                 merged = merge(number, judged)
             except MergeRefused as error:
-                out(f"green at {judged[:12]} but not merged: {error}")
+                # Refused by GitHub because the head moved is the case this is
+                # DESIGNED to hit (#674), and until #1342 it arrived as an API
+                # error rather than as the sentence saying so. Asked only on
+                # the refusal, and only to name what happened: the merge is
+                # pinned to the SHA, so re-reading the head beforehand could
+                # not have made it safer, only slower (L157).
+                moved = _head_now(number, poll)
+                if moved is None:
+                    out(f"green at {judged[:12]} but not merged, and gh could "
+                        f"not be asked whether the head moved, so this is the "
+                        f"refusal as GitHub gave it: {error}")
+                elif moved != judged:
+                    out(f"green at {judged[:12]} but not merged: the branch "
+                        f"moved to {moved[:12]} while the merge was being "
+                        f"made, so the commit that passed is no longer the "
+                        f"head. Wait again at {moved[:12]}.")
+                else:
+                    out(f"green at {judged[:12]} but not merged, and the head "
+                        f"is still {judged[:12]}, so it moved back or the "
+                        f"refusal is about something else: {error}")
                 return EXIT_NOT_MERGED
             out(f"merged {merged[:12]}, which is the commit judged at "
                 f"{judged[:12]}")
