@@ -47,19 +47,22 @@ final class BlogMetaCopyTests: XCTestCase {
     func testEachCopyFieldPutsExactlyThatFieldOnThePasteboard() {
         let event = makeEvent()
         let fields = BlogMeta.copyFields(event: event)
-        XCTAssertEqual(fields.count, 2, "one control per string")
+        XCTAssertEqual(fields.count, 3, "one control per string")
 
         // Proved by comparing against the generators, not by looking at it.
-        XCTAssertEqual(fields[0].text, BlogMeta.seoDescription(event: event))
-        XCTAssertEqual(fields[1].text, BlogMeta.detailsBlock(event: event))
+        XCTAssertEqual(fields[0].text, BlogMeta.seoTitle(event: event))
+        XCTAssertEqual(fields[1].text, BlogMeta.seoDescription(event: event))
+        XCTAssertEqual(fields[2].text, BlogMeta.detailsBlock(event: event))
     }
 
     func testNoCopyFieldCarriesTheOther() {
         // A control labelled "SEO description" that also copies the details
         // block would paste a block of facts into a 300 character field.
         let fields = BlogMeta.copyFields(event: makeEvent())
-        XCTAssertFalse(fields[0].text.contains("Photographer:"))
-        XCTAssertFalse(fields[1].text.contains(BlogMeta.brandTail))
+        XCTAssertFalse(fields[1].text.contains("Photographer:"))
+        XCTAssertFalse(fields[2].text.contains(BlogMeta.brandTail))
+        // The title is one line, not a summary and not a block of facts.
+        XCTAssertFalse(fields[0].text.contains("\n"))
     }
 
     func testEveryFieldIsLabelledAndNonEmpty() {
