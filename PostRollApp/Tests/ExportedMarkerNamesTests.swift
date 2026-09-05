@@ -85,6 +85,52 @@ final class ExportedMarkerNamesTests: XCTestCase {
         XCTAssertEqual(BlogDraftText.renamingPhotos(in: body, to: [:]), body)
     }
 
+    /// Two photographs from different folders sharing a basename is an
+    /// ordinary way to shoot: `day 1/DSC4821.jpg` and `day 2/DSC4821.jpg`.
+    /// `blog_quality.refuse_colliding_filenames` exists for exactly that case.
+    ///
+    /// The first version of the export mapping keyed on the basename with
+    /// `Dictionary(uniqueKeysWithValues:)`, which TRAPS on a duplicate key, so
+    /// this would have crashed the export outright. Keeping only one of the
+    /// two would have been worse in a quieter way: the copy loop looked the
+    /// name up by basename, so both photographs would have been written to the
+    /// same file and one would be gone.
+    func testTwoPhotosSharingABasenameStillBothExport() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("colliding-basenames-\(UUID().uuidString)")
+        let one = root.appendingPathComponent("day 1")
+        let two = root.appendingPathComponent("day 2")
+        for dir in [one, two] {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        var photos: [URL] = []
+        for dir in [one, two] {
+            let url = dir.appendingPathComponent("DSC4821.jpg")
+            FileManager.default.createFile(atPath: url.path, contents: Data("img".utf8))
+            photos.append(url)
+        }
+
+        var event = Event(name: "Two Days", org: "Decoda", venue: "Hall",
+                          date: Date(timeIntervalSince1970: 1_700_000_000),
+                          shootType: .fullShow)
+        event.blogPhotoPaths = photos
+        var result = WeekGenerationResult()
+        result.blog = BlogOutput(title: "T",
+                                 body: "Prose.\n\n[PHOTO: DSC4821.jpg | Alt text]")
+        event.weekResult = result
+
+        let folder = try EventExporter.export(event: event, to: root).staging.commit()
+        let blogDir = folder.appendingPathComponent("0. Blog")
+        let names = try FileManager.default.contentsOfDirectory(atPath: blogDir.path)
+
+        XCTAssertTrue(names.contains("photo_01.jpg"), names.sorted().description)
+        XCTAssertTrue(names.contains("photo_02.jpg"),
+                      "the second photograph did not reach the export, so one "
+                      + "overwrote the other: \(names.sorted())")
+    }
+
     // MARK: - the export actually uses it
 
     /// The test #1142 asks for, and the one that matters: built is not wired

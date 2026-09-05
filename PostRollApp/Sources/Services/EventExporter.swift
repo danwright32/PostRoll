@@ -158,15 +158,35 @@ struct EventExporter {
                 // The export folder is the deliverable, and somebody pasting
                 // that draft had to work out which photograph each marker
                 // meant by opening them in order and hoping the order matched.
-                let exportedNames = Dictionary(
-                    uniqueKeysWithValues: event.blogPhotoPaths.enumerated().map {
-                        ($1.lastPathComponent,
-                         "photo_\(String(format: "%02d", $0 + 1)).\($1.pathExtension)")
-                    })
+                // Indexed, not keyed. Two photographs from different folders
+                // sharing a basename is an ordinary way to shoot, `day 1/
+                // DSC4821.jpg` and `day 2/DSC4821.jpg`, which is what
+                // `blog_quality.refuse_colliding_filenames` exists for.
+                //
+                // Keying the export names on the basename crashed outright,
+                // because `Dictionary(uniqueKeysWithValues:)` traps on a
+                // duplicate. Uniquing instead would have been worse in a
+                // quieter way: the copy loop looked its name up by basename,
+                // so both photographs would have been written to one file and
+                // one would simply be gone.
+                //
+                // So the exported name comes from the POSITION, which cannot
+                // collide, and the basename map is built from it for the draft
+                // alone. A colliding basename then renames both markers to the
+                // first photograph, which is the ambiguity the body already
+                // had: one name cannot pick between two files, and the blog
+                // checks report it rather than the export inventing an answer.
+                let exportedNames = event.blogPhotoPaths.enumerated().map {
+                    "photo_\(String(format: "%02d", $0 + 1)).\($1.pathExtension)"
+                }
+                let namesForMarkers = Dictionary(
+                    zip(event.blogPhotoPaths.map(\.lastPathComponent), exportedNames),
+                    uniquingKeysWith: { first, _ in first })
 
                 let md = BlogDraftText.copyText(
                     title: blog.title,
-                    body: BlogDraftText.renamingPhotos(in: blog.body, to: exportedNames)
+                    body: BlogDraftText.renamingPhotos(in: blog.body,
+                                                       to: namesForMarkers)
                 ) + "\n"
                 try md.write(to: blogDir.appendingPathComponent("draft.md"),
                              atomically: true, encoding: .utf8)
@@ -180,13 +200,10 @@ struct EventExporter {
                            atomically: true, encoding: .utf8)
 
                 for (i, photo) in event.blogPhotoPaths.enumerated() {
-                    // The name the draft above already used for this file.
-                    // Falling back would mean the two disagreed again, so an
-                    // absent entry is impossible by construction: the mapping
-                    // is built from this same list.
-                    let name = exportedNames[photo.lastPathComponent]
-                        ?? "photo_\(String(format: "%02d", i + 1)).\(photo.pathExtension)"
-                    copy(photo, to: blogDir.appendingPathComponent(name),
+                    // By POSITION, the same list the draft's names came from,
+                    // so every photograph gets its own file however the
+                    // basenames collide.
+                    copy(photo, to: blogDir.appendingPathComponent(exportedNames[i]),
                          label: "blog photo \(i + 1)")
                 }
             }
