@@ -468,6 +468,11 @@ final class PreviewGraphicsManager {
                             reason: "\(day.displayName) images could not be redrawn: "
                                   + "\(error.localizedDescription)")
                     }
+                    // A run that died is a finished switch too, and the one
+                    // most worth saying out loud: every day it claimed is back
+                    // where it started (#1046).
+                    self.announce(landed: [], failed: days,
+                                  for: eventID, appState: appState)
                 }
             }
         }
@@ -596,8 +601,44 @@ final class PreviewGraphicsManager {
                      appState: AppState) {
         // Each day judged alone, so one day's failure does not take away
         // another day's finished work (L53).
+        var landed: [DayName] = []
+        var failed: [DayName] = []
         for day in days {
-            _ = applyDayRender(result, day: day, for: eventID, appState: appState)
+            if applyDayRender(result, day: day, for: eventID, appState: appState) {
+                landed.append(day)
+            } else {
+                failed.append(day)
+            }
+        }
+        announce(landed: landed, failed: failed, for: eventID, appState: appState)
+    }
+
+    /// One notice for a whole layout switch (#1046).
+    ///
+    /// `landRender` announces a single day as it lands, and this path
+    /// deliberately does not go through it: notifying per day would report
+    /// three finished rebuilds for one thing Dan did. The cost of that was
+    /// silence, for a run of several minutes, so a finished switch and one
+    /// still going looked identical unless he watched the screen (#95).
+    ///
+    /// Sent from the answer `applyDayRender` gives rather than from the fact
+    /// the run returned, so a switch where days failed cannot be announced as
+    /// ready (L12), and a run that died reports the days it lost rather than
+    /// nothing at all (L110).
+    private func announce(landed: [DayName], failed: [DayName],
+                          for eventID: UUID, appState: AppState) {
+        guard let notice = LayoutSwitchNotice.of(landed: landed, failed: failed)
+        else { return }
+        // The live name, read after the writes: the run takes minutes and the
+        // event may have been renamed while it ran.
+        guard let name = appState.events.first(where: { $0.id == eventID })?.name
+        else { return }
+        if notice.isFailure {
+            NotificationService.shared.notifyWorkFailed(
+                work: "Layout switch", eventName: name, reason: notice.what)
+        } else {
+            NotificationService.shared.notifyRegenerationComplete(
+                eventName: name, what: notice.what)
         }
     }
 
