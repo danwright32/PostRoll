@@ -42,7 +42,8 @@ from pathlib import Path
 
 import pytest
 
-from tools.measure_thursday_alt_text import Reading, read_store, render
+from tools.measure_thursday_alt_text import (
+    RESTORE_CAVEAT, Reading, read_store, render)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -195,3 +196,85 @@ def test_the_shape_count_is_not_set_beside_an_incomparable_baseline(tmp_path):
     assert "first taken" in shape, (
         f"the shape count carries no reading of its own to be compared "
         f"against, so the next run has nothing to say whether it moved: {shape}")
+
+
+# ── the finding the review writes ────────────────────────────────────────────
+
+
+def event_with_findings(alt_texts: list[str], codes: list[str], **kw) -> dict:
+    """One event whose Thursday result also carries review findings.
+
+    Findings hang off the same `weekResult.<day>` object the alt texts do, one
+    record per finding, each with a `code`. Measured from the live store on
+    2026-09-05: 21 events carry `weekResult.thursday.findings`.
+    """
+    made = event(alt_texts, **kw)
+    made["weekResult"]["thursday"]["findings"] = [{"code": c} for c in codes]
+    return made
+
+
+def test_a_reel_whose_alt_text_the_review_rewrote_is_counted(tmp_path):
+    """#1219 asks for this count beside the other two.
+
+    If it fires on nearly every post it is noise and the panel gets skimmed
+    (L36). If it never fires the restore is inert and something upstream
+    changed. Neither question can be asked while nothing counts it.
+    """
+    reading = read_store(store(tmp_path, [
+        event_with_findings([LONG], ["alt_text_rewritten_by_review"])]))
+
+    assert reading.rewritten_reels == 1
+    assert reading.rewritten_findings == 1
+
+
+def test_two_rewrites_on_one_reel_are_one_reel_and_two_findings(tmp_path):
+    """Counted against BOTH denominators, because "fires on nearly every post"
+    is a question about posts and a panel is skimmed per finding (L118)."""
+    reading = read_store(store(tmp_path, [
+        event_with_findings([LONG, LONG], ["alt_text_rewritten_by_review",
+                                           "alt_text_rewritten_by_review"])]))
+
+    assert reading.rewritten_reels == 1
+    assert reading.rewritten_findings == 2
+
+
+def test_another_finding_on_the_same_reel_is_not_counted(tmp_path):
+    """The store holds eight other codes. Counting any finding would report the
+    panel's whole volume as this one restore firing."""
+    reading = read_store(store(tmp_path, [
+        event_with_findings([LONG], ["alt_text_length", "invented_number"])]))
+
+    assert reading.rewritten_reels == 0
+    assert reading.rewritten_findings == 0
+
+
+def test_a_reel_with_no_findings_key_at_all_is_read_as_none(tmp_path):
+    """A day generated before the finding existed carries no `findings` key,
+    and that must not raise: it is a reel with nothing recorded, which the
+    report tells apart from a reel the restore did not fire on."""
+    reading = read_store(store(tmp_path, [event([LONG])]))
+
+    assert reading.rewritten_reels == 0
+
+
+def test_a_zero_is_not_reported_as_the_restore_being_inert(tmp_path):
+    """The one reading this count cannot make on its own.
+
+    Nothing in the store stamps when an alt text was written, so a store
+    generated entirely BEFORE the restore shipped shows zero, and that is the
+    same zero a restore that never fires would show. Two states that share an
+    appearance are one state to the reader (L11, L98), so the report says which
+    it cannot tell apart rather than letting the number speak.
+    """
+    printed = render(read_store(store(tmp_path, [event([LONG])])))
+
+    # The caveat has to be attached to THIS count. Asserting a phrase and a
+    # number somewhere in the whole report is satisfied by two unrelated
+    # places in it, and this report already says "0 of 1" about length and
+    # already uses the word "generated" about the store as a whole (L178).
+    restore = [line for line in printed.splitlines()
+               if RESTORE_CAVEAT in line]
+    assert restore, (
+        f"nothing in the report says {RESTORE_CAVEAT!r}, so a zero here reads "
+        f"as the restore never firing when it equally means no week has been "
+        f"generated since it shipped")

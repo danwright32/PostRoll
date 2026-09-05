@@ -69,6 +69,28 @@ SHAPE_BASELINE = {"reels": 21, "per_frame": 1, "measured_on": "2026-09-04"}
 #: The day this is about. #1067 is specifically the Thursday scroll reel.
 DAY = "thursday"
 
+#: The finding the caption review writes when it rewrote an alt text itself.
+#:
+#: #1219 asks for this counted beside the other two, and the reason is a rate
+#: rather than a presence: firing on nearly every post makes the panel noise
+#: somebody learns to skim (L36), and never firing means the restore is inert
+#: and something upstream changed. Neither can be asked while nothing counts it.
+RESTORE_CODE = "alt_text_rewritten_by_review"
+
+#: Why a zero in that count is not yet a reading about the restore.
+#:
+#: Nothing in the store stamps when an alt text was written, so a store holding
+#: only weeks generated BEFORE the restore shipped counts zero, and that is the
+#: same zero a restore that never fires would count. Two states that share an
+#: appearance are one state to whoever reads it (L11, L98), so the count says
+#: which two it cannot separate rather than letting the number speak alone.
+#:
+#: Measured 2026-09-05: the code appears 0 times across all 21 stored events,
+#: and events.json had not been written since 2026-08-31, before the restore
+#: shipped. So the zero this prints today is the uninformative one.
+RESTORE_CAVEAT = ("a zero cannot tell a restore that never fires from a store "
+                  "no week has been generated into since it shipped")
+
 
 @dataclass(frozen=True)
 class Reading:
@@ -81,6 +103,12 @@ class Reading:
     #: #1067's baseline is "7 of 21" and a rate compared against a different
     #: denominator is not a comparison at all (L118).
     events_under_floor: int
+    #: Reels carrying at least one RESTORE_CODE finding, and the findings
+    #: themselves. Both, because "fires on nearly every post" is a question
+    #: about posts while a panel is skimmed per finding, and one denominator
+    #: cannot answer the other (L118).
+    rewritten_reels: int = 0
+    rewritten_findings: int = 0
 
 
 def read_store(path: Path) -> Reading:
@@ -99,6 +127,7 @@ def read_store(path: Path) -> Reading:
             "Nothing was measured.")
 
     reels = alt_texts = per_frame = under_floor = events_under_floor = 0
+    rewritten_reels = rewritten_findings = 0
     for event in events:
         day = (event.get("weekResult") or {}).get(DAY) or {}
         alts = day.get("alt_texts") or []
@@ -117,9 +146,18 @@ def read_store(path: Path) -> Reading:
         short = sum(1 for alt in alts if len(str(alt).split()) < floor)
         under_floor += short
         events_under_floor += 1 if short else 0
+        # A day generated before the finding existed carries no `findings` key
+        # at all, which is a reel with nothing recorded rather than an error.
+        restored = sum(1 for finding in (day.get("findings") or [])
+                       if isinstance(finding, dict)
+                       and finding.get("code") == RESTORE_CODE)
+        rewritten_findings += restored
+        rewritten_reels += 1 if restored else 0
     return Reading(events=len(events), reels=reels, alt_texts=alt_texts,
                    per_frame=per_frame, under_floor=under_floor,
-                   events_under_floor=events_under_floor)
+                   events_under_floor=events_under_floor,
+                   rewritten_reels=rewritten_reels,
+                   rewritten_findings=rewritten_findings)
 
 
 def render(reading: Reading) -> str:
@@ -143,6 +181,12 @@ def render(reading: Reading) -> str:
         f"{rate(reading.events_under_floor, reading.reels)} reels"
         f"   baseline {BASELINE['under_floor']} of {BASELINE['events']} "
         f"on {BASELINE['measured_on']}",
+        "",
+        f"REVIEW RESTORE, reels whose alt text the review rewrote itself "
+        f"({RESTORE_CODE}):",
+        f"  {rate(reading.rewritten_reels, reading.reels)} reels, "
+        f"{reading.rewritten_findings} finding(s)",
+        f"  {RESTORE_CAVEAT}.",
         "",
         "NOT comparable to #1067's other figure. Its '12 of 21 described a",
         "single moment rather than the reel' was a judgement about the PROSE of",
