@@ -383,7 +383,15 @@ def repair_marker_placement(body: str) -> Placement:
     if not body:
         return Placement(body)
 
-    blocks = [b.strip() for b in body.split("\n\n") if b.strip()]
+    # Split so the SEPARATORS survive, because a move must not reformat the
+    # rest of the post (#1170). A separator belongs to the GAP rather than to
+    # either block: blocks are reordered by a move and the gaps stay where they
+    # are, so the post keeps its own rhythm and the content moves through it.
+    # That is the only reading that survives a reorder without inventing a
+    # separator for a block whose neighbours have changed.
+    pieces = re.split(r"(\n{2,})", body)
+    blocks = [b.strip() for b in pieces[::2] if b.strip()]
+    separators = [s for b, s in zip(pieces[::2], pieces[1::2]) if b.strip()]
 
     def is_marker(block: str) -> bool:
         return block.startswith("[PHOTO:")
@@ -439,7 +447,29 @@ def repair_marker_placement(body: str) -> Placement:
         # Untouched means untouched: rebuilding would normalise whitespace on a
         # body this had no reason to rewrite.
         return Placement(body, [], refused)
-    return Placement("\n\n".join(placed), moves, refused)
+    return Placement(_rejoin(placed, separators), moves, refused)
+
+
+def _rejoin(blocks: list[str], separators: list[str]) -> str:
+    """`blocks` in their new order, through the gaps the post already had.
+
+    The separators are used POSITIONALLY: gap one keeps whatever gap one was,
+    whichever block now sits after it. Rebuilding with a fixed `"\n\n"`
+    normalised every gap in a post the repair had only one reason to touch, and
+    nothing reported it because the repair names only the markers it moved
+    (#1170, L340).
+
+    A short separator list is padded rather than raising: the two are built
+    from one split so they cannot disagree, and a body ending in a separator
+    would otherwise lose its last block to an IndexError.
+    """
+    gaps = list(separators) + ["\n\n"] * max(0, len(blocks) - 1 - len(separators))
+    out = []
+    for index, block in enumerate(blocks):
+        out.append(block)
+        if index < len(blocks) - 1:
+            out.append(gaps[index])
+    return "".join(out)
 
 
 def repair_marker_filenames(
