@@ -41,7 +41,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from postroll.ai.repair_log import (  # noqa: E402
-    RepairLogUnreadable, default_log_path, read_records)
+    default_log_path, read_records)
 
 
 class EmptyJournal(Exception):
@@ -85,30 +85,6 @@ class Rates:
         return self.by_outcome[outcome] / self.attempts
 
 
-def _lines_in(target: Path) -> int:
-    """Non-blank lines in the journal, to tell corrupt from absent.
-
-    A read that FAILS here is not zero lines. It is the file `read_records`
-    read moments ago having become unreadable, and answering 0 would send the
-    caller down the "nothing was ever written" branch, which is the exact
-    conflation this whole tool exists to prevent (L10, L11).
-
-    An ABSENT file is the one honest zero: no pass has run against this data
-    directory, which is what `read_records` answers with an empty list too.
-    """
-    try:
-        return sum(1 for line in target.read_text(encoding="utf-8").splitlines()
-                   if line.strip())
-    except FileNotFoundError:
-        return 0
-    except OSError as e:
-        raise RepairLogUnreadable(
-            f"{target} could not be read while establishing whether it holds "
-            f"anything: {e}. That is not an empty journal, and reporting it as "
-            f"one would say no repair ran where the evidence is merely "
-            f"unavailable.") from e
-
-
 def _within(record: dict, since: datetime | None) -> tuple[bool, bool]:
     """Whether the record is inside the window, and whether it is undated."""
     stamp = record.get("at")
@@ -130,17 +106,10 @@ def read_rates(path: str | Path | None = None, *, now: datetime | None = None,
     target = Path(path) if path is not None else default_log_path()
     records = read_records(path)
     if not records:
-        # A journal whose every line is corrupt arrives here as no records,
-        # because `read_records` SKIPS a line it cannot parse, deliberately, so
-        # that one bad line does not hide every good one. That is right per
-        # line and wrong in the aggregate: nothing written and nothing readable
-        # are opposite facts, and only one of them is a healthy pass (L11, L98).
-        if _lines_in(target):
-            raise RepairLogUnreadable(
-                f"{target} holds {_lines_in(target)} line(s) and not one of "
-                f"them could be read as a record. That is the evidence of "
-                f"every repair pass being unavailable, not a journal nothing "
-                f"has written to.")
+        # No branch here for a journal whose every line is corrupt: `read_records`
+        # raises for that itself since #1399, so this is reached only when the
+        # journal is genuinely untouched. It used to be checked here, which left
+        # two implementations of one rule and protected only this reader (L370).
         raise EmptyJournal(
             f"{target} holds no records, so every count below would be zero "
             "and that reads exactly like a repair pass that met nothing "
