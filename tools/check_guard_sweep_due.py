@@ -265,16 +265,26 @@ def _history(sha: str, repo: str | None, run_id: int | None,
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    # One or the other, never neither. `--shard N` is the gate INSIDE a shard,
-    # which keeps a shard that was already proved from redoing its share when a
-    # neighbour is why the sweep ran. `--shards N` is the gate BEFORE any of
-    # them start, asked once on Linux so a quiet day takes no Mac (#1259).
-    which = parser.add_mutually_exclusive_group(required=True)
-    which.add_argument("--shard", type=int)
-    which.add_argument("--shards", type=int, nargs="?", const=SHARD_COUNT,
-                       help="ask for a whole sweep of this many shards "
-                            f"(default {SHARD_COUNT}, the one place it is set)")
+    # `allow_abbrev=False` so the REMOVED spelling fails rather than being
+    # reinterpreted. `--shard N` used to mean "shard number N"; with it gone,
+    # argparse's prefix matching accepted it as `--shards N`, "a sweep N wide",
+    # and answered a different question in silence. An argument a tool can no
+    # longer honour must be refused, never quietly folded into another
+    # (L320, #1356).
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0],
+                                     allow_abbrev=False)
+    # The only mode. There was a `--shard N` form asking about ONE shard from
+    # inside it, which was load bearing while all seven shards started
+    # regardless; #1344 made the matrix expand to the due shards only and #1348
+    # removed its last caller, leaving a CLI branch nothing ran that still read
+    # as a supported way to use this (#1356, L29).
+    #
+    # `decide` itself is untouched: it is still the per-shard decision, called
+    # once per shard by `decide_sweep`, and tested directly.
+    parser.add_argument("--shards", type=int, nargs="?", const=SHARD_COUNT,
+                        default=SHARD_COUNT,
+                        help="ask for a whole sweep of this many shards "
+                             f"(default {SHARD_COUNT}, the one place it is set)")
     parser.add_argument("--sha", default=None)
     parser.add_argument("--repo", default=None)
     parser.add_argument("--window-days", type=int,
@@ -283,35 +293,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="where to write due=true|false for later steps")
     args = parser.parse_args(argv)
 
-    if args.shards is not None:
-        return _whole_sweep(args)
-
-    sha = args.sha or _head_sha()
-    if not sha:
-        # Refusing to answer about a commit nobody named, rather than answering
-        # about whatever the default scope happens to be (L320).
-        print("::warning::no commit to ask about, so the sweep runs")
-        decision = Decision(Due.HISTORY_UNREADABLE,
-                            "no commit sha was available, so the sweep runs")
-    else:
-        window = timedelta(days=args.window_days)
-        run_id = int(os.environ.get("GITHUB_RUN_ID") or 0) or None
-        decision = decide(sha=sha, shard=args.shard,
-                          history=_history(sha, args.repo, run_id, window),
-                          now=datetime.now(timezone.utc),
-                          unconditional_after=window)
-
-    print(decision.message)
-    summary = os.environ.get("GITHUB_STEP_SUMMARY")
-    if summary:
-        with open(summary, "a", encoding="utf-8") as fh:
-            fh.write(f"### Guard sweep, shard {args.shard}\n\n"
-                     f"{decision.message}\n")
-    if args.output:
-        with open(args.output, "a", encoding="utf-8") as fh:
-            fh.write(f"due={'true' if decision.run else 'false'}\n")
-            fh.write(f"reason={decision.due.value}\n")
-    return 0
+    return _whole_sweep(args)
 
 
 def _whole_sweep(args) -> int:
