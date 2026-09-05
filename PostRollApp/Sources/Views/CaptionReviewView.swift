@@ -642,6 +642,7 @@ struct CaptionReviewView: View {
         .sheet(item: $editingAccount) { target in
             AccountNumbersSheet(
                 handle: target.handle,
+                checkedProfileURL: checkedProfile(for: target.handle),
                 stats: accounts.stats(for: target.handle),
                 onSave: { followers, likes, comments, isPrivate, neverInvite,
                           accepted, declined in
@@ -1374,6 +1375,16 @@ struct CaptionReviewView: View {
     /// view builder past its type-check budget.
     private func beginEditingNumbers(_ handle: String) {
         editingAccount = EditingAccount(handle: handle)
+    }
+
+    /// The profile address the research step checked for one account (#987).
+    ///
+    /// A method for the same reason `beginEditingNumbers` is one: this view's
+    /// body is at the type checker's limit and the expression belongs outside
+    /// it.
+    private func checkedProfile(for handle: String) -> String? {
+        ProfileLink.checkedProfile(for: handle,
+                                   in: event.ocrResult?.performers ?? [])
     }
 
     /// A later photo worth leading with, and the press that does it (#983).

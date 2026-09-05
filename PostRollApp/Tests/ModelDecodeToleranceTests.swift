@@ -16,6 +16,24 @@ final class ModelDecodeToleranceTests: XCTestCase {
         XCTAssertEqual(ocr.programNotes, "")
     }
 
+    func testAPerformerSavedBeforeTheProfileFieldExistedStillDecodes() throws {
+        // Every performer in the store predates this field (#987), so the
+        // absence has to read as "no checked address", not as a broken record.
+        let json = Data(#"{"name": "Jo", "handle": "@jo"}"#.utf8)
+        let performer = try JSONDecoder().decode(Performer.self, from: json)
+        XCTAssertEqual(performer.handle, "@jo")
+        XCTAssertNil(performer.profileURL)
+    }
+
+    func testAPerformerRoundTripKeepsTheCheckedProfile() throws {
+        // The whole point of storing it is that it survives to the next launch.
+        var performer = Performer(name: "Jo", handle: "@jo")
+        performer.profileURL = "https://www.instagram.com/jo/"
+        let decoded = try JSONDecoder().decode(
+            Performer.self, from: try JSONEncoder().encode(performer))
+        XCTAssertEqual(decoded.profileURL, "https://www.instagram.com/jo/")
+    }
+
     func testCollageCellToleratesMissingKeys() throws {
         let json = Data(#"{"photo_path": "/x.jpg", "x": 1, "y": 2}"#.utf8)
         let cell = try JSONDecoder().decode(CollageCell.self, from: json)

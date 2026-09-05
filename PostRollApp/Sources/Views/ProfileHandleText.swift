@@ -16,7 +16,13 @@ struct ProfileHandleText: View {
     let handle: String
     /// A profile URL the research step stored and checked, where one exists.
     /// Preferred over the constructed address by `ProfileLink`.
-    var storedProfileURL: String? = nil
+    ///
+    /// No default (#987, L168). A checked address is what separates a
+    /// confirmed account from a convention, and a screen that silently
+    /// inherited "there is none" would go on opening the constructed address
+    /// while every call site read as correct. Passing nil is fine, and says
+    /// out loud that this surface has nothing checked to offer.
+    let storedProfileURL: String?
     var font: Font = .system(size: 12, weight: .medium)
 
     var body: some View {

@@ -144,6 +144,12 @@ struct ExportView: View {
         .sheet(item: $editingRecurringAccount) { target in
             AccountNumbersSheet(
                 handle: target.handle,
+                // The address the research step checked for this account, off
+                // this event's own performers (#987). A recurring account from
+                // another event carries none here, and falls back to the
+                // address built from the handle.
+                checkedProfileURL: ProfileLink.checkedProfile(
+                    for: target.handle, in: event.ocrResult?.performers ?? []),
                 stats: accounts.stats(for: target.handle),
                 onSave: { followers, likes, comments, isPrivate, neverInvite,
                           accepted, declined in

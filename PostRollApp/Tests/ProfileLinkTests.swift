@@ -87,6 +87,41 @@ final class ProfileLinkTests: XCTestCase {
             URL(string: "https://www.instagram.com/dprdance/"))
     }
 
+    // MARK: - The addresses the performers carry (#987)
+
+    /// A performer's handle and the key a candidate is ranked under are two
+    /// spellings of one account, so the lookup is keyed the way the account
+    /// book keys and not by the raw string.
+    func testACheckedAddressIsFoundUnderEverySpellingOfTheHandle() {
+        let performers = [Performer(name: "Jane", handle: "@Jane",
+                                    profileURL: "https://www.instagram.com/jane/")]
+        XCTAssertEqual(ProfileLink.checkedProfile(for: "jane", in: performers),
+                       "https://www.instagram.com/jane/")
+        XCTAssertEqual(ProfileLink.checkedProfile(for: "@JANE", in: performers),
+                       "https://www.instagram.com/jane/")
+    }
+
+    /// Most handles have no checked address, and a miss has to stay a miss:
+    /// an empty string here would read as an address at any call site that
+    /// only asks whether there is one.
+    func testAPerformerWithNoCheckedAddressContributesNoEntry() {
+        let performers = [Performer(name: "Jane", handle: "@jane"),
+                          Performer(name: "Blank", handle: "@blank",
+                                    profileURL: "   ")]
+        XCTAssertNil(ProfileLink.checkedProfile(for: "jane", in: performers))
+        XCTAssertNil(ProfileLink.checkedProfile(for: "blank", in: performers))
+        XCTAssertTrue(ProfileLink.checked(in: performers).isEmpty)
+    }
+
+    /// A performer with no handle at all cannot be looked up by one, and must
+    /// not land under the empty key where every handleless account would
+    /// collide.
+    func testAPerformerWithNoHandleIsNotInTheBook() {
+        let performers = [Performer(name: "Nobody", handle: "",
+                                    profileURL: "https://www.instagram.com/x/")]
+        XCTAssertTrue(ProfileLink.checked(in: performers).isEmpty)
+    }
+
     // MARK: - What the control says
 
     /// Matching the "Edit numbers for <handle>" pattern beside it, and naming

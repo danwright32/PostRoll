@@ -335,6 +335,12 @@ final class PerformerLookupManager {
             return
         }
         stored.performers[index].handle = handle
+        // The address the research step fetched and checked this handle
+        // against, kept rather than discarded (#987). Only what came back: a
+        // suggestion with no URL leaves the field empty, because writing the
+        // constructed address here would make an unchecked handle
+        // indistinguishable from a confirmed one (L11).
+        stored.performers[index].profileURL = suggestion.profileURL
         live.ocrResult = stored
         appState.updateEvent(live)
         dropSuggestion(named: suggestion.name, for: eventID)

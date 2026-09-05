@@ -188,9 +188,11 @@ struct CollaboratorPanel: View {
             VStack(alignment: .leading, spacing: 1) {
                 // A link to the profile, because the next thing Dan does with
                 // a name here is open it to read the numbers off (#973). The
-                // panel holds no checked URL for a candidate, only the handle,
-                // so the address is built from it.
-                ProfileHandleText(handle: candidate.handle)
+                // candidate carries the address the research step checked
+                // where its performer record has one (#987); the rest fall
+                // back to the address built from the handle.
+                ProfileHandleText(handle: candidate.handle,
+                                  storedProfileURL: candidate.profileURL)
                 Text(candidate.reason)
                     .font(.system(size: 10))
                     .foregroundStyle(PaintedSurfaces.secondaryText)
@@ -233,6 +235,11 @@ struct CollaboratorPanel: View {
 /// should already be scored the next time they turn up.
 struct AccountNumbersSheet: View {
     let handle: String
+    /// The profile address the research step checked for this account, where
+    /// the screen presenting this sheet holds one (#987). The screen that
+    /// TELLS him to open the profile is the one that most needs the checked
+    /// address rather than the convention.
+    let checkedProfileURL: String?
     let stats: AccountStats?
     /// Followers, likes, comments, whether the profile is private, and whether
     /// Dan will never invite it. Any of the three figures may be nil, which
@@ -303,6 +310,7 @@ struct AccountNumbersSheet: View {
             // The screen that TELLS him to open the profile is the one that
             // most needs to be able to (#973).
             ProfileHandleText(handle: handle,
+                              storedProfileURL: checkedProfileURL,
                               font: .system(size: 16, weight: .semibold))
 
             // The requirement BEFORE the fields, not after the save (#977).

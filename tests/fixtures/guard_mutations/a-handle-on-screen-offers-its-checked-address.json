@@ -1,0 +1,8 @@
+{
+  "name": "a-handle-on-screen-offers-its-checked-address",
+  "file": "PostRollApp/Sources/Views/CollaboratorPanel.swift",
+  "find": "                ProfileHandleText(handle: candidate.handle,\n                                  storedProfileURL: candidate.profileURL)",
+  "replace": "                ProfileHandleText(handle: candidate.handle,\n                                  storedProfileURL: nil)",
+  "test": "tests/test_a_handle_on_screen_offers_its_checked_address.py::test_every_surface_drawing_a_handle_offers_what_it_has_checked",
+  "breaks": "a screen that holds the address the research step fetched and confirmed draws the handle as a link built by convention instead, and the call site still compiles and reads as correct, which is how the tenth surface reading a stored handle was found by hand one issue at a time (#987, #1112)"
+}
