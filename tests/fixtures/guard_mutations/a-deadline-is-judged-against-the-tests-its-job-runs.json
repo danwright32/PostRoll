@@ -1,0 +1,8 @@
+{
+  "name": "a-deadline-is-judged-against-the-tests-its-job-runs",
+  "file": "tests/test_a_wedged_test_names_itself.py",
+  "find": "        if \"pytest\" in python_without_comments(script.read_text(encoding=\"utf-8\")):",
+  "replace": "        if False:",
+  "test": "tests/test_a_wedged_test_names_itself.py::test_the_job_that_runs_the_suite_without_naming_pytest_is_judged",
+  "breaks": "a job that reaches pytest only through a script it runs, which is how the full guard sweep runs the entire Python suite, stops being judged against the per test deadline. Its own cap could then fire first, and a job killed by its cap reports only that it ran out of time while the per test diagnostic goes inert (#1345, #1086, L170)"
+}
