@@ -1044,17 +1044,18 @@ def ask(
     raise last
 
 
-def _head_now(number: str, poll: Callable[[str], Poll]) -> str:
-    """The head as it stands right now, or "" when that cannot be read.
+def _head_now(number: str, poll: Callable[[str], Poll]) -> str | None:
+    """The head as it stands right now, or None when that cannot be read.
 
-    Only ever asked on a path that is already ending, so a failure here is not
-    worth another failure: the caller falls back to reporting what it was told
-    rather than losing that message too.
+    Only ever asked on a path that is already ending, so a failure here must
+    not lose the message that path was carrying. None rather than "" because
+    the caller SAYS which of the two happened: "the branch moved" and "I could
+    not find out whether it moved" are different things to be told (L11).
     """
     try:
         return poll(number).head_sha
-    except Exception:  # noqa: BLE001 - any failure here means "cannot say"
-        return ""
+    except GhUnusable:
+        return None
 
 
 def main(
@@ -1202,13 +1203,19 @@ def main(
                 # pinned to the SHA, so re-reading the head beforehand could
                 # not have made it safer, only slower (L157).
                 moved = _head_now(number, poll)
-                if moved and moved != judged:
+                if moved is None:
+                    out(f"green at {judged[:12]} but not merged, and gh could "
+                        f"not be asked whether the head moved, so this is the "
+                        f"refusal as GitHub gave it: {error}")
+                elif moved != judged:
                     out(f"green at {judged[:12]} but not merged: the branch "
                         f"moved to {moved[:12]} while the merge was being "
                         f"made, so the commit that passed is no longer the "
                         f"head. Wait again at {moved[:12]}.")
                 else:
-                    out(f"green at {judged[:12]} but not merged: {error}")
+                    out(f"green at {judged[:12]} but not merged, and the head "
+                        f"is still {judged[:12]}, so it moved back or the "
+                        f"refusal is about something else: {error}")
                 return EXIT_NOT_MERGED
             out(f"merged {merged[:12]}, which is the commit judged at "
                 f"{judged[:12]}")

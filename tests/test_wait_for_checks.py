@@ -1089,6 +1089,31 @@ def test_a_merge_refused_after_the_branch_moved_says_what_moved() -> None:
     assert "moved" in said, said
 
 
+def test_a_refusal_says_when_it_could_not_tell_whether_the_head_moved() -> None:
+    """Two different situations, two messages (L11). "The branch moved" and "I
+    could not find out whether it moved" must not read alike, or the second is
+    taken for a merge refused for some other reason."""
+    merge = FakeMerge(refusing="GitHub did not merge 825b338131f9: Head branch "
+                               "was modified.")
+    lines: list[str] = []
+    polls = [Poll(head_sha=HEAD_SHA, rows=real_reply(), repo=REPO)]
+
+    def poll(_number: str) -> Poll:
+        if polls:
+            return polls.pop(0)
+        raise GhUnusable("gh api exited 1: (silence)")
+
+    clock = FakeClock()
+    code = main(["7", "--timeout", "600", "--interval", "30", "--merge"],
+                poll=poll, merge=merge, base=FakeStanding(behind_by=0),
+                now=clock.now, sleep=clock.sleep, bar=local_bar, out=lines.append)
+
+    assert code == EXIT_NOT_MERGED
+    said = " ".join(lines)
+    assert "not merged" in said, said
+    assert "whether the head moved" in said, said
+
+
 def test_the_merge_is_of_exactly_the_commit_that_was_judged_green() -> None:
     """The whole point: the merge names a SHA rather than "the top of the branch".
 
