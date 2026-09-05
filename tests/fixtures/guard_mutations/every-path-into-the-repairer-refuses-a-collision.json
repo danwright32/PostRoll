@@ -1,0 +1,8 @@
+{
+  "name": "every-path-into-the-repairer-refuses-a-collision",
+  "file": "postroll/ai/retry_blog_repair.py",
+  "find": "    refuse_colliding_filenames([Path(p).name for p in photo_paths],\n                               [str(p) for p in photo_paths])",
+  "replace": "    pass",
+  "test": "tests/test_blog_photo_filename_collision.py::test_every_caller_of_the_repairer_refuses_a_collision_first",
+  "breaks": "a path into the alt text repairer stops refusing two photographs that share a basename, so the filename to path mapping folds them into one key: one photograph is silently missing and a marker naming it attaches the other, which reads as correct and is not (#1364, #1130)"
+}

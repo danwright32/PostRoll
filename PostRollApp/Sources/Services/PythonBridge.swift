@@ -957,6 +957,16 @@ actor PythonBridge {
             // narrowed set from here would mean parsing markers in two
             // languages, and the two would drift.
             "photo_filenames": event.blogPhotoPaths.map { $0.lastPathComponent },
+            // The same photographs in full, so a colliding pair can be refused
+            // by name (#1364). Two source photos from different folders sharing
+            // a basename fold to one marker, and a marker that cannot be
+            // resolved back to ONE file attaches the wrong photograph. Python
+            // refuses that, as it does on generation and on a swap, and the
+            // refusal names both files, which the bare names above cannot.
+            //
+            // Sent BESIDE the names rather than instead of them: the names are
+            // what the model is shown and what a marker is compared against.
+            "photo_paths": event.blogPhotoPaths.map { $0.path },
         ]
     }
 

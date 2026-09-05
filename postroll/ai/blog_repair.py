@@ -263,7 +263,17 @@ def repair_alt_text(
     is `blocked`, so every marker the retry was not about would come back
     reported as carrying a failure it never had.
 
-    `photo_paths` maps a marker's filename to the file on disk. `deadline` is an
+    `photo_paths` maps a marker's filename to the file on disk, and it does NOT
+    refuse a collision, deliberately (#1364). By the time this holds a mapping
+    the pair has already collapsed: two source photographs sharing a basename
+    are one key, one of them is simply absent, and nothing here can tell that
+    from an event that never had it. So the refusal belongs at every ENTRANCE,
+    where both lists still exist and the message can name which two files, and
+    `tests/test_blog_photo_filename_collision.py` holds every caller of this
+    function to asking (L281: behaviour correct only as a side effect of a
+    neighbour has no owner).
+
+    `deadline` is an
     ABSOLUTE value on `now()`'s scale, derived by the caller from its own process
     start, never a constant number of seconds: the 1,800 second process ceiling
     is shared differently on each path, and a budget expressed as a constant is

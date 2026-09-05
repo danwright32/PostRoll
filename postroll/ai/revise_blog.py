@@ -18,8 +18,11 @@ Input manifest:
     "body":  "..."
   },
   "feedback": "tighten the middle, cut the closing CTA",
-  "photo_filenames": ["DSC4821.jpg", ...]   // optional; the names the post's
+  "photo_filenames": ["DSC4821.jpg", ...],  // optional; the names the post's
                                             // photos actually carry on disk
+  "photo_paths": ["/path/to/DSC4821.jpg", ...]  // optional; the same photos in
+                                            // full, so a colliding pair can be
+                                            // refused by name (#1364)
 }
 
 Output JSON (written to --output file):
@@ -60,6 +63,7 @@ from .repair_log import RepairLog
 from .blog_quality import _PHOTO_MARKER, _fold_filename
 from .progress import ProgressWriter
 from .blog_quality import (check_blog_targeted, filenames_used_by, finding_entry,
+                           refuse_colliding_filenames,
                            repair_marker_filenames,
                            repair_marker_placement)
 from .generate_blog import (
@@ -173,6 +177,7 @@ def revise_blog(
     venue_context: str = "",
     event_id: str = "",
     photo_filenames: list[str] | None = None,
+    photo_paths: list[str] | None = None,
     humanizer_path: str | Path | None = None,
     skip_humanizer: bool = False,
     skip_voice_pass: bool = False,
@@ -189,6 +194,13 @@ def revise_blog(
     `check_blog` documents, so an event whose photo paths are gone does not
     have every marker reported as unknown (#962).
 
+    `photo_paths` are those same photographs' full paths, and they are here so
+    the collision refusal can run on this path too (#1364). Two source photos
+    from different folders sharing a basename fold to one marker, and a marker
+    that cannot be resolved back to ONE file attaches the wrong photograph. A
+    build that sends no paths keeps the behaviour it had: the refusal cannot
+    run, which is not the same as there being nothing to refuse (L214).
+
     `progress` is where this run says what it is doing (#1128). Three
     sequential Claude calls at a 600 second timeout each said nothing on any
     channel the app reads, so a revision that was working, one that was hung
@@ -197,6 +209,19 @@ def revise_blog(
     milestone adds up to seven more calls to this path.
     """
     say = (progress or ProgressWriter(None))
+
+    # Refused before a single paid call, exactly as generation and the swap
+    # refuse (#1364, #1130). A revision is a live path back into the blog and
+    # runs the same deterministic checks the first pass does; this was the one
+    # of them it did not run, while resolving markers through the same fold.
+    #
+    # Both lists or neither: the names alone cannot tell one photograph listed
+    # twice, which is harmless, from two photographs sharing a name, which is
+    # not, and refusing on the names alone would refuse the harmless case.
+    if photo_filenames and photo_paths:
+        refuse_colliding_filenames(list(photo_filenames),
+                                   [str(p) for p in photo_paths])
+
     brand_voice_text = load_brand_voice()
 
     title = existing.get("title", "")
@@ -452,6 +477,9 @@ def main() -> int:
         # revision must not fail on one. Absent means the filename rules stay
         # off, which is what shipped before.
         photo_filenames=m.get("photo_filenames"),
+        # Optional for the same reason the names are: a build that predates
+        # #1364 sends none, and a revision must not fail on one.
+        photo_paths=m.get("photo_paths"),
         progress=ProgressWriter(args.progress),
     )
     Path(args.output).write_text(
