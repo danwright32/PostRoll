@@ -115,3 +115,71 @@ def test_the_comment_stripper_is_why_the_checks_above_can_be_trusted():
         "a comment naming the call is still being read as the call")
     assert "gh pr view" in _without_comments(described), (
         "the real call is being stripped along with the prose about it")
+
+
+#: The token the proposal is opened with, which the push has to carry too.
+PROPOSING_TOKEN = "RECORD_UPDATE_TOKEN"
+
+
+def _checkout_step(text: str) -> str:
+    """The `actions/checkout` step, to the start of the next step.
+
+    Bounded by the next step rather than by a fixed number of lines. A window
+    of N lines from an anchor stops containing what it checks the moment
+    anything is added above it, and then fails on the addition rather than on
+    the code (L518).
+    """
+    start = text.index("actions/checkout")
+    rest = text[start:]
+    lines = rest.splitlines()
+    out = [lines[0]]
+    for line in lines[1:]:
+        stripped = line.lstrip()
+        if stripped.startswith("- ") and not line.startswith("          "):
+            break
+        out.append(line)
+    return "\n".join(out)
+
+
+@pytest.mark.parametrize("name,text", proposers(),
+                         ids=lambda v: v if isinstance(v, str) and v.endswith(".yml") else "")
+def test_it_checks_out_with_the_token_it_proposes_with(name: str, text: str):
+    """Both halves of the proposal run as ONE actor, or the push starts nothing.
+
+    `gh pr create` runs with RECORD_UPDATE_TOKEN, so OPENING the pull request
+    is attributed to a person and its checks run. The push inside the script
+    uses whatever `actions/checkout` persisted, which is the default
+    GITHUB_TOKEN, so every UPDATE to that branch is attributed to
+    github-actions[bot] and GitHub holds its runs at `action_required`.
+
+    Measured 2026-09-05 (#1390): PR #1387, freshly opened, ran 8 checks as
+    danwright32. PR #1383, re-pushed the same day by the next scheduled run,
+    reported 0 checks as github-actions[bot], and wait_for_checks.py correctly
+    refuses to call an empty answer green, so it could never merge.
+
+    The failure only ever appears on a RE-push, which is exactly when the
+    newest measurement is the one waiting (L403).
+    """
+    step = _checkout_step(text)
+
+    assert PROPOSING_TOKEN in step, (
+        f"{name} checks out with the default token, so the push inside "
+        f"propose_recorded_change.sh is attributed to github-actions[bot] and "
+        f"its checks are held at action_required. The pull request then "
+        f"reports no checks at all, which reads the same as checks that have "
+        f"not started (#1390)")
+
+
+def test_the_checkout_step_reader_stops_at_the_next_step():
+    """The control on `_checkout_step`. Reading past the step would find a
+    token belonging to some later step and report a workflow as fixed when its
+    checkout is untouched, which is the whole defect wearing the remedy's
+    clothes (L178)."""
+    described = ("      - uses: actions/checkout@v5\n"
+                 "\n"
+                 "      - name: Something else\n"
+                 "        env:\n"
+                 "          GH_TOKEN: ${{ secrets.RECORD_UPDATE_TOKEN }}\n")
+
+    assert PROPOSING_TOKEN not in _checkout_step(described), (
+        "a token belonging to a later step is being read as the checkout's")
