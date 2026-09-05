@@ -1,7 +1,7 @@
 {
-  "count": 3077,
-  "measured_on": "2026-09-04",
-  "measured_at_commit": "5cb2bd809927e98bb6fb504698006deed1ec0923",
-  "measured_from": "3077 tests, no failures, read from run 33877045408 of swift.yml, job swift-unit",
+  "count": 3175,
+  "measured_on": "2026-09-05",
+  "measured_at_commit": "ecd2210c767375063e046180a3aabe69e151ac7c",
+  "measured_from": "3175 tests, no failures, read from run 33976123529 of swift.yml, job swift-unit",
   "re_measure_with": "venv/bin/python tools/record_suite_count.py --from-newest-run"
 }
