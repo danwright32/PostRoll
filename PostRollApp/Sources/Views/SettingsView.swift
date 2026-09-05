@@ -68,12 +68,79 @@ struct SettingsView: View {
     /// Told when the Meta token changes, so the records that failed for want of
     /// one are asked about again (#1004).
     @Environment(AccountNumbersManager.self) private var accountNumbers
+    /// Everything a layout change has to reach (#1025). Changing the default
+    /// moves every event that has no override of its own, and until now that
+    /// happened silently: the per event control has confirmed and named what it
+    /// replaces since #1007, while this one, which can move many events at
+    /// once, did neither.
+    @Environment(AppState.self) private var appState
+    @Environment(GenerationManager.self) private var genManager
+    /// NOT `@Environment`: `withAppOwners` does not provide this manager, so
+    /// the per event control takes the shared one the same way.
+    var previews: PreviewGraphicsManager = .shared
+
+    /// The layout waiting on the confirmation, and what it would do.
+    @State private var pendingLayout: (preset: PostingPreset,
+                                       impact: SettingsLayoutSwitch.Impact)?
 
     // Legacy-data reclaim (#47): nil until probed; 0 means nothing to reclaim.
     @State private var reclaimableBytes: Int64? = nil
     @State private var isReclaiming = false
     @State private var showReclaimConfirm = false
     @State private var reclaimResult: String?
+
+    /// Ask before a default layout change rebuilds anything (#1025).
+    ///
+    /// Confirmed only when there is something to lose, exactly as the per event
+    /// control decides: a switch that moves no event applies straight away
+    /// rather than raising a question with no consequence behind it.
+    private func requestLayout(_ newValue: PostingPreset) {
+        let old = presetStore.selected
+        guard newValue != old else { return }
+        let impact = SettingsLayoutSwitch.impact(from: old, to: newValue,
+                                                 events: appState.events)
+        if SettingsLayoutSwitch.confirmation(impact) == nil {
+            applyLayout(newValue, impact: impact)
+        } else {
+            pendingLayout = (newValue, impact)
+        }
+    }
+
+    /// Save the default, then rebuild the events that follow it.
+    ///
+    /// The setting lands FIRST and stays landed. A rebuild that fails leaves
+    /// the day flagged by the manager that ran it, which is the surface that
+    /// knows why; rolling the setting back on a failure would leave the app
+    /// disagreeing with the picker Dan just moved (L12).
+    ///
+    /// The work goes through the same two managers the per event control uses,
+    /// rather than a second implementation of what a layout change costs (L41).
+    private func applyLayout(_ newValue: PostingPreset,
+                             impact: SettingsLayoutSwitch.Impact) {
+        presetStore.selected = newValue
+        presetStore.save()
+
+        for affected in impact.affected {
+            if !affected.work.redrawDays.isEmpty {
+                _ = previews.startRedraw(affected.work.redrawDays,
+                                         for: affected.id, appState: appState)
+            }
+            if !affected.work.rebuildDays.isEmpty {
+                // The images of a rebuilt day are cleared first, so a failed
+                // rebuild shows nothing rather than the graphic drawn for the
+                // layout this event has just left.
+                if var event = appState.events.first(where: { $0.id == affected.id }) {
+                    for day in affected.work.rebuildDays {
+                        event.previewMediaPaths.removeValue(forKey: day)
+                    }
+                    appState.updateEvent(event)
+                }
+                genManager.start(eventID: affected.id,
+                                 retryDays: affected.work.rebuildDays,
+                                 appState: appState, regenerateGraphics: true)
+            }
+        }
+    }
 
     var body: some View {
         Form {
@@ -89,7 +156,7 @@ struct SettingsView: View {
             Section {
                 Picker("Default layout", selection: Binding(
                     get: { presetStore.selected },
-                    set: { presetStore.selected = $0; presetStore.save() }
+                    set: { requestLayout($0) }
                 )) {
                     ForEach(PostingPreset.allCases) { preset in
                         Text(preset.displayName).tag(preset)
@@ -154,6 +221,24 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This removes only the migrated copies (photos, programs, audio, previews, events). Your active data in Application Support and the Python project files are not affected.")
+        }
+        // #1025. The same shape as the per event confirmation: it names what
+        // it would rebuild before anything is applied, and says where the
+        // events it is NOT touching went.
+        .alert("Change the default posting layout?",
+               isPresented: Binding(get: { pendingLayout != nil },
+                                    set: { if !$0 { pendingLayout = nil } })) {
+            Button("Change", role: .destructive) {
+                if let pending = pendingLayout {
+                    applyLayout(pending.preset, impact: pending.impact)
+                }
+                pendingLayout = nil
+            }
+            Button("Cancel", role: .cancel) { pendingLayout = nil }
+        } message: {
+            Text(pendingLayout.flatMap {
+                SettingsLayoutSwitch.confirmation($0.impact)
+            } ?? "")
         }
     }
 

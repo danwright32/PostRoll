@@ -108,7 +108,13 @@ enum EventStore {
         do {
             let events = try JSONDecoder().decode([Event].self, from: data)
             saveGate.unblock(url)
-            return LoadResult(events: events, status: .ok, recoveryMessage: nil)
+            // Which photograph each alt text describes, for the days generated
+            // before anything recorded it (#1035). Here because this is the one
+            // moment every stored event passes through, and the population is
+            // entirely historical: anything generated from now on arrives with
+            // its anchors already on it.
+            return LoadResult(events: AltTextAnchors.backfill(events),
+                              status: .ok, recoveryMessage: nil)
         } catch let error as DecodingError {
             // Genuine corruption: the bytes are there and they are not events.
             NSLog("EventStore: failed to decode \(url.lastPathComponent): \(error)")
