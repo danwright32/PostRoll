@@ -160,15 +160,24 @@ def test_the_revise_validator_leaves_alt_text_to_the_splice():
     assert ordered_markers_validator(EXISTING, {"body": rewritten}) is None
 
 
-def test_the_generate_validator_does_refuse_a_rewritten_alt_text():
+def test_the_shared_comparison_does_refuse_a_rewritten_alt_text():
     """The positive control for the test above. Without it, a shared comparison
     that had quietly stopped reading alt text at all would satisfy both (L159).
+
+    Asks `ordered_marker_change` directly rather than through a wrapper. It
+    went through `markers_preserved_validator` until #1170, and that wrapper
+    lost its last caller when #1359 moved the generate path onto the
+    repairable form, so this was the only thing keeping it alive: a control
+    testing a function nothing else calls proves the wrapper works, not the
+    rule both paths share (L29).
     """
-    from postroll.ai.ai_tells import markers_preserved_validator
+    from postroll.ai.ai_tells import ordered_marker_change, photo_markers
 
     rewritten = EXISTING.replace("| ", "| a different description of ")
-    assert markers_preserved_validator({"body": EXISTING},
-                                       {"body": rewritten}) is not None
+    assert rewritten != EXISTING, "the fixture did not actually change any alt text"
+    assert ordered_marker_change(photo_markers(EXISTING),
+                                 photo_markers(rewritten),
+                                 compare_alt=True) is not None
 
 
 def test_a_marker_the_model_dropped_leaves_the_revision_usable(capsys):
