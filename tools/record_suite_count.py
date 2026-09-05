@@ -84,6 +84,17 @@ class NothingRanTheSuite(NoRunFound):
 #: swift-unit SKIPS its work on a push whose tree a green pull request already
 #: checked, and a skipped job leaves no count.
 SUITE_WORKFLOW = "swift.yml"
+
+#: The branch the recorded floor is a claim ABOUT (#1398).
+#:
+#: Without it the query took the newest successful Swift run from anywhere, so
+#: a pull request's run supplied main's floor. Measured 2026-09-05: three
+#: proposals in one day recorded it at 9fb5981, ecd2210 and c0fd193, every one
+#: a pull request head. The count agreed each time by luck, those branches
+#: having added only Python tests, and a branch that REMOVES Swift tests would
+#: have proposed a smaller floor, recalibrating the guard downwards by the very
+#: change it exists to notice (L182, L237).
+SUITE_BRANCH = "main"
 SUITE_JOB = "swift-unit"
 
 #: The line `tools/suite_counts.py` prints, read back.
@@ -131,6 +142,7 @@ def green_swift_runs(run=None, limit: int = RUNS_TO_LOOK_BACK
     code, output = run([
         "gh", "run", "list",
         "--workflow", SUITE_WORKFLOW,
+        "--branch", SUITE_BRANCH,
         "--status", "success",
         "--limit", str(limit),
         "--json", "databaseId,headSha,conclusion,createdAt",
