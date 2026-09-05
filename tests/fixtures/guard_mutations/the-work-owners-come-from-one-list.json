@@ -1,8 +1,8 @@
 {
   "name": "the-work-owners-come-from-one-list",
   "file": "PostRollApp/Sources/PostRollApp.swift",
-  "find": "                .withAppOwners(owners)",
-  "replace": "                .environment(GenerationManager())",
+  "find": "                .withAppOwners(owners)\n                .preferredColorScheme(.light)",
+  "replace": "                .environment(GenerationManager())\n                .preferredColorScheme(.light)",
   "test": "PostRollTests/AppOwnersTests/testNothingInjectsAWorkOwnerOutsideTheOneList",
-  "breaks": "a second hand-kept list of the work owners comes back. SwiftUI TRAPS on a missing environment value, so the copy that falls behind does not fail a check, it crashes whatever screen reads the missing owner and the run blames an unrelated test (#718, L41, L96)"
+  "breaks": "a second hand-kept list of the work owners comes back. SwiftUI TRAPS on a missing environment value, so the copy that falls behind does not fail a check, it crashes whatever screen reads the missing owner and the run blames an unrelated test (#718, L41, L96). The anchor gained the line below it in #1025, when the Settings window started taking the same owners and `.withAppOwners(owners)` stopped naming one place"
 }

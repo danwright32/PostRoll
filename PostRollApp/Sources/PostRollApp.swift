@@ -162,6 +162,12 @@ struct PostRollApp: App {
         Settings {
             SettingsView()
                 .environment(presetStore)
+                // The default layout decides what every event without an
+                // override posts, so changing it here can rebuild them, and
+                // this screen needs the same things the per event control does
+                // to say what it would touch and then do it (#1025).
+                .environment(appState)
+                .withAppOwners(owners)
         }
     }
 }

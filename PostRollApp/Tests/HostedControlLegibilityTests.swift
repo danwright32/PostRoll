@@ -1698,6 +1698,16 @@ extension HostedControlLegibilityTests {
                 // rendering this screen reads Dan's real preference, so it is
                 // applied last and wins.
                 .withAppOwners(AppOwners())
+                // The events a default layout change would rebuild (#1025).
+                // Empty here: this harness measures what the screen DRAWS, and
+                // the layout confirmation only appears once a picker is moved.
+                // Provided rather than made optional in the view, because a
+                // screen that can rebuild events should not be able to run
+                // with no state and quietly rebuild none (L67).
+                .environment(AppState(events: [],
+                                      storeURL: Self.scratchStore(),
+                                      dataRoot: Self.scratchStore()
+                                        .deletingLastPathComponent()))
                 .environment(PostingPresetStore(defaults: Self.scratchDefaults()))
         }
         .frame(width: width, height: height)
@@ -1712,6 +1722,14 @@ extension HostedControlLegibilityTests {
     /// reached by, the preferences the app really uses (L2).
     private static func scratchDefaults() -> UserDefaults {
         UserDefaults(suiteName: "settings-render-\(UUID().uuidString)")!
+    }
+
+    /// A store path of its own per call, for the same reason the defaults suite
+    /// is fresh: nothing rendered here may read or write the real events (L2).
+    private static func scratchStore() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("settings-render-\(UUID().uuidString)")
+            .appendingPathComponent("events.json")
     }
 
     private static func emptyBook() -> HandleBook {
