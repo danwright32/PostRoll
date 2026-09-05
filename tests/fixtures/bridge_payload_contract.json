@@ -683,6 +683,26 @@
       "target": "swift"
     }
   },
+  "caption_finding": {
+    "_what": "One deterministic caption check result inside day_caption.findings. The same shape as a blog finding, built by the same `finding_entry`, and it had no entry of its own until #1156: #1132 widened that shared builder with a `repair` field, so caption findings carry it at runtime with nothing verifying either side.",
+    "python": [
+      {
+        "module": "postroll/ai/blog_findings.py",
+        "function": "finding_entry"
+      }
+    ],
+    "swift": {
+      "kind": "model",
+      "type": "QualityFinding"
+    },
+    "keys": {
+      "code": "swift",
+      "message": "swift",
+      "detail": "swift",
+      "repair": "swift",
+      "target": "swift"
+    }
+  },
   "cover_result": {
     "_what": "A single day's regenerated cover image.",
     "python": [
@@ -1257,6 +1277,14 @@
       "payloads": [
         "ocr_performer",
         "web_performers"
+      ],
+      "missing_in": {}
+    },
+    "a check result": {
+      "_what": "One deterministic check that fired, wherever it fired. The blog panel and the caption panel read the same shape, and #1156 gave the caption side an entry of its own; they are grouped so the day one of them starts building its own entries rather than calling `finding_entry`, the two are compared key by key rather than each being checked against itself (#1023).",
+      "payloads": [
+        "blog_finding",
+        "caption_finding"
       ],
       "missing_in": {}
     }

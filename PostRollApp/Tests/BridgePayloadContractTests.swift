@@ -114,6 +114,7 @@ final class BridgePayloadContractTests: XCTestCase {
     /// Every payload with a proof below. Kept beside the tests so the check
     /// above cannot pass by listing something that is not really covered.
     private static let provenPayloads = [
+        "caption_finding",
         "week_result", "week_timing", "run_progress", "day_caption", "blog_output",
         "revised_caption", "revised_blog", "swapped_blog", "ocr_result", "flag_review",
         "media_result", "media_day", "friday_clip_plan", "friday_clip_selection",
@@ -561,6 +562,34 @@ final class BridgePayloadContractTests: XCTestCase {
         let back = try JSONDecoder().decode(
             QualityFinding.self, from: try JSONEncoder().encode(finding))
         XCTAssertEqual(back, finding)
+    }
+
+    func testACaptionFindingReadsEveryDeclaredKey() throws {
+        // #1156. Caption findings are built by the same `finding_entry` as blog
+        // findings and had no entry of their own, so #1132's `repair` field
+        // reached them at runtime with nothing verifying the shape either side.
+        // Nothing was broken; this is the drift the contract exists to catch
+        // before it is.
+        let finding = QualityFinding(code: "caption_credit_missing",
+                                     message: "m", detail: "d")
+        try assertCovers("caption_finding", try encodedKeys(finding))
+
+        let back = try JSONDecoder().decode(
+            QualityFinding.self, from: try JSONEncoder().encode(finding))
+        XCTAssertEqual(back, finding)
+    }
+
+    func testACaptionFindingCarriesWhatTheRepairPassDid() throws {
+        // The field that arrived without a contract. Read back rather than
+        // merely declared: a key the app drops on decode is a key the panel
+        // silently reports as never attempted (L46).
+        let json = Data(#"""
+        {"code": "c", "message": "m", "detail": "d", "repair": "blocked"}
+        """#.utf8)
+
+        let finding = try JSONDecoder().decode(QualityFinding.self, from: json)
+
+        XCTAssertEqual(finding.repairState, .blocked)
     }
 
     // MARK: - Reader payloads
