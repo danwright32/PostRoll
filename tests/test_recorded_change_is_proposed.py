@@ -439,3 +439,48 @@ def test_a_rerun_measuring_a_different_number_still_recommits(tmp_path):
     assert git("rev-parse", BRANCH, cwd=remote).stdout.strip() != before, (
         "a genuinely new number was not committed onto today's proposal")
     assert remote_record(remote, BRANCH)["count"] == 3201
+
+
+def test_a_record_that_cannot_be_compared_is_refused_rather_than_pushed(tmp_path):
+    """The third outcome, which is the one that must not be guessed.
+
+    The script reads "different" as commit and push. A copy on the branch that
+    cannot be READ is neither the same measurement nor a different one, so
+    taking either branch would be a guess: one silently drops a real reading,
+    the other pushes on top of a corrupt file. It refuses instead, and says so
+    (L11, L98).
+    """
+    remote = make_remote(tmp_path)
+    first = make_checkout(tmp_path, remote, "first")
+    gh, _ = make_gh_stub(tmp_path)
+    propose(first, gh, record_value=_reading(3175, run="111", commit="aaaaaaa"))
+
+    # Corrupt the copy ON the branch, which is what the next run compares
+    # against. Done through a real commit rather than by editing the working
+    # tree, because the comparison reads `HEAD:<record>` and not the file.
+    breaker = make_checkout(tmp_path, remote, "breaker")
+    git("fetch", "-q", "origin",
+        f"+refs/heads/{BRANCH}:refs/remotes/origin/{BRANCH}", cwd=breaker)
+    git("checkout", "-q", "-B", BRANCH, f"refs/remotes/origin/{BRANCH}",
+        cwd=breaker)
+    (breaker / RECORD).write_text("{not json\n")
+    git("add", "--", RECORD, cwd=breaker)
+    git("commit", "-qm", "corrupt the record", cwd=breaker)
+    git("push", "-q", "origin", BRANCH, cwd=breaker)
+    corrupted = git("rev-parse", BRANCH, cwd=remote).stdout.strip()
+
+    second = make_checkout(tmp_path, remote, "second")
+    gh_open, calls = make_gh_stub(tmp_path, open_heads=(BRANCH,), name="second")
+    refused = propose(second, gh_open,
+                      record_value=_reading(3201, run="222", commit="bbbbbbb"),
+                      check=False)
+
+    assert refused.returncode == 2, (
+        f"an uncomparable record did not refuse: {refused.stdout} "
+        f"{refused.stderr}")
+    assert "could not be compared" in refused.stderr, (
+        f"the refusal does not say what it could not do, so it reads like any "
+        f"other failure (L11): {refused.stderr}")
+    assert git("rev-parse", BRANCH, cwd=remote).stdout.strip() == corrupted, (
+        "the proposal was pushed on top of a record nothing could read")
+    assert not any(call.startswith("pr create") for call in gh_calls(calls))
