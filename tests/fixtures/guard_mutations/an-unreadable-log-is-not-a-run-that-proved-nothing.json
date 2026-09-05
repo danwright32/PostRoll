@@ -1,0 +1,8 @@
+{
+  "name": "an-unreadable-log-is-not-a-run-that-proved-nothing",
+  "file": "tools/measure_changed_job.py",
+  "find": "    if log is None:\n        return None",
+  "replace": "    if log is None:\n        return 0",
+  "test": "tests/test_the_pr_guard_job_has_a_deadline.py::test_a_log_that_cannot_be_read_records_nothing_rather_than_zero",
+  "breaks": "a run whose log has aged out of GitHub's 90 day retention is recorded as having proved no entries, so the retention window is counted as evidence about the work, and every such reading then lands in the proved-nothing bucket the deadline's sample is judged by (#1351, L11)"
+}
