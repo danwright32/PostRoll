@@ -178,7 +178,11 @@ struct CaptionSection: View {
     private var altTextScope: String? {
         AltTextScope.line(day: day, isCarousel: isCollageCarouselDay,
                           photos: postingDay?.photoPaths.count ?? 0,
-                          altTexts: caption.altTexts.count)
+                          altTexts: caption.altTexts.count,
+                          // #1035 stamps these where it can. What is left
+                          // unanchored is a day whose photos had already moved,
+                          // so the order these are listed in is a guess.
+                          anchored: !caption.altTextPhotoPaths.isEmpty)
     }
 
     /// The rendered cover.png, only when it's still on disk (a stale path

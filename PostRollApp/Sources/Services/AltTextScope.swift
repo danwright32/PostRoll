@@ -22,7 +22,8 @@ enum AltTextScope {
     /// the reviewer to check the description against the wrong set: worse than
     /// saying nothing, because it reads as a fact.
     static func line(day: DayName, isCarousel: Bool,
-                     photos: Int, altTexts: Int) -> String? {
+                     photos: Int, altTexts: Int,
+                     anchored: Bool = true) -> String? {
         guard altTexts > 0 else { return nil }
         if day.isReelDay {
             // Said as a fault rather than as a description, because a reel
@@ -39,8 +40,18 @@ enum AltTextScope {
                  + "\(photos) \(photos == 1 ? "photograph" : "photographs")."
         }
         if isCarousel {
+            // An unanchored day is one #1035 could not recover: its photographs
+            // had already moved when the anchors were stamped, so which
+            // description belongs to which photograph is genuinely unknown and
+            // the position they are listed in is a guess. Said out loud rather
+            // than presented as an order, because a mismatched alt text reads
+            // as plausible: it is alt text from the same shoot.
+            let unknown = anchored ? "" : " The order is unverified: these were "
+                                        + "written before the app recorded which "
+                                        + "photo each one describes, and this "
+                                        + "day's photos have changed since."
             return "One per photo, in the order they appear in the carousel"
-                 + countNote(photos: photos, altTexts: altTexts)
+                 + countNote(photos: photos, altTexts: altTexts) + unknown
         }
         return "Describes the one photograph in this post"
              + countNote(photos: photos, altTexts: altTexts)
