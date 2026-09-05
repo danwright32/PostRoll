@@ -221,6 +221,82 @@ def seo_description(*, name: str, org: str, venue: str, venue_context: str,
         venue_phrase=_venue_phrase(venue, ""), date_display=date_display))
 
 
+#: What a search result actually shows. Google truncates around 60 characters
+#: and Squarespace accepts 100, so the useful ceiling is the smaller one: a
+#: title cut by the search engine loses the photographer, which is the half the
+#: page is trying to be found for (#1368).
+SEO_TITLE_MAX_CHARS = 60
+
+
+class TitleTooLong(ValueError):
+    """A title the ceiling could not be met for, raised rather than shipped."""
+
+
+def check_title(text: str) -> str:
+    """A title inside the ceiling, or a refusal naming the length it measured.
+
+    Raised rather than returned and truncated: a title cut by Squarespace is
+    cut where the character count falls rather than where the sentence ends,
+    and nothing inside the app would show that it happened (#1368, L12).
+    """
+    if len(text) > SEO_TITLE_MAX_CHARS:
+        raise TitleTooLong(
+            f"title is {len(text)} characters, over the "
+            f"{SEO_TITLE_MAX_CHARS} a search result shows: {text!r}")
+    return text
+
+
+def seo_title(*, name: str, org: str, venue: str) -> str:
+    """The page title for one post, always inside the ceiling.
+
+    Squarespace leaves this field empty by default and builds the page title
+    from the post title and the site's title format, and PostRoll's post titles
+    are shaped for the blog rather than for a search result: a long venue name
+    pushes the photographer and the event off the end (#1368).
+
+    Three facts, in the order somebody searching would recognise them: what the
+    event was, where it was, and who photographed it. Shortened by a declared
+    ladder rather than a blind cut, so the venue goes before the photographer
+    does and the name is cut last, at a word boundary.
+
+    The organisation stands in for a missing event name rather than leaving a
+    hole, and a post with neither is still a correct shorter title rather than
+    a string with an empty half (L67).
+    """
+    name = _clean(name)
+    org = _clean(org)
+    venue = _clean(venue)
+    subject = name or _org_worth_naming(name, org, venue) or ""
+
+    ladder = (
+        (subject, venue, True),
+        (subject, "", True),
+        (subject, venue, False),
+        (subject, "", False),
+    )
+    for try_subject, try_venue, credited in ladder:
+        text = _compose_title(try_subject, try_venue, credited)
+        if text and len(text) <= SEO_TITLE_MAX_CHARS:
+            return check_title(text)
+
+    # The subject itself is the problem, so it is cut to the budget the rest
+    # leaves, at a word boundary, and never mid word.
+    fixed = len(_compose_title("", "", True))
+    trimmed = subject[:max(SEO_TITLE_MAX_CHARS - fixed, 0)]
+    trimmed = trimmed.rsplit(" ", 1)[0].rstrip(" ,.") if " " in trimmed else trimmed
+    return check_title(_compose_title(trimmed, "", True))
+
+
+def _compose_title(subject: str, venue: str, credited: bool) -> str:
+    """`Perpetual Light at Carnegie Hall | Dan Wright`, or whichever half is
+    there. Empty when there is nothing to name at all, which the caller reads
+    as this rung of the ladder not applying."""
+    left = " at ".join(part for part in (subject, venue) if part)
+    if not left:
+        return PHOTOGRAPHER if credited else ""
+    return f"{left} | {PHOTOGRAPHER}" if credited else left
+
+
 def details_block(*, name: str, org: str, venue: str, venue_context: str,
                   date: str, shoot_type: str, event_url: str) -> str:
     """The plain factual statement of who photographed what, where and when.

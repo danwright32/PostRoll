@@ -251,9 +251,13 @@ struct CaptionSection: View {
     private var captionFindingsPanel: some View {
         if let summary = caption.findingsSummary {
             FindingsPanel(summary: summary,
-                          findings: caption.findings,
+                          // What is still open, not everything ever found: a
+                          // cleared check leaves the panel and the record of it
+                          // stays on the caption (#958).
+                          findings: caption.openFindings,
                           isStale: caption.findingsAreStale,
-                          subject: "caption")
+                          subject: "caption",
+                          onClear: { caption.clearFinding($0) })
         }
     }
 

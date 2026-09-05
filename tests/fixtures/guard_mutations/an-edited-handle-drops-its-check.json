@@ -1,0 +1,8 @@
+{
+  "name": "an-edited-handle-drops-its-check",
+  "file": "PostRollApp/Sources/Models/OCRResult.swift",
+  "find": "        if wasChecked != becomes { profileURL = nil }",
+  "replace": "        if false { profileURL = nil }",
+  "test": "PostRollTests/CheckedHandleEditTests/testChangingTheHandleDropsTheAddressCheckedAgainstTheOldOne",
+  "breaks": "a handle edited to a different account keeps the address checked against the old one, so the row says this handle was checked against a profile belonging to somebody else. That is the app vouching for an account nobody looked at, which is worse than no mark at all (#1372, L15, L92)"
+}

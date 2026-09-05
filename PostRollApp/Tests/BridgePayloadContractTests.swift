@@ -114,6 +114,7 @@ final class BridgePayloadContractTests: XCTestCase {
     /// Every payload with a proof below. Kept beside the tests so the check
     /// above cannot pass by listing something that is not really covered.
     private static let provenPayloads = [
+        "caption_finding",
         "week_result", "week_timing", "run_progress", "day_caption", "blog_output",
         "revised_caption", "revised_blog", "swapped_blog", "ocr_result", "flag_review",
         "media_result", "media_day", "friday_clip_plan", "friday_clip_selection",
@@ -163,7 +164,12 @@ final class BridgePayloadContractTests: XCTestCase {
 
         // generated_caption is this side's own bookkeeping, never sent by
         // Python, so it is not part of the contract and is excluded here.
-        try assertCovers("day_caption", try encodedKeys(cap).subtracting(["generated_caption"]))
+        // `cleared_findings` is this side's own too (#958): it is Dan's
+        // judgement about a finding, written and read by the app, and Python
+        // neither sends it nor could.
+        try assertCovers("day_caption",
+                         try encodedKeys(cap).subtracting(["generated_caption",
+                                                           "cleared_findings"]))
         XCTAssertEqual(try JSONDecoder().decode(
             DayCaption.self, from: try JSONEncoder().encode(cap)), cap)
     }
@@ -171,7 +177,9 @@ final class BridgePayloadContractTests: XCTestCase {
     func testRevisedCaptionReadsEveryDeclaredKey() throws {
         var cap = DayCaption(caption: "c")
         cap.hashtags = ["#a"]; cap.altTexts = ["alt"]; cap.sceneLabels = ["s"]
-        try assertCovers("revised_caption", try encodedKeys(cap).subtracting(["generated_caption"]))
+        try assertCovers("revised_caption",
+                         try encodedKeys(cap).subtracting(["generated_caption",
+                                                           "cleared_findings"]))
     }
 
     func testBlogOutputReadsEveryDeclaredKey() throws {
@@ -187,7 +195,7 @@ final class BridgePayloadContractTests: XCTestCase {
         // findings still describe what is on screen", which only the half that
         // ran the checks knows. Nothing emitted it, so it decoded empty on
         // every generated post and the panel could never go stale (#974).
-        let ours: Set<String> = ["generated_body"]
+        let ours: Set<String> = ["generated_body", "cleared_findings"]
         try assertCovers("blog_output", try encodedKeys(blog).subtracting(ours))
         XCTAssertEqual(try JSONDecoder().decode(
             BlogOutput.self, from: try JSONEncoder().encode(blog)), blog)
@@ -199,7 +207,8 @@ final class BridgePayloadContractTests: XCTestCase {
         blog.findings = [QualityFinding(code: "c", message: "m", detail: "d")]
         blog.findingsBody = "b"
         try assertCovers("revised_blog",
-                         try encodedKeys(blog).subtracting(["generated_body"]))
+                         try encodedKeys(blog).subtracting(["generated_body",
+                                                            "cleared_findings"]))
     }
 
     func testSwappedBlogReadsEveryDeclaredKey() throws {
@@ -210,7 +219,7 @@ final class BridgePayloadContractTests: XCTestCase {
         blog.findings = []
         blog.findingsBody = "b"
         let sent = try encodedKeys(blog)
-            .subtracting(["generated_body", "title"])
+            .subtracting(["generated_body", "title", "cleared_findings"])
         try assertCovers("swapped_blog", sent)
     }
 
@@ -561,6 +570,34 @@ final class BridgePayloadContractTests: XCTestCase {
         let back = try JSONDecoder().decode(
             QualityFinding.self, from: try JSONEncoder().encode(finding))
         XCTAssertEqual(back, finding)
+    }
+
+    func testACaptionFindingReadsEveryDeclaredKey() throws {
+        // #1156. Caption findings are built by the same `finding_entry` as blog
+        // findings and had no entry of their own, so #1132's `repair` field
+        // reached them at runtime with nothing verifying the shape either side.
+        // Nothing was broken; this is the drift the contract exists to catch
+        // before it is.
+        let finding = QualityFinding(code: "caption_credit_missing",
+                                     message: "m", detail: "d")
+        try assertCovers("caption_finding", try encodedKeys(finding))
+
+        let back = try JSONDecoder().decode(
+            QualityFinding.self, from: try JSONEncoder().encode(finding))
+        XCTAssertEqual(back, finding)
+    }
+
+    func testACaptionFindingCarriesWhatTheRepairPassDid() throws {
+        // The field that arrived without a contract. Read back rather than
+        // merely declared: a key the app drops on decode is a key the panel
+        // silently reports as never attempted (L46).
+        let json = Data(#"""
+        {"code": "c", "message": "m", "detail": "d", "repair": "blocked"}
+        """#.utf8)
+
+        let finding = try JSONDecoder().decode(QualityFinding.self, from: json)
+
+        XCTAssertEqual(finding.repairState, .blocked)
     }
 
     // MARK: - Reader payloads

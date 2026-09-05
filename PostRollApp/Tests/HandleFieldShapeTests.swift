@@ -299,10 +299,18 @@ final class HandleFieldShapeTests: XCTestCase {
                                               handle: "").isEmpty)
     }
 
-    func testASentinelDrawsNoNote() {
-        XCTAssertTrue(PerformerRowNotes.lines(duplicate: nil, isGuessed: false,
-                                              handle: "unknown").isEmpty,
-                      "a sentinel is a recorded answer, not a malformed one")
+    /// Reversed by #1371, and kept as the assertion of what replaced it rather
+    /// than deleted: a sentinel is still not a MALFORMED value, and calling it
+    /// one would ask Dan to fix an answer the app wrote down on purpose. What
+    /// changed is that it no longer says nothing at all, because a value no
+    /// surface will treat as an account read exactly like one that will (L252,
+    /// L11).
+    func testASentinelIsNotDrawnAsAMalformedValue() {
+        let notes = PerformerRowNotes.lines(duplicate: nil, isGuessed: false,
+                                            handle: "unknown")
+
+        XCTAssertEqual(notes.map(\.text), [PerformerRowNotes.searchedAndNotFound])
+        XCTAssertEqual(notes.map(\.isProblem), [false])
     }
 
     /// A book on its own storage. A test that recorded handles for real would

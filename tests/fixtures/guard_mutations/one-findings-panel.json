@@ -1,8 +1,8 @@
 {
   "name": "one-findings-panel",
   "file": "PostRollApp/Sources/Views/CaptionReview/CaptionSection.swift",
-  "find": "            FindingsPanel(summary: summary,\n                          findings: caption.findings,\n                          isStale: caption.findingsAreStale,\n                          subject: \"caption\")",
-  "replace": "            ForEach(FindingsDisplay.grouped(findings: caption.findings), id: \\.code) { group in\n                Text(group.message)\n            }",
+  "find": "            FindingsPanel(summary: summary,\n                          // What is still open, not everything ever found: a\n                          // cleared check leaves the panel and the record of it\n                          // stays on the caption (#958).\n                          findings: caption.openFindings,\n                          isStale: caption.findingsAreStale,\n                          subject: \"caption\",\n                          onClear: { caption.clearFinding($0) })",
+  "replace": "            ForEach(FindingsDisplay.grouped(findings: caption.openFindings), id: \\.code) { group in\n                Text(group.message)\n            }",
   "test": "PostRollTests/FindingsPanelTests/testOnlyOneViewGroupsTheFindings",
   "breaks": "a second copy of the findings panel grows back in a screen file, which is how the two of them drifted into reading as one labelled group on one screen and loose fragments on the other (#603)"
 }

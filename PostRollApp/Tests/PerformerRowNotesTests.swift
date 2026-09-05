@@ -44,4 +44,69 @@ final class PerformerRowNotesTests: XCTestCase {
                         .map(\.isProblem),
                        [true, false])
     }
+
+    // MARK: - What the shared check refuses (#1371, #1373)
+
+    func testASentinelSaysThatASearchFoundNobody() {
+        // Shaped like a handle, and refused by the shared check, so no caption,
+        // tag or invite will ever use it. It read as an ordinary handle, and
+        // the performer was silently untaggable (L11).
+        let notes = PerformerRowNotes.lines(duplicate: nil, isGuessed: false,
+                                            handle: "unknown")
+
+        XCTAssertEqual(notes.map(\.text), [PerformerRowNotes.searchedAndNotFound])
+        XCTAssertEqual(notes.map(\.isProblem), [false],
+                       "a recorded answer is not a mistake to fix")
+    }
+
+    func testAValueThatIsNotEvenHandleShapedKeepsItsOwnMark() {
+        // The two are different answers: one was searched for, the other was
+        // never a handle at all, and only the second is a problem.
+        let notes = PerformerRowNotes.lines(duplicate: nil, isGuessed: false,
+                                            handle: "DPR Dance")
+
+        XCTAssertEqual(notes.map(\.text), [PerformerRowNotes.notAHandle])
+        XCTAssertEqual(notes.map(\.isProblem), [true])
+    }
+
+    func testARealHandleWithNoMarksSaysNothing() {
+        XCTAssertTrue(PerformerRowNotes.lines(duplicate: nil, isGuessed: false,
+                                              handle: "@jenna").isEmpty)
+    }
+
+    func testACheckedAddressIsMarkedQuietly() {
+        let notes = PerformerRowNotes.lines(
+            duplicate: nil, isGuessed: false, handle: "@jenna",
+            checkedProfile: "https://www.instagram.com/jenna/")
+
+        XCTAssertEqual(notes.map(\.text),
+                       [PerformerRowNotes.checkedAgainstTheProfile])
+        XCTAssertEqual(notes.map(\.isProblem), [false])
+    }
+
+    func testAHandleWithNoCheckedAddressIsNotAccused() {
+        // Most handles are Dan's own answers, typed or filled from the book.
+        // Marking those unverified would accuse the accounts most likely to be
+        // right, so the mark goes on the ones that HAVE been checked.
+        XCTAssertTrue(PerformerRowNotes.lines(duplicate: nil, isGuessed: false,
+                                              handle: "@jenna",
+                                              checkedProfile: nil).isEmpty)
+    }
+
+    func testASentinelCarryingAnAddressIsNotCalledChecked() {
+        // Two marks contradicting each other, and the shared check decides
+        // which is true: a value no surface treats as an account cannot be a
+        // checked one.
+        let notes = PerformerRowNotes.lines(
+            duplicate: nil, isGuessed: false, handle: "unknown",
+            checkedProfile: "https://www.instagram.com/unknown/")
+
+        XCTAssertEqual(notes.map(\.text), [PerformerRowNotes.searchedAndNotFound])
+    }
+
+    func testABlankAddressIsNotACheck() {
+        XCTAssertTrue(PerformerRowNotes.lines(duplicate: nil, isGuessed: false,
+                                              handle: "@jenna",
+                                              checkedProfile: "  ").isEmpty)
+    }
 }

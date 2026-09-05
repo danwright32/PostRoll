@@ -26,6 +26,7 @@ final class BlogMetaContractTests: XCTestCase {
             let _what: String
             let event: Facts
             let description: String
+            let title: String
             let details: String
         }
         struct DateCase: Decodable {
@@ -34,6 +35,9 @@ final class BlogMetaContractTests: XCTestCase {
         }
         let description_min: Int
         let description_max: Int
+        /// #1368: what a search result shows, which is smaller than what
+        /// Squarespace accepts.
+        let title_max: Int
         let vectors: [Vector]
         /// #1106: every valid ISO date the two halves must render identically.
         let dates: [DateCase]
@@ -77,6 +81,27 @@ final class BlogMetaContractTests: XCTestCase {
                                       shootType: v.event.shoot_type,
                                       eventURL: v.event.event_url),
                 v.details, v._what)
+        }
+    }
+
+    func testSwiftTitleSatisfiesTheSharedContract() throws {
+        // #1368. Byte for byte with Python, from the same fixture, because the
+        // two are kept in parity by hand and a title that differs across the
+        // languages is a page titled one way and exported another.
+        for v in try fixture().vectors {
+            XCTAssertEqual(
+                BlogMeta.seoTitle(name: v.event.name, org: v.event.org,
+                                  venue: v.event.venue),
+                v.title, v._what)
+        }
+    }
+
+    func testEveryTitleSurvivesASearchResult() throws {
+        let fixture = try fixture()
+        for v in fixture.vectors {
+            XCTAssertLessThanOrEqual(v.title.count, fixture.title_max,
+                                     "\(v._what): \(v.title)")
+            XCTAssertTrue(v.title.contains(BlogMeta.photographer), v._what)
         }
     }
 
