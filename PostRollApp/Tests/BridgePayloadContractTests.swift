@@ -164,7 +164,12 @@ final class BridgePayloadContractTests: XCTestCase {
 
         // generated_caption is this side's own bookkeeping, never sent by
         // Python, so it is not part of the contract and is excluded here.
-        try assertCovers("day_caption", try encodedKeys(cap).subtracting(["generated_caption"]))
+        // `cleared_findings` is this side's own too (#958): it is Dan's
+        // judgement about a finding, written and read by the app, and Python
+        // neither sends it nor could.
+        try assertCovers("day_caption",
+                         try encodedKeys(cap).subtracting(["generated_caption",
+                                                           "cleared_findings"]))
         XCTAssertEqual(try JSONDecoder().decode(
             DayCaption.self, from: try JSONEncoder().encode(cap)), cap)
     }
@@ -172,7 +177,9 @@ final class BridgePayloadContractTests: XCTestCase {
     func testRevisedCaptionReadsEveryDeclaredKey() throws {
         var cap = DayCaption(caption: "c")
         cap.hashtags = ["#a"]; cap.altTexts = ["alt"]; cap.sceneLabels = ["s"]
-        try assertCovers("revised_caption", try encodedKeys(cap).subtracting(["generated_caption"]))
+        try assertCovers("revised_caption",
+                         try encodedKeys(cap).subtracting(["generated_caption",
+                                                           "cleared_findings"]))
     }
 
     func testBlogOutputReadsEveryDeclaredKey() throws {
@@ -188,7 +195,7 @@ final class BridgePayloadContractTests: XCTestCase {
         // findings still describe what is on screen", which only the half that
         // ran the checks knows. Nothing emitted it, so it decoded empty on
         // every generated post and the panel could never go stale (#974).
-        let ours: Set<String> = ["generated_body"]
+        let ours: Set<String> = ["generated_body", "cleared_findings"]
         try assertCovers("blog_output", try encodedKeys(blog).subtracting(ours))
         XCTAssertEqual(try JSONDecoder().decode(
             BlogOutput.self, from: try JSONEncoder().encode(blog)), blog)
@@ -200,7 +207,8 @@ final class BridgePayloadContractTests: XCTestCase {
         blog.findings = [QualityFinding(code: "c", message: "m", detail: "d")]
         blog.findingsBody = "b"
         try assertCovers("revised_blog",
-                         try encodedKeys(blog).subtracting(["generated_body"]))
+                         try encodedKeys(blog).subtracting(["generated_body",
+                                                            "cleared_findings"]))
     }
 
     func testSwappedBlogReadsEveryDeclaredKey() throws {
@@ -211,7 +219,7 @@ final class BridgePayloadContractTests: XCTestCase {
         blog.findings = []
         blog.findingsBody = "b"
         let sent = try encodedKeys(blog)
-            .subtracting(["generated_body", "title"])
+            .subtracting(["generated_body", "title", "cleared_findings"])
         try assertCovers("swapped_blog", sent)
     }
 
