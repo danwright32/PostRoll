@@ -224,6 +224,7 @@ struct PhotoAssignmentView: View {
                             photos: dayBinding(day),
                             cropOffsets: enableCrop ? cropOffsetsBinding(day) : nil,
                             photoTags: isCollageDay(day) ? photoTagsBinding(day) : nil,
+                            tagProgress: tagProgress(for: day),
                             tagSuggestions: isCollageDay(day) ? tagSheet(for: day).suggestions : [],
                             missingPeopleNote: isCollageDay(day) ? tagSheet(for: day).note : nil,
                             notes: noteBinding(day),
@@ -394,6 +395,17 @@ struct PhotoAssignmentView: View {
             get: { dayCropOffsets[day] ?? [:] },
             set: { dayCropOffsets[day] = $0; save() }
         )
+    }
+
+    /// What this day's header says about its tagging, or nil where the day has
+    /// no per-photo tagging at all (#1361).
+    ///
+    /// A method rather than an expression at the call site, so the view
+    /// builder has one call to infer rather than a count and a filter.
+    private func tagProgress(for day: DayName) -> String? {
+        guard isCollageDay(day) else { return nil }
+        return PhotoTagProgress.note(photos: dayPhotos[day] ?? [],
+                                     tags: dayPhotoTags[day] ?? [:])
     }
 
     private func photoTagsBinding(_ day: DayName) -> Binding<[String: [String]]> {
@@ -873,6 +885,10 @@ struct PhotoDaySection: View {
     @Binding var photos: [URL]
     var cropOffsets: Binding<[String: CropOffset]>? = nil
     var photoTags: Binding<[String: [String]]>? = nil
+    /// How much of this day's per-photo tagging is left, or nil on a day that
+    /// has none (#1361). Passed in beside the tags it describes, so a view
+    /// holding one holds both and the sentence cannot drift from the grid.
+    var tagProgress: String? = nil
     var tagSuggestions: [PhotoTagSuggestion] = []
     /// Travels beside the list it is about, so a view holding one holds both
     /// (#902). Split apart they drift, and the drift is a count that no longer
@@ -900,6 +916,15 @@ struct PhotoDaySection: View {
                                 .tracking(1.2)
                                 .foregroundStyle(isExpanded ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)
                             if !photos.isEmpty { PhotoCountBadge(count: photos.count) }
+                            // Beside the count, because it is a second fact
+                            // about the same photographs, and in the header so
+                            // it is legible with the section collapsed: the
+                            // question it answers is which day to open next.
+                            if let tagProgress {
+                                Text(tagProgress)
+                                    .font(.system(size: 9, weight: .medium))
+                                    .foregroundStyle(PaintedSurfaces.secondaryText)
+                            }
                         }
                         if let subtitle {
                             Text(subtitle).font(.light(11)).foregroundStyle(PaintedSurfaces.secondaryText)

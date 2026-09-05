@@ -1,0 +1,8 @@
+{
+  "name": "an-empty-tag-list-is-not-a-tagged-photo",
+  "file": "PostRollApp/Sources/Services/PhotoTagProgress.swift",
+  "find": "            let named = (tags[photo.absoluteString] ?? [])\n                .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }\n            return named.isEmpty",
+  "replace": "            return tags[photo.absoluteString] == nil",
+  "test": "PostRollTests/PhotoTagProgressTests/testAnEmptyTagListCountsAsUntagged",
+  "breaks": "a photograph whose stored tag list is empty counts as tagged, so a day reports the tagging finished while a photograph on it names nobody, and the count exists precisely to say when the job is done (#1361, L11)"
+}
