@@ -169,6 +169,18 @@ struct CaptionSection: View {
     /// key so the view stays preset-agnostic.
     private var isCollageCarouselDay: Bool { previewPaths?["collage"] != nil }
 
+    /// What this day's alt text is meant to describe (#1069).
+    ///
+    /// The photo count comes from the DAY, which is what a reel is built from,
+    /// rather than from the descriptions or from whatever the caption was
+    /// written off: a reel's alt text is written from a sample and naming the
+    /// sample would send the reviewer to check it against the wrong set.
+    private var altTextScope: String? {
+        AltTextScope.line(day: day, isCarousel: isCollageCarouselDay,
+                          photos: postingDay?.photoPaths.count ?? 0,
+                          altTexts: caption.altTexts.count)
+    }
+
     /// The rendered cover.png, only when it's still on disk (a stale path
     /// surviving after the file was reclaimed/deleted must not show a
     /// broken image, same guard FridayReviewDisplay.showsDualSlot uses).
@@ -575,7 +587,7 @@ struct CaptionSection: View {
                                 HashtagsEditor(hashtags: $caption.hashtags)
 
                                 if !caption.altTexts.isEmpty {
-                                    AltTextsSection(altTexts: $caption.altTexts)
+                                    AltTextsSection(altTexts: $caption.altTexts, scope: altTextScope)
                                 }
 
                                 if showingRevision {
@@ -680,7 +692,7 @@ struct CaptionSection: View {
                             HashtagsEditor(hashtags: $caption.hashtags)
 
                             if !caption.altTexts.isEmpty {
-                                AltTextsSection(altTexts: $caption.altTexts)
+                                AltTextsSection(altTexts: $caption.altTexts, scope: altTextScope)
                             }
 
                             if showingRevision {
@@ -981,7 +993,7 @@ struct CaptionSection: View {
                         HashtagsEditor(hashtags: $caption.hashtags)
 
                         if !caption.altTexts.isEmpty {
-                            AltTextsSection(altTexts: $caption.altTexts)
+                            AltTextsSection(altTexts: $caption.altTexts, scope: altTextScope)
                         }
 
                         if showingRevision {

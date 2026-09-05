@@ -417,6 +417,33 @@ extension PostingDay {
         return reelSeed!
     }
 
+    /// This day's collage layout, decided once and written down (#1028).
+    ///
+    /// The same shape as `ensureReelSeed`, and for the same reason: a seed
+    /// minted only when somebody presses "New layout" leaves every day nobody
+    /// reshuffled without one, and the first thing that does mint one changes
+    /// an arrangement Dan had already seen.
+    ///
+    /// `fresh` is a reshuffle, and it drops the hand adjusted cells with it:
+    /// those are keyed to the arrangement they were made against, so keeping
+    /// them would place cells from the old layout over the new one. Minting a
+    /// FIRST seed keeps them, because a day with no seed had no reshuffle
+    /// either and its override was made against the deterministic default.
+    ///
+    /// `generate` is a parameter so a test can pin the value rather than assert
+    /// around a random one.
+    @discardableResult
+    mutating func ensureCollageSeed(
+        fresh: Bool = false,
+        using generate: () -> Int = { Int.random(in: 1...999_999_999) }
+    ) -> Int {
+        if fresh { collageCellOverride = nil }
+        if fresh || collageSeed == nil { collageSeed = generate() }
+        // Force unwrapped deliberately: the line above is the only way to reach
+        // here with nil, and it cannot leave one.
+        return collageSeed!
+    }
+
     /// Returns a copy with the given photos removed from photoPaths and from
     /// every per-photo map (crop offsets and tags, keyed by URL absoluteString)
     /// and collage cells (keyed by POSIX path). Used to drop references to
@@ -983,7 +1010,21 @@ struct PostingDay: Codable, Hashable {
     /// `ensureReelSeed` is for.
     var reelSeed: Int? = nil
     // Wednesday collage
-    var collageSeed: Int? = nil        // nil = random each time
+    /// The collage's layout seed.
+    ///
+    /// nil does NOT mean "random each time", which is what this said until
+    /// #1028 while three places disagreed about it. `generate_collage.py` is
+    /// deterministic with no seed: it takes the first fitting arrangement
+    /// rather than drawing one, and says so. What made an unseeded day change
+    /// anyway was the app, which stamped a fresh random seed on the first
+    /// rebuild of any collage day that had none, so a day laid out by the
+    /// deterministic default was re-laid-out the first time Dan touched
+    /// anything at all.
+    ///
+    /// So nil is a day whose layout has not been decided yet, and
+    /// `ensureCollageSeed` decides it where the day's photographs are decided,
+    /// exactly as #1062 settled the reel. Nothing renders from nil any more.
+    var collageSeed: Int? = nil
     var cropOffsets: [String: CropOffset] = [:]        // carousel crop — keyed by photo URL absoluteString
     var collageCropOffsets: [String: CropOffset] = [:] // collage-specific crop — separate from carousel
     var reelCropOffsets: [String: CropOffset] = [:]    // Thursday reel per-photo crop — independent from carousel/collage

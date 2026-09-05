@@ -1511,11 +1511,16 @@ struct CaptionReviewView: View {
             // For a collage day, lock the collage seed before the first regen so
             // Python always produces the same grid layout when only crop offsets
             // change. When `newLayout` is true, force a fresh seed regardless.
-            if isCollageDay(day), newLayout || ev.days[day.rawValue]?.collageSeed == nil {
+            //
+            // Through the day's own `ensureCollageSeed` since #1028, which is
+            // also called where a day's photographs are decided, so this is a
+            // backstop rather than the only place a seed is minted. It was the
+            // only place, and that is what made an unseeded day change
+            // arrangement the first time Dan touched anything: it had rendered
+            // under Python's deterministic default until then.
+            if isCollageDay(day) {
                 var pd = ev.days[day.rawValue] ?? PostingDay(day: day)
-                pd.collageSeed = Int.random(in: 1...999_999_999)
-                // Drop any per-cell overrides: they are keyed to the previous layout.
-                pd.collageCellOverride = nil
+                pd.ensureCollageSeed(fresh: newLayout)
                 ev.days[day.rawValue] = pd
             }
             // The same rule as the collage above: mint on the FIRST render of a

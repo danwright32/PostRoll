@@ -665,6 +665,10 @@ struct HashtagsEditor: View {
 
 struct AltTextsSection: View {
     @Binding var altTexts: [String]
+    /// What these descriptions are supposed to cover (#1069). Nil on the blog
+    /// panel, where the heading already sits under the post the alt text
+    /// belongs to and every entry is one photograph in it.
+    var scope: String? = nil
     @State private var isExpanded = false
 
     var body: some View {
@@ -682,6 +686,16 @@ struct AltTextsSection: View {
                 }
             }
             .buttonStyle(.plain)
+
+            // Under the heading and OUTSIDE the collapse, because the question
+            // it answers is whether to open the list at all: a reel described
+            // four times is a fault visible without expanding anything.
+            if let scope {
+                Text(scope)
+                    .font(.system(size: 10))
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if isExpanded {
                 ForEach(altTexts.indices, id: \.self) { i in
