@@ -284,28 +284,43 @@ class TestStripEmDashes:
 
 
 class TestMarkerPreservation:
+    """The rule both blog paths share, asked directly.
+
+    These drove it through `markers_preserved_validator` until #1170. That
+    wrapper lost its last production caller when #1359 moved the generate path
+    onto the repairable form, and a test class keeping a function alive is how
+    dead code reads as supported (L29). The wrapper only added the
+    `photo_markers` extraction, which each test now does for itself.
+    """
+
     def test_extracts_sorted_filenames(self):
         from postroll.ai.ai_tells import photo_marker_filenames
         body = "p1\n\n[PHOTO: b.jpg | alt two]\n\np2\n\n[PHOTO: a.jpg | alt one]"
         assert photo_marker_filenames(body) == ["a.jpg", "b.jpg"]
 
     def test_validator_passes_when_markers_intact(self):
-        from postroll.ai.ai_tells import markers_preserved_validator
+        from postroll.ai.ai_tells import (
+            ordered_marker_change, photo_markers)
         prior = {"body": "[PHOTO: a.jpg | x]\n\ntext"}
         revised = {"body": "better text\n\n[PHOTO: a.jpg | x]"}
-        assert markers_preserved_validator(prior, revised) is None
+        assert ordered_marker_change(photo_markers(prior["body"]),
+                                     photo_markers(revised["body"])) is None
 
     def test_validator_flags_dropped_marker(self):
-        from postroll.ai.ai_tells import markers_preserved_validator
+        from postroll.ai.ai_tells import (
+            ordered_marker_change, photo_markers)
         prior = {"body": "[PHOTO: a.jpg | x]\n\n[PHOTO: b.jpg | y]"}
         revised = {"body": "[PHOTO: a.jpg | x]\n\nprose only now"}
-        assert markers_preserved_validator(prior, revised) is not None
+        assert ordered_marker_change(photo_markers(prior["body"]),
+                                     photo_markers(revised["body"])) is not None
 
     def test_validator_flags_renamed_marker(self):
-        from postroll.ai.ai_tells import markers_preserved_validator
+        from postroll.ai.ai_tells import (
+            ordered_marker_change, photo_markers)
         prior = {"body": "[PHOTO: a.jpg | x]"}
         revised = {"body": "[PHOTO: hallucinated.jpg | x]"}
-        assert markers_preserved_validator(prior, revised) is not None
+        assert ordered_marker_change(photo_markers(prior["body"]),
+                                     photo_markers(revised["body"])) is not None
 
     # ── #1141: the two faults the sorted comparison could not see ────────────
     #
@@ -317,33 +332,42 @@ class TestMarkerPreservation:
     # resembles itself.
 
     def test_validator_flags_two_markers_swapped_between_paragraphs(self):
-        from postroll.ai.ai_tells import markers_preserved_validator
+        from postroll.ai.ai_tells import (
+            ordered_marker_change, photo_markers)
         prior = {"body": "one\n\n[PHOTO: a.jpg | x]\n\ntwo\n\n[PHOTO: b.jpg | y]"}
         revised = {"body": "one\n\n[PHOTO: b.jpg | y]\n\ntwo\n\n[PHOTO: a.jpg | x]"}
-        assert markers_preserved_validator(prior, revised) is not None
+        assert ordered_marker_change(photo_markers(prior["body"]),
+                                     photo_markers(revised["body"])) is not None
 
     def test_validator_flags_two_alt_texts_swapped(self):
-        from postroll.ai.ai_tells import markers_preserved_validator
+        from postroll.ai.ai_tells import (
+            ordered_marker_change, photo_markers)
         prior = {"body": "[PHOTO: a.jpg | dancers in blue]\n\n[PHOTO: b.jpg | a full choir]"}
         revised = {"body": "[PHOTO: a.jpg | a full choir]\n\n[PHOTO: b.jpg | dancers in blue]"}
-        assert markers_preserved_validator(prior, revised) is not None
+        assert ordered_marker_change(photo_markers(prior["body"]),
+                                     photo_markers(revised["body"])) is not None
 
     def test_validator_flags_one_alt_text_rewritten(self):
-        from postroll.ai.ai_tells import markers_preserved_validator
+        from postroll.ai.ai_tells import (
+            ordered_marker_change, photo_markers)
         prior = {"body": "[PHOTO: a.jpg | four dancers lit in blue]"}
         revised = {"body": "[PHOTO: a.jpg | a performance]"}
-        assert markers_preserved_validator(prior, revised) is not None
+        assert ordered_marker_change(photo_markers(prior["body"]),
+                                     photo_markers(revised["body"])) is not None
 
     def test_validator_flags_an_added_marker(self):
-        from postroll.ai.ai_tells import markers_preserved_validator
+        from postroll.ai.ai_tells import (
+            ordered_marker_change, photo_markers)
         prior = {"body": "[PHOTO: a.jpg | x]"}
         revised = {"body": "[PHOTO: a.jpg | x]\n\n[PHOTO: invented.jpg | y]"}
-        assert markers_preserved_validator(prior, revised) is not None
+        assert ordered_marker_change(photo_markers(prior["body"]),
+                                     photo_markers(revised["body"])) is not None
 
     def test_each_fault_says_which_one_it_was(self):
         """A message that reads the same for four different faults tells the
         reader nothing about what the pass actually did (L11)."""
-        from postroll.ai.ai_tells import markers_preserved_validator
+        from postroll.ai.ai_tells import (
+            ordered_marker_change, photo_markers)
         prior = {"body": "[PHOTO: a.jpg | x]\n\n[PHOTO: b.jpg | y]"}
         faults = {
             "added":    {"body": "[PHOTO: a.jpg | x]\n\n[PHOTO: b.jpg | y]"
@@ -355,7 +379,8 @@ class TestMarkerPreservation:
         }
         messages = {}
         for fault, revised in faults.items():
-            problem = markers_preserved_validator(prior, revised)
+            problem = ordered_marker_change(photo_markers(prior["body"]),
+                                     photo_markers(revised["body"]))
             assert problem is not None, fault
             messages[fault] = problem
         assert len(set(messages.values())) == len(messages), messages
@@ -373,7 +398,9 @@ class TestMarkerPreservation:
     def test_moving_the_only_marker_within_the_post_is_not_a_reorder(self):
         """One marker has no relative order to change, and the passes are
         allowed to move prose about."""
-        from postroll.ai.ai_tells import markers_preserved_validator
+        from postroll.ai.ai_tells import (
+            ordered_marker_change, photo_markers)
         prior = {"body": "[PHOTO: a.jpg | x]\n\ntext"}
         revised = {"body": "better text\n\n[PHOTO: a.jpg | x]"}
-        assert markers_preserved_validator(prior, revised) is None
+        assert ordered_marker_change(photo_markers(prior["body"]),
+                                     photo_markers(revised["body"])) is None

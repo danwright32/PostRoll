@@ -136,20 +136,6 @@ def ordered_marker_change(expected: list[tuple[str, str]],
     return None
 
 
-def markers_preserved_validator(prior: dict, revised: dict) -> str | None:
-    """run_review_pass validator: a review pass must not add, drop, rename,
-    reorder or re-describe [PHOTO:] markers. Returns a problem description, or
-    None when intact.
-
-    The blog generate path's two review passes are told to keep every marker
-    exactly as it is, and until #1141 this compared a SORTED list of filenames,
-    so the two faults it could not see were the two that leave a well formed
-    post describing the wrong photographs.
-    """
-    return ordered_marker_change(photo_markers(prior.get("body", "")),
-                                 photo_markers(revised.get("body", "")))
-
-
 def markers_repairable_validator(prior: dict, revised: dict) -> str | None:
     """The same rule with alt text left to the splice (#1218).
 

@@ -1,5 +1,6 @@
 {
   "seconds": {
+    "test_a_move_keeps_the_posts_spacing.py": 0.0,
     "test_a_new_test_file_is_measured.py": 0.9199999999999999,
     "test_a_pull_request_fits_the_runner_limit.py": 0.02,
     "test_a_quiet_day_costs_no_mac.py": 0.0,
@@ -286,6 +287,10 @@
     "test_wordmark_required.py": 0.54
   },
   "measured": {
+    "test_a_move_keeps_the_posts_spacing.py": {
+      "run": "partial-2026-09-05T00:58Z",
+      "scale": 1.042
+    },
     "test_a_new_test_file_is_measured.py": {
       "run": "full-2026-09-04T03:02Z",
       "scale": 1.0
