@@ -1222,27 +1222,61 @@
     }
   },
   "_siblings": {
-    "_what": "Payload shapes with MORE THAN ONE producer, and what each producer must therefore emit. Each payload above is checked against its own entry; nothing compared the two paths that make the same shape, so a key carried by one and dropped by the other was invisible at both ends. #1008 added alt_text_photo_paths to the generation path and the revision dropped it silently; it was caught only because Swift happened to read the key (#1023). `only_in` excuses a key one producer legitimately has nothing to put in, with the reason, and tests/test_sibling_payloads_agree.py holds every excuse to still being true.",
+    "_what": "Payload shapes with MORE THAN ONE producer, and what each producer must therefore emit. Each payload above is checked against its own entry; nothing compared the two paths that make the same shape, so a key carried by one and dropped by the other was invisible at both ends. #1008 added alt_text_photo_paths to the generation path and the revision dropped it silently; it was caught only because Swift happened to read the key (#1023). `missing_in` excuses a key one producer legitimately has nothing to put in, naming the producer that LACKS it and why, and tests/test_sibling_payloads_agree.py holds every excuse to still being true. Which entries are in a group is no longer only a list somebody wrote: any two entries whose declared keys overlap by half or more must be grouped here or declared under `_unrelated` (#1357).",
     "a day caption": {
       "_what": "What a day's caption panel reads, however it was produced.",
       "payloads": [
         "day_caption",
         "revised_caption"
       ],
-      "only_in": {
+      "missing_in": {
         "skipped_photos": {
-          "payload": "day_caption",
+          "payload": "revised_caption",
           "why": "The photographs too large or unsupported to upload, decided by partition_uploadable when the photos are STAGED. A revision works from an existing caption and stages nothing, so it has none to report rather than having lost them."
         }
       }
     },
     "a blog post": {
-      "_what": "What the blog panel reads, however it was produced.",
+      "_what": "What the blog panel reads, however it was produced: written, revised, or rewritten around a different set of photographs.",
       "payloads": [
         "blog_output",
-        "revised_blog"
+        "revised_blog",
+        "swapped_blog"
       ],
-      "only_in": {}
+      "only_in": {},
+      "missing_in": {
+        "title": {
+          "payload": "swapped_blog",
+          "why": "A swap rewrites the prose around different photographs and keeps the post it was given. CaptionWorkManager merges the swap into the blog already on the event rather than decoding a fresh one, so the title it holds is carried forward and sending one back would be a second answer to a question nobody asked (#1357)."
+        }
+      }
+    },
+    "a performer": {
+      "_what": "One performer, however the app learned about them: read off the printed programme, or off the event's own web page.",
+      "payloads": [
+        "ocr_performer",
+        "web_performers"
+      ],
+      "missing_in": {}
     }
+  },
+  "_unrelated": {
+    "_what": "Pairs whose declared keys overlap enough for #1357's sweep to ask, and which are NOT one shape produced twice. Each says why, because a pair left undeclared and a pair declared with no reason read the same from here.",
+    "pairs": [
+      {
+        "payloads": [
+          "piece_notes",
+          "program_piece"
+        ],
+        "why": "A programme note LOOKED UP for a work, against a piece READ OFF the printed programme. They share the words that name a work, which is why they overlap, and nothing else: one carries the movements printed in the programme, the other carries notes fetched from the web, and they decode into different Swift types with different readers."
+      },
+      {
+        "payloads": [
+          "media_result",
+          "week_result"
+        ],
+        "why": "Both are keyed by day with errors and warnings beside them, which is the shape every whole-week result takes, but one holds rendered GRAPHICS per day and the other holds CAPTIONS and the blog. A day's value in one is a list of image paths and in the other a caption object, so the readers cannot be interchanged."
+      }
+    ]
   }
 }
