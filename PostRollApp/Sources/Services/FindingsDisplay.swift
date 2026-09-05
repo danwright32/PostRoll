@@ -38,6 +38,33 @@ enum FindingsDisplay {
         var state: RepairState { RepairState(raw: repair) }
     }
 
+    /// What a cleared finding is remembered by (#958).
+    ///
+    /// The code and the quoted text, because that pair is what Dan judged: the
+    /// same rule against a different quote is a different finding, and the
+    /// position in the list is not a key at all, since one fix reorders the
+    /// rest.
+    ///
+    /// It deliberately does NOT survive a regeneration, and nothing here has to
+    /// remember that: `applyFindings` drops every clearance when it attaches a
+    /// fresh set, so a regenerated caption is judged again from nothing (L15).
+    static func key(for finding: QualityFinding) -> String {
+        "\(finding.code)|\(finding.detail)"
+    }
+
+    /// The findings still worth showing: everything Dan has not cleared.
+    ///
+    /// Filtered here rather than deleted from the stored list, so the record of
+    /// what the checks found survives a clearance and the panel is the only
+    /// thing that changes (L116: a preference filters what is shown, it does
+    /// not delete the data behind it).
+    static func remaining(findings: [QualityFinding],
+                          cleared: [String]) -> [QualityFinding] {
+        guard !cleared.isEmpty else { return findings }
+        let gone = Set(cleared)
+        return findings.filter { !gone.contains(key(for: $0)) }
+    }
+
     /// True once the text no longer matches what the checks actually ran on.
     ///
     /// An empty `checked` is not evidence of an edit: anything saved before the
@@ -140,8 +167,14 @@ extension BlogOutput {
         FindingsDisplay.isStale(checked: findingsBody, current: body)
     }
 
+    /// The findings still on the panel: what the checks found, less what Dan
+    /// has cleared (#958).
+    var openFindings: [QualityFinding] {
+        FindingsDisplay.remaining(findings: findings, cleared: clearedFindings)
+    }
+
     var findingsSummary: String? {
-        FindingsDisplay.summary(count: findings.count, stale: findingsAreStale,
+        FindingsDisplay.summary(count: openFindings.count, stale: findingsAreStale,
                                 subject: "draft")
     }
 }
@@ -153,8 +186,14 @@ extension DayCaption {
         FindingsDisplay.isStale(checked: findingsCaption, current: caption)
     }
 
+    /// The findings still on the panel: what the checks found, less what Dan
+    /// has cleared (#958).
+    var openFindings: [QualityFinding] {
+        FindingsDisplay.remaining(findings: findings, cleared: clearedFindings)
+    }
+
     var findingsSummary: String? {
-        FindingsDisplay.summary(count: findings.count, stale: findingsAreStale,
+        FindingsDisplay.summary(count: openFindings.count, stale: findingsAreStale,
                                 subject: "caption")
     }
 }

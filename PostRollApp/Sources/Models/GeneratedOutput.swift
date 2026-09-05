@@ -48,12 +48,44 @@ struct DayCaption: Codable, Hashable {
         case sceneLabels      = "scene_labels"
         case generatedCaption = "generated_caption"
         case findingsCaption  = "findings_caption"
+        //: Written by the app, never by Python: it is Dan's judgement about a
+        //: finding, not part of the payload that produced it (#958).
+        case clearedFindings  = "cleared_findings"
     }
 
     /// Attach findings from a Python run, pinning the caption they describe.
+    /// The checks Dan has cleared, by `FindingsDisplay.key` (#958).
+    ///
+    /// A check that was right and has been acted on used to have nowhere to go:
+    /// the panel went stale, which says the text moved rather than that the
+    /// finding was dealt with, and it went on naming a handle he had already
+    /// removed. That is the "trains him to ignore the panel" failure the stale
+    /// wording itself was written to avoid.
+    ///
+    /// The findings themselves are kept, so the record of what the checks
+    /// found survives; only the panel changes (L116). Emptied by
+    /// `applyFindings`, because a fresh set of findings is a fresh judgement
+    /// and a clearance recorded against generated text must not outlive that
+    /// text.
+    var clearedFindings: [String] = []
+
     mutating func applyFindings(_ found: [QualityFinding], checkedCaption: String) {
         findings = found
         findingsCaption = checkedCaption
+        clearedFindings = []
+    }
+
+    /// Take one finding off the panel, however Dan judged it (#958).
+    ///
+    /// Handled and dismissed do the same thing here and record nothing about
+    /// which it was. Dan's call on 2026-08-29, shown the trade that asking why
+    /// would let a noisy check type be counted as noisy: he chose the simpler
+    /// control. Nothing in the app can tell a check that was wrong from one he
+    /// chose not to act on, and getting that number later needs this control
+    /// changed, not a query.
+    mutating func clearFinding(_ key: String) {
+        guard !clearedFindings.contains(key) else { return }
+        clearedFindings.append(key)
     }
 
     /// Caption + hashtags as a ready-to-paste string.
@@ -393,12 +425,36 @@ struct BlogOutput: Codable, Hashable {
         case findingsBody  = "findings_body"
         case photoStamps   = "photo_stamps"
         case repairPass    = "repair_pass"
+        //: The app's own, as on DayCaption (#958).
+        case clearedFindings = "cleared_findings"
     }
 
     /// Attach findings from a Python run, pinning the body they describe.
+    /// The checks Dan has cleared, by `FindingsDisplay.key` (#958).
+    ///
+    /// A check that was right and has been acted on used to have nowhere to go:
+    /// the panel went stale, which says the text moved rather than that the
+    /// finding was dealt with, and it went on naming a handle he had already
+    /// removed. That is the "trains him to ignore the panel" failure the stale
+    /// wording itself was written to avoid.
+    ///
+    /// The findings themselves are kept, so the record of what the checks
+    /// found survives; only the panel changes (L116). Emptied by
+    /// `applyFindings`, because a fresh set of findings is a fresh judgement
+    /// and a clearance recorded against generated text must not outlive that
+    /// text.
+    var clearedFindings: [String] = []
+
     mutating func applyFindings(_ found: [QualityFinding], checkedBody: String) {
         findings = found
         findingsBody = checkedBody
+        clearedFindings = []
+    }
+
+    /// Take one finding off the panel (#958). See `DayCaption.clearFinding`.
+    mutating func clearFinding(_ key: String) {
+        guard !clearedFindings.contains(key) else { return }
+        clearedFindings.append(key)
     }
 
     var wasEdited: Bool {
@@ -559,6 +615,7 @@ extension DayCaption {
         generatedCaption = try c.decodeIfPresent(String.self,    forKey: .generatedCaption) ?? ""
         findings         = try c.decodeIfPresent([QualityFinding].self, forKey: .findings)  ?? []
         findingsCaption  = try c.decodeIfPresent(String.self,    forKey: .findingsCaption)  ?? ""
+        clearedFindings  = try c.decodeIfPresent([String].self,  forKey: .clearedFindings)  ?? []
     }
 }
 
@@ -578,6 +635,8 @@ extension BlogOutput {
         repairPass    = try c.decodeIfPresent(RepairPassSummary.self,
                                               forKey: .repairPass)
             ?? RepairPassSummary()
+        clearedFindings = try c.decodeIfPresent([String].self,
+                                                forKey: .clearedFindings) ?? []
     }
 }
 

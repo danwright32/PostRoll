@@ -194,9 +194,10 @@ struct BlogSection: View {
 
             if let summary = blog.findingsSummary {
                 FindingsPanel(summary: summary,
-                              findings: blog.findings,
+                              findings: blog.openFindings,
                               isStale: blog.findingsAreStale,
-                              subject: "draft")
+                              subject: "draft",
+                              onClear: { blog.clearFinding($0) })
             }
         }
     }
