@@ -168,6 +168,7 @@
     "test_markers_are_not_prose.py": 0.0,
     "test_measure_blog_calls.py": 0.0,
     "test_measure_clip_reel_encodes.py": 0.0,
+    "test_measure_repair_rates.py": 0.01,
     "test_measure_thursday_alt_text.py": 0.0,
     "test_media_design_fingerprint.py": 5.5,
     "test_media_design_version.py": 1.3,
@@ -234,6 +235,7 @@
     "test_resolve_reel_audio.py": 0.0,
     "test_revise_caption_backstops.py": 0.0,
     "test_safe_area_tokens.py": 0.02,
+    "test_same_measurement.py": 0.18,
     "test_say_when_ci_goes_red.py": 0.0,
     "test_scene_labels_stay_in_step.py": 1.03,
     "test_screen_reel_logo_contrast.py": 0.0,
@@ -963,6 +965,10 @@
       "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
     },
+    "test_measure_repair_rates.py": {
+      "run": "partial-2026-09-05T16:53Z",
+      "scale": 1.014
+    },
     "test_measure_thursday_alt_text.py": {
       "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
@@ -1226,6 +1232,10 @@
     "test_safe_area_tokens.py": {
       "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
+    },
+    "test_same_measurement.py": {
+      "run": "partial-2026-09-05T16:53Z",
+      "scale": 1.014
     },
     "test_say_when_ci_goes_red.py": {
       "run": "full-2026-09-05T02:25Z",
