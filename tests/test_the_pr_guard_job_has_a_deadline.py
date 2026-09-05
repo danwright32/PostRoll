@@ -22,11 +22,23 @@ from __future__ import annotations
 import json
 import re
 import statistics
+import subprocess
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+from tools import measure_changed_job as measure  # noqa: E402
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "guards.yml"
 RECORD = REPO_ROOT / "tests" / "fixtures" / "changed_job_timing.json"
+
+#: A run proving this many entries or more is a WIDE one, which is the case the
+#: deadline exists for (#1351). The issue's own boundary, and it is also where
+#: the readings stop being setup: every reading under five sits in the first
+#: minute.
+WIDE_AT = 5
+#: Below this the p90 the deadline is chosen against is a single reading.
+FEWEST_WIDE = 10
 
 
 def measured() -> dict:
@@ -74,6 +86,31 @@ def percentile(seconds: list[int], share: float) -> int:
     return ordered[min(len(ordered) - 1, int(share * len(ordered)))]
 
 
+def working_seconds() -> list[int]:
+    """The readings of runs that actually PROVED something (#1351).
+
+    A run the diff affected no entry of returns in setup time and its duration
+    measures the runner rather than the job: measured on 2026-09-05, 15 of 94
+    readings proved nothing, and those 15 have a median of 43s against 75s for
+    the rest. Counting them drags every percentile below down, and a run that
+    did no work is indistinguishable from a genuinely fast one once only its
+    duration is kept (L331).
+    """
+    found = measured()
+    readings = found.get("readings")
+    assert readings, (
+        "the record holds no per-reading entry counts, so nothing can tell a "
+        "run that proved 40 guards from one that proved none, and the "
+        "percentiles below are over a sample nobody can describe. Re-measure "
+        f"with `{found.get('re_measure_with', 'tools/measure_changed_job.py')} "
+        "--write`.")
+    working = [int(r["seconds"]) for r in readings if r.get("entries")]
+    assert working, (
+        "every reading in the record proved nothing, so the sample measures "
+        "the runner's setup and not this job at all")
+    return working
+
+
 # ── the deadline is wired, and it is the record's number ─────────────────────
 
 def test_the_changed_job_passes_a_deadline():
@@ -117,7 +154,7 @@ def test_the_deadline_is_well_under_the_job_s_own_cap():
 
 def test_the_deadline_does_not_fire_on_an_ordinary_run():
     """A check that fires on ordinary runs is one that gets turned off (L36)."""
-    seconds = measured()["seconds"]
+    seconds = working_seconds()
     p75 = percentile(seconds, 0.75)
     assert declared_deadline() > p75, (
         f"the deadline is {declared_deadline()}s and three runs in four finish "
@@ -129,7 +166,7 @@ def test_the_deadline_can_actually_fire():
 
     The runs above it are the 15 to 36 minute ones this issue is about.
     """
-    seconds = measured()["seconds"]
+    seconds = working_seconds()
     over = [s for s in seconds if s >= declared_deadline()]
     assert over, (
         f"no recorded run of this job reached {declared_deadline()}s, so the "
@@ -149,7 +186,7 @@ def test_the_deadline_is_not_inside_the_dense_middle():
     be further away than the median run is long.
     """
     deadline = declared_deadline()
-    seconds = sorted(measured()["seconds"])
+    seconds = sorted(working_seconds())
     below = max((s for s in seconds if s < deadline), default=0)
     above = min((s for s in seconds if s >= deadline), default=deadline * 10)
     gap = above - below
@@ -157,3 +194,176 @@ def test_the_deadline_is_not_inside_the_dense_middle():
         f"the deadline at {deadline}s sits between recorded runs of {below}s and "
         f"{above}s, a gap of {gap}s, which is narrower than the median run "
         f"({statistics.median(seconds):.0f}s). Pick a number in a real gap.")
+
+
+# ── the sample says what it is made of (#1351) ───────────────────────────────
+
+def test_every_reading_says_how_many_entries_that_run_proved():
+    """A sample skewed toward changes that touch little Swift reads exactly like
+    a representative one, and the record used to carry that as a sentence
+    somebody wrote, which nothing checks and nothing expires (L27, L316)."""
+    readings = measured().get("readings")
+    assert readings, "the record carries no readings, so its composition is prose"
+    for reading in readings:
+        assert "seconds" in reading and "entries" in reading, (
+            f"a reading with no entry count at all: {reading}. Unreadable is "
+            "recorded as null, which is a different thing from missing.")
+
+
+def test_the_sample_holds_enough_wide_runs_to_size_a_tail_from():
+    """The deadline exists for the wide diffs, so a sample of narrow ones cannot
+    justify it however many readings it has.
+
+    Ten, because below that the p90 the deadline is chosen against IS a single
+    reading, and one reading is a story rather than a distribution. Measured on
+    2026-09-05: 60 of 94 readings proved five entries or more.
+    """
+    readings = measured()["readings"]
+    wide = [r for r in readings if (r.get("entries") or 0) >= WIDE_AT]
+    assert len(wide) >= FEWEST_WIDE, (
+        f"only {len(wide)} of {len(readings)} readings proved {WIDE_AT} entries "
+        f"or more, which is fewer than the {FEWEST_WIDE} it takes for the tail "
+        "to be a distribution rather than one run. The deadline is about wide "
+        "diffs, so re-measure after a stretch of app work rather than "
+        "justifying it from this.")
+
+
+def test_the_run_at_or_over_the_deadline_is_a_wide_one():
+    """What the deadline is FOR, asserted rather than assumed. A narrow diff
+    taking longer than the deadline would mean the cost is not where this
+    thinks it is, and the number was chosen against the wrong variable (L209).
+    """
+    readings = measured()["readings"]
+    slow = [r for r in readings if int(r["seconds"]) >= declared_deadline()]
+    assert slow, "no reading reaches the deadline, which the rule above covers"
+    narrow = [r for r in slow if r.get("entries") is not None
+              and r["entries"] < WIDE_AT]
+    assert not narrow, (
+        f"these runs reached the deadline while proving fewer than {WIDE_AT} "
+        f"entries: {narrow}. The deadline is sized on how much a run proves, so "
+        "either the cost is not in the entries or one of these was starved by "
+        "the runner.")
+
+
+# ── the recorder that fills it (#1351) ──────────────────────────────────────
+
+
+class FakeRuns:
+    """The two API calls the recorder makes, from replies shaped like GitHub's."""
+
+    def __init__(self, jobs: list[dict]) -> None:
+        self.jobs = jobs
+
+    def __call__(self, path: str) -> dict:
+        if "/actions/workflows/" in path:
+            return {"workflow_runs": [{"id": 1}]}
+        return {"jobs": self.jobs}
+
+
+def a_job(job_id: int, seconds: int, *, name: str = "changed",
+          conclusion: str = "success") -> dict:
+    return {"id": job_id, "name": name, "conclusion": conclusion,
+            "started_at": "2026-09-05T00:00:00Z",
+            "completed_at": f"2026-09-05T00:{seconds // 60:02d}:{seconds % 60:02d}Z"}
+
+
+def test_a_reading_carries_how_many_entries_that_run_proved():
+    found = measure.readings(
+        ask=FakeRuns([a_job(7, 300)]),
+        log=lambda _id: "--changed: 34 of 645 entries affected by the diff")
+
+    assert [(r.seconds, r.entries) for r in found] == [(300, 34)]
+
+
+def test_a_log_that_cannot_be_read_records_nothing_rather_than_zero():
+    """GitHub keeps job logs for 90 days. A run whose log has aged out is a run
+    nobody can describe, and recording it as having proved none of them would
+    count the retention window as evidence about the work (L11)."""
+    found = measure.readings(ask=FakeRuns([a_job(7, 300)]), log=lambda _id: None)
+
+    assert found[0].entries is None
+
+
+def test_a_run_that_proved_nothing_is_a_measured_zero():
+    """Said in so many words by the job itself, so it is a reading rather than
+    an absence: these are the ones that return in setup time."""
+    found = measure.readings(
+        ask=FakeRuns([a_job(7, 43)]),
+        log=lambda _id: "no registered guard is affected by this diff, so "
+                        "nothing was verified")
+
+    assert found[0].entries == 0
+
+
+def test_the_composition_counts_the_four_kinds_apart():
+    """One percentage would hide which of them moved."""
+    made_of = measure.composition([
+        measure.Reading(seconds=43, entries=0),
+        measure.Reading(seconds=90, entries=2),
+        measure.Reading(seconds=800, entries=34),
+        measure.Reading(seconds=120, entries=None),
+    ], wide_at=WIDE_AT)
+
+    assert made_of["proved_nothing"] == 1
+    assert made_of["narrow"] == 1
+    assert made_of["wide"] == 1
+    assert made_of["unreadable"] == 1
+
+
+def test_a_job_that_is_not_this_one_is_not_a_reading():
+    found = measure.readings(
+        ask=FakeRuns([a_job(7, 300, name="full"), a_job(8, 60)]),
+        log=lambda _id: "--changed: 6 of 645 entries affected")
+
+    assert [(r.seconds, r.entries) for r in found] == [(60, 6)]
+
+
+def test_a_run_that_was_cancelled_is_not_a_reading():
+    """Its duration measures when somebody pushed again (L331)."""
+    found = measure.readings(
+        ask=FakeRuns([a_job(7, 300, conclusion="cancelled"), a_job(8, 60)]),
+        log=lambda _id: "--changed: 6 of 645 entries affected")
+
+    assert [r.seconds for r in found] == [60]
+
+
+class FakePytest:
+    """Stands in for the run of the deadline rules, recording what it was told
+    to run."""
+
+    def __init__(self, *, code: int, output: str = "") -> None:
+        self.code = code
+        self.output = output
+        self.ran: list[list[str]] = []
+
+    def __call__(self, argv, **_kwargs):
+        self.ran.append(list(argv))
+        return subprocess.CompletedProcess(argv, self.code, self.output, "")
+
+
+def test_a_green_run_of_the_rules_names_nothing():
+    assert measure.deadline_rules_failing(run=FakePytest(code=0)) == []
+
+
+def test_the_rules_that_failed_are_named_one_by_one():
+    """The point of running them: the re-measure says what work it created,
+    rather than printing a warning to go and look."""
+    output = ("FAILED tests/test_the_pr_guard_job_has_a_deadline.py::"
+              "test_the_deadline_can_actually_fire - assert 0\n"
+              "FAILED tests/test_the_pr_guard_job_has_a_deadline.py::"
+              "test_the_deadline_is_not_inside_the_dense_middle - assert 12\n")
+
+    assert measure.deadline_rules_failing(run=FakePytest(code=1, output=output)) == [
+        "test_the_deadline_can_actually_fire",
+        "test_the_deadline_is_not_inside_the_dense_middle",
+    ]
+
+
+def test_a_run_that_failed_without_naming_a_test_says_so_rather_than_nothing():
+    """A collection error exits non zero and names no test. Reporting that as
+    an empty list would read as the rules passing, which is the one thing it
+    does not mean (L98)."""
+    named = measure.deadline_rules_failing(run=FakePytest(code=2, output="ERROR"))
+
+    assert len(named) == 1
+    assert "run it yourself" in named[0]

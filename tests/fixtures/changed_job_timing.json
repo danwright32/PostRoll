@@ -1,26 +1,31 @@
 {
   "job": "Guard proofs / changed",
   "measured_on": "2026-09-04",
-  "runs": 95,
+  "runs": 94,
   "seconds": [
     29,
+    33,
     36,
-    37,
-    38,
+    39,
     40,
     41,
     41,
     41,
+    41,
     42,
     42,
     42,
     42,
+    43,
     44,
     44,
     44,
     44,
     44,
     44,
+    44,
+    44,
+    45,
     45,
     46,
     47,
@@ -31,27 +36,25 @@
     48,
     49,
     49,
-    49,
     50,
+    50,
+    51,
     52,
-    52,
-    53,
     53,
     53,
     53,
     54,
     54,
-    55,
     55,
     55,
     55,
     57,
     58,
     60,
-    60,
+    62,
     63,
-    63,
-    63,
+    66,
+    66,
     67,
     74,
     75,
@@ -63,6 +66,8 @@
     179,
     184,
     189,
+    193,
+    200,
     205,
     206,
     209,
@@ -83,25 +88,404 @@
     457,
     494,
     504,
-    560,
     573,
     622,
-    637,
-    715,
+    714,
     756,
     757,
     793,
     869,
-    876,
     882,
-    915,
-    917,
-    933,
-    961
+    915
   ],
   "deadline_seconds": 850,
   "what_expired": "Twice now. #1086 chose 900 against a 165s median and 393s p90 over 28 runs; by 2026-08-31 the p90 over 69 runs was 884s, more than double, and 900 was re-justified against that. On 2026-09-04 the job had got FASTER, not slower: median 174s to 63s and worst 2,182s to 961s, because #1096 moved the app build out of the per-entry cost. 900 then sat inside the dense middle and the guard said so. Read the caveat below before treating these numbers as the steady state.",
   "re_measure_with": "venv/bin/python tools/measure_changed_job.py",
-  "why_850": "Chosen from where the distribution actually is, not picked round (L172). Over 95 runs: median 63s, p75 349s, p90 756s, worst 961s. There is a real gap between 793s and 869s and 850 sits in it, so the deadline is not inside the dense middle where a small shift carries many runs across at once. Seven runs are at or over it, 7%, so it is a tail rather than ordinary operation. Setup is measured at 24s median and 31s at worst, so 850 leaves 950s of headroom under the job's 1,800s cap and the deadline is comfortably what fires.",
-  "caveat": "These 95 runs are weighted toward changes that touch little Swift, because the work in the days before 2026-09-04 was mostly Python and CI tooling. A wide Swift diff is exactly the case this deadline is about and is under-represented here, so re-measure after a stretch of app work rather than assuming the tail has really shrunk (L354)."
+  "why_850": "Chosen from where the distribution actually is, not picked round (L172), and from the runs that PROVED SOMETHING rather than all of them (#1351): 15 of the 94 readings proved no entry at all and returned in setup time, with a median of 43s, so counting them measures the runner rather than the job (L331). Over the 79 that did work: median 75s, p75 301s, p90 622s, worst 915s. There is a real gap between 793s and 869s and 850 sits in it, so the deadline is not inside the dense middle where a small shift carries many runs across at once. Three of the 79 are at or over it, 4%, so it is a tail rather than ordinary operation. Setup is measured at 24s median and 31s at worst, so 850 leaves 950s of headroom under the job's 1,800s cap and the deadline is comfortably what fires. The gap it sits in is 76s against a 75s median, which clears the dense middle rule by one second: this is the widest gap the readings offer near the deadline, so a re-measure that fails that rule wants a new number rather than a wider gap.",
+  "caveat": "The sample is described rather than guessed at since #1351: 60 of the 94 readings proved five entries or more, 19 proved between one and four, 15 proved none, and none was unreadable. The wide runs are the case this deadline exists for and every reading at or over it proves at least 23 entries, so the tail is made of the right runs. What the readings cannot say is whether a wide diff today costs what a wide diff cost in August: #1096 moved the app build out of the per entry cost between the two measurements, so comparing this sample with the one before it compares two different jobs (L354, L323).",
+  "readings": [
+    {
+      "seconds": 29,
+      "entries": 0
+    },
+    {
+      "seconds": 33,
+      "entries": 2
+    },
+    {
+      "seconds": 36,
+      "entries": 0
+    },
+    {
+      "seconds": 39,
+      "entries": 11
+    },
+    {
+      "seconds": 40,
+      "entries": 0
+    },
+    {
+      "seconds": 41,
+      "entries": 8
+    },
+    {
+      "seconds": 41,
+      "entries": 0
+    },
+    {
+      "seconds": 41,
+      "entries": 0
+    },
+    {
+      "seconds": 41,
+      "entries": 1
+    },
+    {
+      "seconds": 42,
+      "entries": 5
+    },
+    {
+      "seconds": 42,
+      "entries": 0
+    },
+    {
+      "seconds": 42,
+      "entries": 0
+    },
+    {
+      "seconds": 42,
+      "entries": 1
+    },
+    {
+      "seconds": 43,
+      "entries": 0
+    },
+    {
+      "seconds": 44,
+      "entries": 1
+    },
+    {
+      "seconds": 44,
+      "entries": 21
+    },
+    {
+      "seconds": 44,
+      "entries": 5
+    },
+    {
+      "seconds": 44,
+      "entries": 0
+    },
+    {
+      "seconds": 44,
+      "entries": 0
+    },
+    {
+      "seconds": 44,
+      "entries": 3
+    },
+    {
+      "seconds": 44,
+      "entries": 0
+    },
+    {
+      "seconds": 44,
+      "entries": 0
+    },
+    {
+      "seconds": 45,
+      "entries": 2
+    },
+    {
+      "seconds": 45,
+      "entries": 0
+    },
+    {
+      "seconds": 46,
+      "entries": 22
+    },
+    {
+      "seconds": 47,
+      "entries": 10
+    },
+    {
+      "seconds": 47,
+      "entries": 5
+    },
+    {
+      "seconds": 47,
+      "entries": 0
+    },
+    {
+      "seconds": 47,
+      "entries": 0
+    },
+    {
+      "seconds": 47,
+      "entries": 16
+    },
+    {
+      "seconds": 48,
+      "entries": 10
+    },
+    {
+      "seconds": 49,
+      "entries": 13
+    },
+    {
+      "seconds": 49,
+      "entries": 43
+    },
+    {
+      "seconds": 50,
+      "entries": 20
+    },
+    {
+      "seconds": 50,
+      "entries": 5
+    },
+    {
+      "seconds": 51,
+      "entries": 1
+    },
+    {
+      "seconds": 52,
+      "entries": 27
+    },
+    {
+      "seconds": 53,
+      "entries": 2
+    },
+    {
+      "seconds": 53,
+      "entries": 8
+    },
+    {
+      "seconds": 53,
+      "entries": 14
+    },
+    {
+      "seconds": 54,
+      "entries": 22
+    },
+    {
+      "seconds": 54,
+      "entries": 11
+    },
+    {
+      "seconds": 55,
+      "entries": 3
+    },
+    {
+      "seconds": 55,
+      "entries": 18
+    },
+    {
+      "seconds": 55,
+      "entries": 9
+    },
+    {
+      "seconds": 57,
+      "entries": 7
+    },
+    {
+      "seconds": 58,
+      "entries": 11
+    },
+    {
+      "seconds": 60,
+      "entries": 10
+    },
+    {
+      "seconds": 62,
+      "entries": 10
+    },
+    {
+      "seconds": 63,
+      "entries": 39
+    },
+    {
+      "seconds": 66,
+      "entries": 13
+    },
+    {
+      "seconds": 66,
+      "entries": 19
+    },
+    {
+      "seconds": 67,
+      "entries": 2
+    },
+    {
+      "seconds": 74,
+      "entries": 34
+    },
+    {
+      "seconds": 75,
+      "entries": 43
+    },
+    {
+      "seconds": 76,
+      "entries": 39
+    },
+    {
+      "seconds": 77,
+      "entries": 16
+    },
+    {
+      "seconds": 83,
+      "entries": 55
+    },
+    {
+      "seconds": 90,
+      "entries": 55
+    },
+    {
+      "seconds": 162,
+      "entries": 24
+    },
+    {
+      "seconds": 179,
+      "entries": 7
+    },
+    {
+      "seconds": 184,
+      "entries": 1
+    },
+    {
+      "seconds": 189,
+      "entries": 4
+    },
+    {
+      "seconds": 193,
+      "entries": 4
+    },
+    {
+      "seconds": 200,
+      "entries": 4
+    },
+    {
+      "seconds": 205,
+      "entries": 4
+    },
+    {
+      "seconds": 206,
+      "entries": 7
+    },
+    {
+      "seconds": 209,
+      "entries": 6
+    },
+    {
+      "seconds": 211,
+      "entries": 4
+    },
+    {
+      "seconds": 221,
+      "entries": 6
+    },
+    {
+      "seconds": 228,
+      "entries": 4
+    },
+    {
+      "seconds": 244,
+      "entries": 4
+    },
+    {
+      "seconds": 275,
+      "entries": 11
+    },
+    {
+      "seconds": 299,
+      "entries": 11
+    },
+    {
+      "seconds": 301,
+      "entries": 4
+    },
+    {
+      "seconds": 319,
+      "entries": 5
+    },
+    {
+      "seconds": 349,
+      "entries": 6
+    },
+    {
+      "seconds": 354,
+      "entries": 6
+    },
+    {
+      "seconds": 370,
+      "entries": 7
+    },
+    {
+      "seconds": 409,
+      "entries": 13
+    },
+    {
+      "seconds": 412,
+      "entries": 11
+    },
+    {
+      "seconds": 418,
+      "entries": 10
+    },
+    {
+      "seconds": 457,
+      "entries": 12
+    },
+    {
+      "seconds": 494,
+      "entries": 19
+    },
+    {
+      "seconds": 504,
+      "entries": 16
+    },
+    {
+      "seconds": 573,
+      "entries": 17
+    },
+    {
+      "seconds": 622,
+      "entries": 14
+    },
+    {
+      "seconds": 714,
+      "entries": 36
+    },
+    {
+      "seconds": 756,
+      "entries": 18
+    },
+    {
+      "seconds": 757,
+      "entries": 42
+    },
+    {
+      "seconds": 793,
+      "entries": 21
+    },
+    {
+      "seconds": 869,
+      "entries": 23
+    },
+    {
+      "seconds": 882,
+      "entries": 23
+    },
+    {
+      "seconds": 915,
+      "entries": 38
+    }
+  ],
+  "composition": {
+    "wide_at": 5,
+    "proved_nothing": 15,
+    "narrow": 19,
+    "wide": 60,
+    "unreadable": 0
+  }
 }

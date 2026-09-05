@@ -1,0 +1,8 @@
+{
+  "name": "a-failed-rules-run-that-named-nothing-is-not-a-pass",
+  "file": "tools/measure_changed_job.py",
+  "find": "    return failing or [f\"pytest exited {done.returncode} and named no test, so \"\n                       \"nothing here can say which rule moved; run it yourself: \"\n                       f\"pytest {DEADLINE_RULES.name}\"]",
+  "replace": "    return failing",
+  "test": "tests/test_the_pr_guard_job_has_a_deadline.py::test_a_run_that_failed_without_naming_a_test_says_so_rather_than_nothing",
+  "breaks": "a run of the deadline rules that failed to collect at all reports as no rules failing, so a re-measure that could not judge the deadline reads exactly like one that judged it and found it fine (#1351, L98)"
+}
