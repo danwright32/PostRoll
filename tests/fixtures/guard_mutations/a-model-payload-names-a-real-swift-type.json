@@ -1,8 +1,8 @@
 {
   "name": "a-model-payload-names-a-real-swift-type",
   "file": "tests/fixtures/bridge_payload_contract.json",
-  "find": "      \"type\": \"QualityFinding\"",
+  "find": "      \"type\": \"WeekGenerationResult\"",
   "replace": "      \"type\": \"NoSuchTypeAnywhere\"",
   "test": "tests/test_bridge_payload_contract.py::test_every_payload_names_a_swift_side_that_exists",
-  "breaks": "a `model` payload can name a Swift type that does not exist, so every key it declares is proved against nothing. That was the live state: blog_finding pointed at `BlogFinding` from the day it was written and the real type is `QualityFinding`. Nothing caught it because only the `reader` branch resolved anything, which is a check that reads as covering a thing it never touches (#1132, L96)"
+  "breaks": "a `model` payload can name a Swift type that does not exist, so every key it declares is proved against nothing. That was the live state: blog_finding pointed at `BlogFinding` from the day it was written and the real type is `QualityFinding`. Nothing caught it because only the `reader` branch resolved anything, which is a check that reads as covering a thing it never touches (#1132, L96). The anchor moved off QualityFinding in #1156, which gave caption findings their own entry naming the same type, so that line stopped naming one place"
 }
