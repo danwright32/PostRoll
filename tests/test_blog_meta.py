@@ -25,6 +25,10 @@ from pathlib import Path
 import pytest
 
 from postroll.blog_meta import (
+    SEO_TITLE_MAX_CHARS,
+    TitleTooLong,
+    check_title,
+    seo_title,
     SEO_MAX_CHARS,
     SEO_MIN_CHARS,
     DescriptionOutOfBand,
@@ -259,3 +263,75 @@ def test_the_shared_shoot_types_are_every_one_python_knows():
     assert set(_fixture()["shoot_types"]) == set(SHOOT_TYPE_LABELS), (
         "the shared list and Python's own map name different shoot types, so "
         "one of them is checking a set nobody uses")
+
+
+# ── the page title (#1368) ──────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize("vector", _vectors(), ids=lambda v: v["_what"])
+def test_python_title_satisfies_the_shared_contract(vector):
+    event = vector["event"]
+    assert seo_title(name=event["name"], org=event["org"],
+                     venue=event["venue"]) == vector["title"]
+
+
+@pytest.mark.parametrize("vector", _vectors(), ids=lambda v: v["_what"])
+def test_every_title_survives_a_search_result(vector):
+    """Google truncates around 60 characters, and a title cut there loses the
+    photographer, which is the half the page is trying to be found for."""
+    assert len(vector["title"]) <= SEO_TITLE_MAX_CHARS, (
+        f'{len(vector["title"])} characters: {vector["title"]!r}')
+
+
+@pytest.mark.parametrize("vector", _vectors(), ids=lambda v: v["_what"])
+def test_every_title_still_names_the_photographer(vector):
+    """The ladder drops the venue before the credit, because a page found
+    without the photographer's name on it is found for somebody else."""
+    assert "Dan Wright" in vector["title"]
+
+
+@pytest.mark.parametrize("vector", _vectors(), ids=lambda v: v["_what"])
+def test_no_banned_dash_survives_into_the_title(vector):
+    for dash in BANNED_DASHES:
+        assert dash not in vector["title"]
+
+
+def test_a_post_with_no_venue_reads_as_a_shorter_title_not_a_broken_one():
+    """A missing half must degrade, not leave a hole (L67)."""
+    assert seo_title(name="Winter Concert", org="Riverside Choral",
+                     venue="") == "Winter Concert | Dan Wright"
+
+
+def test_a_post_with_no_name_is_titled_by_its_organisation():
+    assert seo_title(name="", org="DCINY", venue="Carnegie Hall") \
+        == "DCINY at Carnegie Hall | Dan Wright"
+
+
+def test_a_post_with_nothing_but_the_photographer_still_has_a_title():
+    """Nothing to name is not nothing to publish. An empty title field is what
+    this feature exists to stop."""
+    assert seo_title(name="", org="", venue="") == "Dan Wright"
+
+
+def test_a_long_name_is_cut_at_a_word_boundary_rather_than_mid_word():
+    title = seo_title(
+        name="A Very Long Winter Program Of Choral Music Sung By Many People",
+        org="", venue="Carnegie Hall")
+
+    assert len(title) <= SEO_TITLE_MAX_CHARS
+    assert not title.split(" | ")[0].endswith(" ")
+    assert "Sung" in title or "Music" in title
+
+
+def test_a_title_over_the_ceiling_is_raised_rather_than_returned():
+    """The guard fails loud rather than handing back a string Squarespace will
+    cut where the characters run out (L12)."""
+    with pytest.raises(TitleTooLong):
+        check_title("x" * (SEO_TITLE_MAX_CHARS + 1))
+
+
+def test_the_title_guard_names_the_length_it_measured():
+    with pytest.raises(TitleTooLong) as raised:
+        check_title("y" * 90)
+
+    assert "90" in str(raised.value)

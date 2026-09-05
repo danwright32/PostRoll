@@ -1,0 +1,8 @@
+{
+  "name": "a-title-over-the-ceiling-is-refused",
+  "file": "postroll/blog_meta.py",
+  "find": "    if len(text) > SEO_TITLE_MAX_CHARS:\n        raise TitleTooLong(",
+  "replace": "    if False:\n        raise TitleTooLong(",
+  "test": "tests/test_blog_meta.py::test_a_title_over_the_ceiling_is_raised_rather_than_returned",
+  "breaks": "a page title longer than a search result shows is handed back rather than refused, so Squarespace cuts it where the character count runs out rather than where the sentence ends, and nothing inside the app shows that it happened (#1368, L12)"
+}

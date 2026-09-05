@@ -58,11 +58,79 @@ enum BlogMeta {
                        shootType: event.shootType.pythonValue)
     }
 
+    static func seoTitle(event: Event) -> String {
+        seoTitle(name: event.name, org: event.org, venue: event.venue)
+    }
+
     static func detailsBlock(event: Event) -> String {
         detailsBlock(name: event.name, org: event.org, venue: event.venue,
                      venueContext: event.venueContext, isoDate: event.isoDate,
                      shootType: event.shootType.pythonValue,
                      eventURL: event.eventURL)
+    }
+
+    /// What a search result actually shows. Google truncates around 60
+    /// characters and Squarespace accepts 100, so the useful ceiling is the
+    /// smaller one: a title cut by the search engine loses the photographer,
+    /// which is the half the page is trying to be found for (#1368).
+    static let seoTitleMaxChars = 60
+
+    /// The page title for one post, always inside the ceiling.
+    ///
+    /// Squarespace leaves this field empty by default and builds the page
+    /// title from the post title and the site's title format, and PostRoll's
+    /// post titles are shaped for the blog rather than for a search result: a
+    /// long venue name pushes the photographer and the event off the end.
+    ///
+    /// Three facts, in the order somebody searching would recognise them: what
+    /// the event was, where it was, and who photographed it. Shortened by a
+    /// declared ladder rather than a blind cut, so the venue goes before the
+    /// credit does and the name is cut last, at a word boundary.
+    ///
+    /// The organisation stands in for a missing event name rather than leaving
+    /// a hole, and a post with neither is still a correct shorter title rather
+    /// than a string with an empty half (L67).
+    ///
+    /// Mirrors `postroll/blog_meta.seo_title`; `tests/fixtures/blog_meta.json`
+    /// states every case once and both sides assert against it.
+    static func seoTitle(name: String, org: String, venue: String) -> String {
+        let name = clean(name)
+        let org = clean(org)
+        let venue = clean(venue)
+        let subject = name.isEmpty
+            ? orgWorthNaming(name: name, org: org, venue: venue) : name
+
+        let ladder: [(String, String, Bool)] = [
+            (subject, venue, true),
+            (subject, "", true),
+            (subject, venue, false),
+            (subject, "", false),
+        ]
+        for (trySubject, tryVenue, credited) in ladder {
+            let text = composeTitle(trySubject, tryVenue, credited)
+            if !text.isEmpty, text.count <= seoTitleMaxChars { return text }
+        }
+
+        // The subject itself is the problem, so it is cut to the budget the
+        // rest leaves, at a word boundary, and never mid word.
+        let fixed = composeTitle("", "", true).count
+        let budget = max(seoTitleMaxChars - fixed, 0)
+        var trimmed = String(subject.prefix(budget))
+        if trimmed.contains(" ") {
+            trimmed = String(trimmed[..<trimmed.range(of: " ", options: .backwards)!.lowerBound])
+        }
+        trimmed = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: " ,."))
+        return composeTitle(trimmed, "", true)
+    }
+
+    /// `Perpetual Light at Carnegie Hall | Dan Wright`, or whichever half is
+    /// there. Empty when there is nothing to name at all, which the caller
+    /// reads as this rung of the ladder not applying.
+    private static func composeTitle(_ subject: String, _ venue: String,
+                                     _ credited: Bool) -> String {
+        let left = [subject, venue].filter { !$0.isEmpty }.joined(separator: " at ")
+        guard !left.isEmpty else { return credited ? photographer : "" }
+        return credited ? "\(left) | \(photographer)" : left
     }
 
     // MARK: - The two strings
@@ -158,11 +226,21 @@ enum BlogMeta {
     /// same defect with a new field name.
     static func copyFields(event: Event) -> [CopyField] {
         [
+            CopyField(label: "SEO title",
+                      help: "Paste into the page's SEO title field",
+                      text: seoTitle(event: event)),
             CopyField(label: "SEO description",
                       help: "Paste into the page's SEO description field",
                       text: seoDescription(event: event)),
+            // Says where the block GOES, not where it must not (#1367). It
+            // read "Paste below the post, outside the post body", which is
+            // PostRoll's own constraint (the block stays out of `body` so it
+            // never enters the review passes) and has no referent in
+            // Squarespace, whose editor has one content area. Dan, pasting a
+            // post on 2026-09-04: "I'm not sure what to do with the details
+            // block."
             CopyField(label: "Details block",
-                      help: "Paste below the post, outside the post body",
+                      help: "Paste as its own text block at the end of the post",
                       text: detailsBlock(event: event)),
         ]
     }
