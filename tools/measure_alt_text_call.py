@@ -46,6 +46,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 REPO_ROOT = Path(__file__).resolve().parent.parent
 RECORD = REPO_ROOT / "tests" / "fixtures" / "alt_text_call_timing.json"
 
+#: How many calls one reading is. Each `--photo` run times exactly one, so 1 is
+#: the honest answer, and `runs: 1` is a fine one: what matters is that a reader
+#: can tell a single reading from a median of six (#1328).
+RUNS_PER_READING = 1
+
+#: Said by the tool that writes the record, because a hand edit here is lost.
+#:
+#: The count of `readings` is deliberately NOT offered as the sample size: the
+#: three recorded are three different photographs rather than three readings of
+#: one call, and a list's length standing in for a sample reports a number of
+#: the wrong thing, which is worse than reporting none (L11).
+SAMPLE_NOTE = ("Each reading is one call, so runs is 1 on every one of them. "
+               "The readings are different photographs rather than repeated "
+               "readings of one, so their count is not a sample size (#1328).")
+
 #: The prompt shape the repairer sends: one photograph, one marker, every
 #: finding for it, the venue, the performer names and the word band. Measured
 #: with the real shape rather than a stub, because what is being timed is an
@@ -98,6 +113,10 @@ def measure(photo: Path, *, timeout: int) -> dict:
         "photo_bytes": photo.stat().st_size,
         "answered": bool(isinstance(answer, dict) and answer.get("alt")),
         "words": len(str((answer or {}).get("alt", "")).split()),
+        # One call, timed once. Built with the reading rather than added to the
+        # file afterwards: this tool APPENDS, so a hand edit covers the readings
+        # already there and never the next one (L379, #1328).
+        "runs": RUNS_PER_READING,
     }
 
 
@@ -193,6 +212,7 @@ def main() -> int:
         "_what": "How long one alt text repair call takes with a photograph "
                  "attached (#1127). Written by tools/measure_alt_text_call.py; "
                  "the repair pass derives its per-call timeout from the summary.",
+        "_sample": SAMPLE_NOTE,
         "readings": readings,
     }, indent=2) + "\n", encoding="utf-8")
 

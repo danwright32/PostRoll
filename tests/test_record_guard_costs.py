@@ -348,3 +348,93 @@ def test_a_sweep_with_no_cold_reading_records_an_empty_list(tmp_path):
     record = tmp_path / "costs.json"
     main(["--from", str(a), "--record", str(record)])
     assert json.loads(record.read_text())["cold"] == []
+
+
+def _fixture_dir_and_readings(tmp_path):
+    """The record somewhere the sample guard can scan it alone.
+
+    The readings files are JSON too, and they are not fixtures. Written to a
+    separate directory so the guard scans the record and nothing else,
+    otherwise this passes or fails on files the tool under test only reads.
+    """
+    fixtures = tmp_path / "fixtures"
+    readings_dir = tmp_path / "readings"
+    fixtures.mkdir()
+    readings_dir.mkdir()
+    return fixtures, readings_dir
+
+
+def test_a_written_record_says_what_its_figures_were_measured_over(tmp_path):
+    """The sample size comes from the WRITER, never from a hand edit (#1328).
+
+    #1332 added `runs` and `_sample` to this fixture by hand and updated only
+    `tools/record_test_durations.py`. `write` rewrites the record whole, so the
+    next scheduled sweep dropped both and the guard went red on PR #1387, which
+    is exactly the failure L379 describes: doing by hand what a tool normally
+    does omits the tool's other writes.
+
+    Asserted by running the guard itself rather than by looking for the key,
+    because the invariant is that the two tools agree, and a check on a proxy
+    for that passes while they diverge (L63).
+    """
+    from tools import check_figures_say_their_sample as guard
+
+    fixtures, readings_dir = _fixture_dir_and_readings(tmp_path)
+    record = fixtures / "guard_entry_costs.json"
+
+    assert main(["--from", *[str(p) for p in whole_sweep(readings_dir)],
+                 "--record", str(record)]) == 0
+
+    assert guard.unsourced(root=fixtures) == [], (
+        "the sweep recorder wrote figures the repository's own sample guard "
+        "refuses, so the next scheduled recording cannot merge")
+
+
+def test_adding_a_later_run_keeps_the_record_saying_its_sample(tmp_path):
+    """`--add` rewrites the whole record too, so it is a second way to lose it.
+
+    The first version of this stamp lived in `_whole` alone, which is the mode
+    the scheduled job uses, and left `--add` writing an unsampled record. Both
+    paths go through `write`, so both are asserted here rather than the one
+    that happened to be reported (L173).
+    """
+    from tools import check_figures_say_their_sample as guard
+
+    fixtures, readings_dir = _fixture_dir_and_readings(tmp_path)
+    record = fixtures / "guard_entry_costs.json"
+    assert main(["--from", *[str(p) for p in whole_sweep(readings_dir)],
+                 "--record", str(record)]) == 0
+
+    later = readings(readings_dir, "later.json", "run-8",
+                     {"entry-1": 2.0, "brand-new": 5.0})
+    assert main(["--add", str(later), "--record", str(record)]) == 0
+
+    assert guard.unsourced(root=fixtures) == []
+
+
+def test_the_recorded_sample_note_does_not_claim_one_sweep_after_an_add(tmp_path):
+    """A note is read as a measurement, so it may only claim what is true (L210).
+
+    The hand written note said "Every figure here comes from ONE sweep, run
+    <id>". That is true of a `--from` record and false the moment `--add` folds
+    a second run in, and `measured` is where each reading's own run is already
+    recorded. So the note states the sample size, which holds in both modes,
+    and leaves naming the run to the field that does it per entry.
+    """
+    fixtures, readings_dir = _fixture_dir_and_readings(tmp_path)
+    record = fixtures / "guard_entry_costs.json"
+    assert main(["--from", *[str(p) for p in whole_sweep(readings_dir)],
+                 "--record", str(record)]) == 0
+    # Carrying entry-1, which the record already holds: `--add` scales a later
+    # run onto the record through the entries both measured, so a file sharing
+    # none is refused for having no reference.
+    later = readings(readings_dir, "later.json", "run-8",
+                     {"entry-1": 2.0, "brand-new": 5.0})
+    assert main(["--add", str(later), "--record", str(record)]) == 0
+
+    written = json.loads(record.read_text())
+    assert written["runs"] == 1
+    assert "run-7" not in written["_sample"], (
+        "the note names one run, which stopped being true when run-8 was added")
+    assert written["measured"]["brand-new"]["run"] == "run-8", (
+        "which run a reading came from is still recorded, per entry")
