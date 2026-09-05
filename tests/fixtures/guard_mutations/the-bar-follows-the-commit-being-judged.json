@@ -1,0 +1,8 @@
+{
+  "name": "the-bar-follows-the-commit-being-judged",
+  "file": "tools/wait_for_checks.py",
+  "find": "        if reading.head_sha != judged or not expected:",
+  "replace": "        if not expected:",
+  "test": "tests/test_wait_for_checks.py::test_the_bar_is_derived_again_when_the_head_moves",
+  "breaks": "a push landing mid wait is judged against the bar the PREVIOUS commit had, so a job added by that push is a check nobody waits for and the merge goes through without it (#1342)"
+}

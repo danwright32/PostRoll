@@ -57,6 +57,7 @@ go green, re-record. Adding one costs a knowingly red run to record from.
 
 from __future__ import annotations
 
+import base64
 import inspect
 import json
 import re
@@ -83,6 +84,7 @@ from tools.wait_for_checks import (
     base_standing,
     bucket_of,
     expected_checks,
+    expected_checks_at,
     main,
     merge_commit,
     parse_arguments,
@@ -97,6 +99,9 @@ WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 REAL_REPLY = REPO_ROOT / "tests" / "fixtures" / "gh_pr_checks_real.json"
 REAL_RUNS = REPO_ROOT / "tests" / "fixtures" / "gh_actions_runs_real.json"
 REAL_JOBS = REPO_ROOT / "tests" / "fixtures" / "gh_actions_jobs_real.json"
+#: The reply to `gh api repos/<repo>/contents/.github/workflows?ref=<sha>` at
+#: that same commit, pruned to the fields this reads (#1342).
+REAL_LISTING = REPO_ROOT / "tests" / "fixtures" / "gh_workflow_listing_real.json"
 
 #: The head commit of pull request 1341, which every recorded reply is about.
 HEAD_SHA = "825b338131f9f9cd1f6dbb2881a54e6c8c6b9cb4"
@@ -106,6 +111,16 @@ REPO = "danwright32/PostRoll"
 
 def real_reply() -> list[dict[str, str]]:
     return json.loads(REAL_REPLY.read_text(encoding="utf-8"))
+
+
+def local_bar(_repo: str = "", _sha: str = "") -> set[ExpectedCheck]:
+    """The bar as THIS checkout declares it.
+
+    What `main` used to do for itself. It now reads the pull request's own head
+    instead (#1342), so the tests below that are about the wait rather than
+    about the bar hand it this, which is the reading they were written against.
+    """
+    return expected_checks(WORKFLOWS)
 
 
 def real_expected() -> set[ExpectedCheck]:
@@ -150,6 +165,116 @@ class FakeApi:
         if "/actions/runs?" in path:
             return self.runs
         raise AssertionError(f"the tool asked for a path nothing recorded: {path}")
+
+
+def real_listing() -> list[dict]:
+    return json.loads(REAL_LISTING.read_text(encoding="utf-8"))
+
+
+class FakeContents:
+    """Answers the two contents calls the bar is read through (#1342).
+
+    The listing is GitHub's own reply, recorded at the same commit as every
+    other fixture here. The file bodies are served from the checkout, because
+    that is what GitHub would return at a commit whose workflows are these:
+    inventing workflow text here would only prove this test agrees with itself
+    (L52).
+    """
+
+    def __init__(self, *, listing: list[dict] | None = None,
+                 bodies: dict[str, str] | None = None,
+                 encoding: str = "base64") -> None:
+        self.listing = real_listing() if listing is None else listing
+        self.bodies = bodies or {}
+        self.encoding = encoding
+        self.paths: list[str] = []
+
+    def __call__(self, path: str):
+        self.paths.append(path)
+        if path.endswith("/contents/.github/workflows?ref=" + HEAD_SHA):
+            return self.listing
+        if "/contents/.github/workflows/" in path:
+            name = path.split("/contents/.github/workflows/", 1)[1].split("?", 1)[0]
+            text = self.bodies.get(name)
+            if text is None:
+                text = (WORKFLOWS / name).read_text(encoding="utf-8")
+            if self.encoding != "base64":
+                return {"encoding": self.encoding, "content": ""}
+            return {"encoding": "base64",
+                    "content": base64.b64encode(text.encode("utf-8")).decode("ascii")}
+        raise AssertionError(f"the tool asked for a path nothing recorded: {path}")
+
+
+# ── the bar comes from the commit being judged (#1342) ───────────────────────
+
+
+def test_the_bar_is_read_from_the_pull_requests_own_head() -> None:
+    """Not from whatever checkout the tool happens to run in.
+
+    Measured on #1341 on 2026-09-04: run from the primary checkout, which sat
+    on another branch, it derived 7 checks while the pull request reported 8.
+    A bar short by one is a check nobody waits for, so a merge can go through
+    with that check unfinished or red, and that is the direction it took.
+    """
+    api = FakeContents()
+
+    assert expected_checks_at(REPO, HEAD_SHA, api=api) == expected_checks(WORKFLOWS)
+
+
+def test_a_job_added_at_that_commit_raises_the_bar_without_touching_the_checkout() -> None:
+    """The half the local reading cannot do."""
+    added = (WORKFLOWS / "tests.yml").read_text(encoding="utf-8") + """
+  brand-new:
+    name: brand new
+    runs-on: ubuntu-latest
+    steps:
+      - run: true
+"""
+    api = FakeContents(bodies={"tests.yml": added})
+
+    names = {check.name for check in expected_checks_at(REPO, HEAD_SHA, api=api)}
+
+    assert "brand new" in names
+    assert "brand new" not in {check.name for check in expected_checks(WORKFLOWS)}
+
+
+def test_a_workflow_that_could_not_be_read_refuses_rather_than_lowering_the_bar() -> None:
+    """A file the API would not hand over is not a workflow with no jobs.
+
+    Dropping it silently is the same failure one step earlier: the checks it
+    declares are then checks nobody waits for.
+    """
+    api = FakeContents(encoding="none")
+
+    with pytest.raises(UnreadableWorkflow) as raised:
+        expected_checks_at(REPO, HEAD_SHA, api=api)
+
+    assert "tests.yml" in str(raised.value) or "ci-profile.yml" in str(raised.value)
+
+
+def test_no_workflow_files_at_that_commit_refuses_rather_than_waiting_for_nothing() -> None:
+    api = FakeContents(listing=[])
+
+    with pytest.raises(UnreadableWorkflow):
+        expected_checks_at(REPO, HEAD_SHA, api=api)
+
+
+def test_a_reading_that_names_no_repository_refuses_to_guess_one() -> None:
+    """The repository comes from the same reply the head does (L70). Missing,
+    it must not become a path with a hole in it that gh answers about
+    something else."""
+    with pytest.raises(UnreadableWorkflow) as raised:
+        expected_checks_at("", HEAD_SHA, api=FakeContents())
+
+    assert "repository" in str(raised.value)
+
+
+def test_a_directory_beside_the_workflows_is_not_read_as_one() -> None:
+    listing = real_listing() + [{"name": "shared", "path": ".github/workflows/shared",
+                                 "type": "dir", "size": 0, "sha": "x"}]
+    api = FakeContents(listing=listing)
+
+    assert expected_checks_at(REPO, HEAD_SHA, api=api) == expected_checks(WORKFLOWS)
 
 
 # ── what the workflows promise ────────────────────────────────────────────────
@@ -588,7 +713,7 @@ def run(replies: list[list[dict[str, str]]], *, timeout: str = "600") -> int:
     return main(
         ["7", "--timeout", timeout, "--interval", "30"],
         poll=poll, now=clock.now, sleep=clock.sleep,
-        workflows=WORKFLOWS, out=lambda _line: None)
+        bar=local_bar, out=lambda _line: None)
 
 
 def test_green_exits_zero() -> None:
@@ -629,7 +754,7 @@ def test_gh_being_unusable_throughout_exits_unusable() -> None:
     clock = FakeClock()
     code = main(["7", "--timeout", "600", "--interval", "30"],
                 poll=poll, now=clock.now, sleep=clock.sleep,
-                workflows=WORKFLOWS, out=lambda _line: None)
+                bar=local_bar, out=lambda _line: None)
     assert code == EXIT_UNUSABLE
     # Bounded: a permanent failure costs seconds, not the whole timeout.
     assert 0 < clock.t <= 30
@@ -657,7 +782,7 @@ def test_one_transient_gh_failure_does_not_end_the_wait() -> None:
     clock = FakeClock()
     code = main(["7", "--timeout", "600", "--interval", "30"],
                 poll=poll, now=clock.now, sleep=clock.sleep,
-                workflows=WORKFLOWS, out=lambda _line: None)
+                bar=local_bar, out=lambda _line: None)
     assert code == EXIT_GREEN
 
 
@@ -671,7 +796,7 @@ def test_a_retried_failure_is_said_out_loud() -> None:
     clock = FakeClock()
     main(["7", "--timeout", "600", "--interval", "30"],
          poll=poll, now=clock.now, sleep=clock.sleep,
-         workflows=WORKFLOWS, out=lines.append)
+         bar=local_bar, out=lines.append)
     assert any("retr" in line.lower() for line in lines), lines
     assert any("503" in line for line in lines), lines
 
@@ -684,7 +809,7 @@ def test_retrying_does_not_run_past_the_deadline() -> None:
     clock = FakeClock()
     main(["7", "--timeout", "1", "--interval", "30"],
          poll=poll, now=clock.now, sleep=clock.sleep,
-         workflows=WORKFLOWS, out=lambda _line: None)
+         bar=local_bar, out=lambda _line: None)
     assert clock.t <= 30
 
 
@@ -753,7 +878,7 @@ def test_the_wait_says_what_it_was_waiting_for() -> None:
     main(["7", "--timeout", "60", "--interval", "30"],
          poll=lambda _n: Poll(head_sha=HEAD_SHA, rows=[]),
          now=clock.now, sleep=clock.sleep,
-         workflows=WORKFLOWS, out=lines.append)
+         bar=local_bar, out=lines.append)
     said = "\n".join(lines)
     assert "Tests / python" in said
     assert "60" in said
@@ -766,7 +891,7 @@ def test_every_verdict_names_the_commit_it_judged() -> None:
     code = main(["7", "--timeout", "600", "--interval", "30"],
                 poll=lambda _n: Poll(head_sha=HEAD_SHA, rows=real_reply()),
                 now=clock.now, sleep=clock.sleep,
-                workflows=WORKFLOWS, out=lines.append)
+                bar=local_bar, out=lines.append)
     assert code == EXIT_GREEN
     assert HEAD_SHA[:12] in lines[-1], lines[-1]
 
@@ -787,7 +912,7 @@ def test_a_commit_landing_mid_wait_is_said_out_loud_and_judged_afresh() -> None:
 
     code = main(["7", "--timeout", "600", "--interval", "30"],
                 poll=poll, now=clock.now, sleep=clock.sleep,
-                workflows=WORKFLOWS, out=lines.append)
+                bar=local_bar, out=lines.append)
     said = "\n".join(lines)
     assert code == EXIT_GREEN
     assert OTHER_SHA[:12] in said and HEAD_SHA[:12] in said, said
@@ -878,7 +1003,90 @@ def wait_and_merge(
         argv or ["7", "--timeout", "600", "--interval", "30", "--merge"],
         poll=poll, merge=merge, base=base or FakeStanding(behind_by=0),
         now=clock.now, sleep=clock.sleep,
-        workflows=WORKFLOWS, out=(lines.append if lines is not None else lambda _l: None))
+        bar=local_bar, out=(lines.append if lines is not None else lambda _l: None))
+
+
+def test_the_bar_is_derived_at_the_commit_being_judged() -> None:
+    """Not once, up front, from wherever the tool is standing (#1342)."""
+    asked: list[tuple[str, str]] = []
+
+    def bar(repo: str, sha: str) -> set[ExpectedCheck]:
+        asked.append((repo, sha))
+        return local_bar()
+
+    clock = FakeClock()
+
+    code = main(["7", "--timeout", "600", "--interval", "30"],
+                poll=lambda _n: Poll(head_sha=HEAD_SHA, rows=real_reply(), repo=REPO),
+                now=clock.now, sleep=clock.sleep, bar=bar, out=lambda _l: None)
+
+    assert code == EXIT_GREEN
+    assert asked == [(REPO, HEAD_SHA)], asked
+
+
+def test_the_bar_is_derived_again_when_the_head_moves() -> None:
+    """A push can ADD a job, so the bar the first commit reported is not the
+    bar the second one has to clear. Reading it once would wait for the wrong
+    set, and the direction that fails silently is a bar short by one."""
+    asked: list[tuple[str, str]] = []
+    heads = [HEAD_SHA, OTHER_SHA]
+    replies = [[], real_reply()]
+
+    def bar(repo: str, sha: str) -> set[ExpectedCheck]:
+        asked.append((repo, sha))
+        return local_bar()
+
+    def poll(_number: str) -> Poll:
+        head = heads.pop(0) if len(heads) > 1 else heads[0]
+        rows = replies.pop(0) if len(replies) > 1 else replies[0]
+        return Poll(head_sha=head, rows=rows, repo=REPO)
+
+    clock = FakeClock()
+
+    code = main(["7", "--timeout", "600", "--interval", "30"],
+                poll=poll, now=clock.now, sleep=clock.sleep, bar=bar,
+                out=lambda _l: None)
+
+    assert code == EXIT_GREEN
+    assert asked == [(REPO, HEAD_SHA), (REPO, OTHER_SHA)], asked
+
+
+def test_a_bar_that_cannot_be_derived_exits_unusable_rather_than_waiting() -> None:
+    """An unreadable bar is not an empty one. Carrying on with nothing to wait
+    for makes every reply green, including no reply at all (L98)."""
+    lines: list[str] = []
+
+    def bar(_repo: str, _sha: str) -> set[ExpectedCheck]:
+        raise UnreadableWorkflow("tests.yml came back with no readable content")
+
+    clock = FakeClock()
+
+    code = main(["7", "--timeout", "600", "--interval", "30"],
+                poll=lambda _n: Poll(head_sha=HEAD_SHA, rows=real_reply(), repo=REPO),
+                now=clock.now, sleep=clock.sleep, bar=bar, out=lines.append)
+
+    assert code == EXIT_UNUSABLE
+    said = " ".join(lines)
+    assert "no readable content" in said, said
+    assert HEAD_SHA[:12] in said, said
+
+
+def test_a_merge_refused_after_the_branch_moved_says_what_moved() -> None:
+    """The head moving between the green and the merge is refused by GitHub,
+    which is what makes it safe (#674). What it was not, until #1342, is
+    LEGIBLE: the person saw a 409 rather than the sentence saying the commit
+    that passed is no longer the head."""
+    merge = FakeMerge(refusing="GitHub did not merge 825b338131f9: Head branch "
+                               "was modified. Review and try the merge again.")
+    lines: list[str] = []
+
+    code = wait_and_merge([real_reply()], merge=merge, lines=lines,
+                          heads=[HEAD_SHA, OTHER_SHA])
+
+    assert code == EXIT_NOT_MERGED
+    said = " ".join(lines)
+    assert OTHER_SHA[:12] in said, said
+    assert "moved" in said, said
 
 
 def test_the_merge_is_of_exactly_the_commit_that_was_judged_green() -> None:
@@ -1049,7 +1257,7 @@ def wait_merge_and_compare(
         ["7", "--timeout", "600", "--interval", "30", "--merge"],
         poll=lambda _n: Poll(head_sha=HEAD_SHA, rows=real_reply()),
         merge=merge, base=standing, now=clock.now, sleep=clock.sleep,
-        workflows=WORKFLOWS,
+        bar=local_bar,
         out=(lines.append if lines is not None else lambda _l: None))
 
 
@@ -1123,7 +1331,7 @@ def test_without_the_merge_flag_nothing_is_compared() -> None:
     code = main(["7", "--timeout", "600", "--interval", "30"],
                 poll=lambda _n: Poll(head_sha=HEAD_SHA, rows=real_reply()),
                 base=standing, now=clock.now, sleep=clock.sleep,
-                workflows=WORKFLOWS, out=lambda _l: None)
+                bar=local_bar, out=lambda _l: None)
 
     assert code == EXIT_GREEN
     assert standing.asked == [], standing.asked
@@ -1151,7 +1359,7 @@ def test_the_wait_compares_through_the_real_reading_by_default(monkeypatch) -> N
                 poll=lambda _n: Poll(head_sha=HEAD_SHA, rows=real_reply()),
                 merge=lambda _n, _s: "abc1234",
                 now=clock.now, sleep=clock.sleep,
-                workflows=WORKFLOWS, out=lambda _l: None)
+                bar=local_bar, out=lambda _l: None)
 
     assert code == EXIT_GREEN, code
     assert asked == [("7", HEAD_SHA)], asked
@@ -1360,7 +1568,7 @@ def _retry_seconds(timeout: str, interval: str = "30") -> float:
     clock = FakeClock()
     code = main(["7", "--timeout", timeout, "--interval", interval],
                 poll=_always_failing(), now=clock.now, sleep=clock.sleep,
-                workflows=WORKFLOWS, out=lambda _line: None)
+                bar=local_bar, out=lambda _line: None)
     assert code == EXIT_UNUSABLE, code
     return clock.t
 
@@ -1392,7 +1600,7 @@ def test_an_outage_lasting_longer_than_the_old_six_seconds_no_longer_ends_it():
 
     code = main(["7", "--timeout", "2400", "--interval", "30"],
                 poll=poll, now=clock.now, sleep=clock.sleep,
-                workflows=WORKFLOWS, out=lambda _line: None)
+                bar=local_bar, out=lambda _line: None)
 
     assert code == EXIT_GREEN, (
         f"a {down_until:.0f}s outage inside a 2400s wait still ended it")
@@ -1427,7 +1635,7 @@ def test_no_kind_of_failure_is_retried_differently_from_any_other():
         clock = FakeClock()
         main(["7", "--timeout", "600", "--interval", "30"],
              poll=_always_failing(text), now=clock.now, sleep=clock.sleep,
-             workflows=WORKFLOWS, out=lambda _line: None)
+             bar=local_bar, out=lambda _line: None)
         return clock.t
 
     assert spent("HTTP 503: No server is currently available") == spent(
@@ -1446,7 +1654,7 @@ def test_the_pauses_grow_rather_than_repeating_one_length():
 
     main(["7", "--timeout", "2400", "--interval", "30"],
          poll=_always_failing(), now=clock.now, sleep=sleep,
-         workflows=WORKFLOWS, out=lambda _line: None)
+         bar=local_bar, out=lambda _line: None)
 
     assert len(pauses) >= 3, pauses
     assert pauses == sorted(pauses), f"the pauses do not grow: {pauses}"
@@ -1472,7 +1680,7 @@ def test_an_outage_that_cleared_is_stated_rather_than_left_in_the_scrollback():
 
     code = main(["7", "--timeout", "2400", "--interval", "30"],
                 poll=poll, now=clock.now, sleep=clock.sleep,
-                workflows=WORKFLOWS, out=lines.append)
+                bar=local_bar, out=lines.append)
 
     assert code == EXIT_GREEN
     recovered = [line for line in lines if "recovered" in line]
@@ -1497,7 +1705,7 @@ def test_a_clean_run_says_nothing_about_recovering():
 
     main(["7", "--timeout", "600", "--interval", "30"],
          poll=lambda _n: Poll(head_sha=HEAD_SHA, rows=real_reply()),
-         now=clock.now, sleep=clock.sleep, workflows=WORKFLOWS,
+         now=clock.now, sleep=clock.sleep, bar=local_bar,
          out=lines.append)
 
     assert not [line for line in lines if "recovered" in line], lines
@@ -1512,7 +1720,7 @@ def _green_run(standing, merge, lines):
     return main(["7", "--timeout", "600", "--interval", "30", "--merge"],
                 poll=lambda _n: Poll(head_sha=HEAD_SHA, rows=real_reply()),
                 base=standing, merge=merge, now=clock.now, sleep=clock.sleep,
-                workflows=WORKFLOWS, out=lines.append)
+                bar=local_bar, out=lines.append)
 
 
 def test_behind_but_sharing_no_file_is_merged_and_says_why() -> None:
