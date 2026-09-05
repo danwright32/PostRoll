@@ -86,12 +86,27 @@ class Rates:
 
 
 def _lines_in(target: Path) -> int:
-    """Non-blank lines in the journal, to tell corrupt from absent."""
+    """Non-blank lines in the journal, to tell corrupt from absent.
+
+    A read that FAILS here is not zero lines. It is the file `read_records`
+    read moments ago having become unreadable, and answering 0 would send the
+    caller down the "nothing was ever written" branch, which is the exact
+    conflation this whole tool exists to prevent (L10, L11).
+
+    An ABSENT file is the one honest zero: no pass has run against this data
+    directory, which is what `read_records` answers with an empty list too.
+    """
     try:
         return sum(1 for line in target.read_text(encoding="utf-8").splitlines()
                    if line.strip())
-    except OSError:
+    except FileNotFoundError:
         return 0
+    except OSError as e:
+        raise RepairLogUnreadable(
+            f"{target} could not be read while establishing whether it holds "
+            f"anything: {e}. That is not an empty journal, and reporting it as "
+            f"one would say no repair ran where the evidence is merely "
+            f"unavailable.") from e
 
 
 def _within(record: dict, since: datetime | None) -> tuple[bool, bool]:

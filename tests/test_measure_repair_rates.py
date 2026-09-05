@@ -202,3 +202,19 @@ def test_the_report_states_the_denominator_every_share_is_over(tmp_path):
         attempt("blocked"), attempt("repaired")]), now=NOW))
 
     assert "2 attempts" in printed
+
+
+def test_a_journal_that_stops_being_readable_is_not_counted_as_absent(tmp_path):
+    """The one honest zero is an ABSENT file, and nothing else.
+
+    `_lines_in` runs only after `read_records` has already read the file, so
+    this is the narrow case of it becoming unreadable in between. Answering 0
+    would send the caller to EmptyJournal, which claims no pass has ever run,
+    about a journal whose evidence is merely unavailable (L10, L11).
+    """
+    from tools.measure_repair_rates import _lines_in
+
+    assert _lines_in(tmp_path / "never-written.jsonl") == 0
+
+    with pytest.raises(RepairLogUnreadable):
+        _lines_in(tmp_path)
