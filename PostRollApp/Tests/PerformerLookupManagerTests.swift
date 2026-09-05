@@ -80,6 +80,41 @@ final class PerformerLookupManagerTests: XCTestCase {
         XCTAssertEqual(state.events.first?.ocrResult?.performers.first?.handle, "@jenna")
     }
 
+    func testApplyingASuggestionKeepsTheProfileItWasCheckedAgainst() async throws {
+        // The research step fetched this address and confirmed the account
+        // stood behind the handle before the suggestion was ever offered
+        // (#987). Keeping only the handle threw that away, so every later
+        // reader had to rebuild the address by convention, and nothing
+        // recorded that this handle had been checked at all.
+        let event = event(performers: [Performer(name: "Jenna Robison")])
+        let state = state([event])
+        let manager = PerformerLookupManager()
+        let checked = "https://www.instagram.com/jennarobison/"
+
+        manager.apply(PythonBridge.HandleSuggestion(name: "Jenna Robison",
+                                                    handle: "@jennarobison",
+                                                    profileURL: checked,
+                                                    confidence: "high", note: nil),
+                      to: event.id, in: state)
+
+        XCTAssertEqual(state.events.first?.ocrResult?.performers.first?.profileURL,
+                       checked)
+    }
+
+    func testASuggestionWithNoProfileLeavesTheFieldEmpty() async throws {
+        // No URL came back, so there is nothing checked to record. Writing the
+        // constructed address here would make an unverified handle
+        // indistinguishable from one the research step confirmed, which is the
+        // distinction this field exists to hold (L11).
+        let event = event(performers: [Performer(name: "Jenna Robison")])
+        let state = state([event])
+        let manager = PerformerLookupManager()
+
+        manager.apply(Self.suggestion("Jenna Robison", "@jenna"), to: event.id, in: state)
+
+        XCTAssertNil(state.events.first?.ocrResult?.performers.first?.profileURL)
+    }
+
     func testASuggestionForSomebodyNoLongerInTheListIsDroppedQuietly() async throws {
         // The list can be edited while the search runs, and it takes minutes.
         let event = event(performers: [Performer(name: "Somebody Else")])

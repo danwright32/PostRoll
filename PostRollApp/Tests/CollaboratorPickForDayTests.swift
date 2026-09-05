@@ -686,6 +686,32 @@ final class CollaboratorPickForDayTests: XCTestCase {
         XCTAssertTrue(membership.notes.isEmpty, "no photos is not a resolution failure")
     }
 
+    // MARK: - The address the research step checked (#987)
+
+    func testACandidateCarriesTheProfileTheResearchStepChecked() {
+        // #973 built this panel's link out of the handle by convention,
+        // because the panel held no checked address for a candidate. The
+        // performer record now keeps the one the research step fetched and
+        // confirmed, so the candidate carries it and the panel can prefer it.
+        var event = carouselEvent()
+        var ocr = OCRResult()
+        var known = performer("first1")
+        known.profileURL = "https://www.instagram.com/first1/"
+        ocr.performers = [known, performer("other1")]
+        event.ocrResult = ocr
+
+        let result = CollaboratorPick.suggest(event: event, day: .wednesday,
+                                              preset: .balanced,
+                                              stats: lookup(everyone), asOf: now)
+        let ranked = result.suggested + result.unranked
+
+        XCTAssertEqual(ranked.first(where: { $0.handle == "first1" })?.profileURL,
+                       "https://www.instagram.com/first1/",
+                       "the checked address did not reach the candidate")
+        XCTAssertNil(ranked.first(where: { $0.handle == "other1" })?.profileURL,
+                     "a performer with no checked address invented one")
+    }
+
     // MARK: - Which answer a real day gets (#964)
 
     func testFiveTaggedPeopleOnADayAreAllInvitedRatherThanRanked() {

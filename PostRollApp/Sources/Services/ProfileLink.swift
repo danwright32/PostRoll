@@ -61,6 +61,40 @@ enum ProfileLink {
         return url
     }
 
+    /// The checked addresses these performers carry, keyed the way the account
+    /// book keys a handle (#987).
+    ///
+    /// One place that turns performer records into a lookup, rather than each
+    /// surface walking the list its own way: the panel below ranks by that key
+    /// and holds nothing else that could reach a performer.
+    ///
+    /// A performer with no stored address contributes no entry, so a miss and
+    /// an empty string cannot come to mean different things at different call
+    /// sites.
+    static func checked(in performers: [Performer]) -> [String: String] {
+        var book: [String: String] = [:]
+        for performer in performers {
+            let key = AccountBook.key(performer.handle)
+            guard !key.isEmpty,
+                  let stored = performer.profileURL?
+                      .trimmingCharacters(in: .whitespacesAndNewlines),
+                  !stored.isEmpty
+            else { continue }
+            book[key] = stored
+        }
+        return book
+    }
+
+    /// The checked address for one handle, or nil when there is none.
+    ///
+    /// The same book as above, asked about a single account: a screen that
+    /// holds a handle and the day's performers has no other way to reach it,
+    /// and asking here rather than indexing the book at each call site keeps
+    /// the keying in one place.
+    static func checkedProfile(for handle: String, in performers: [Performer]) -> String? {
+        checked(in: performers)[AccountBook.key(handle)]
+    }
+
     /// What a screen reader says about the control.
     ///
     /// Names whose profile it opens, matching the "Edit numbers for <handle>"

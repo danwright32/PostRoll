@@ -153,6 +153,14 @@ enum CollaboratorPick {
         /// account is in the first photo, because an ordered list with no
         /// reasons is not something anyone can disagree with.
         let reason: String
+        /// The profile address the research step fetched and checked, where
+        /// this account's performer record carries one (#987).
+        ///
+        /// #973 built this panel's link out of the handle by convention,
+        /// because the panel held no checked address for a candidate. It does
+        /// now, and `ProfileLink` prefers it. Nil is the ordinary case and
+        /// means only that no fetched address is on record.
+        var profileURL: String? = nil
     }
 
     /// What kind of answer this day has, which decides what every surface says
@@ -245,7 +253,8 @@ enum CollaboratorPick {
                         eventAccounts: Set<String> = [],
                         membership: MembershipKind = .firstPhoto,
                         stats: (String) -> AccountStats?, asOf now: Date,
-                        notes: [String] = []) -> Result {
+                        notes: [String] = [],
+                        checkedProfiles: [String: String] = [:]) -> Result {
         // Deduplicated on the account book's key, so three spellings of one
         // person are one candidate rather than three slots.
         var seen = Set<String>()
@@ -282,7 +291,8 @@ enum CollaboratorPick {
                                                 inFirstPhoto: inFirstPhoto,
                                                 appliesFirstPhoto: firstPhotoKeys != nil,
                                                 membership: membership,
-                                                asOf: now))
+                                                asOf: now),
+                             profileURL: checkedProfiles[key])
         }
 
         // Held back BEFORE anything is ranked (#1271), and so before the
@@ -680,7 +690,11 @@ enum CollaboratorPick {
                                             .accounts(in: event.eventHandles)
                                             .map(CaptionBlocks.bareUsername)),
                        membership: kind,
-                       stats: stats, asOf: now, notes: notes + membership.notes)
+                       stats: stats, asOf: now, notes: notes + membership.notes,
+                       // The addresses the research step checked, off the same
+                       // event the candidates come from (#987).
+                       checkedProfiles: ProfileLink.checked(
+                           in: event.ocrResult?.performers ?? []))
     }
 
     // MARK: - The block in CAPTIONS.txt (#278)

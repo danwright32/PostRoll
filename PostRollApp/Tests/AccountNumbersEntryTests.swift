@@ -141,7 +141,8 @@ final class AccountNumbersEntryTests: XCTestCase {
     /// to 1.
     @MainActor
     func testTheNumbersFormStillFitsInTheWindow() throws {
-        let sheet = AccountNumbersSheet(handle: "janecellist", stats: nil,
+        let sheet = AccountNumbersSheet(handle: "janecellist",
+                                        checkedProfileURL: nil, stats: nil,
                                         onSave: { _, _, _, _, _, _, _ in },
                                         onCancel: { })
         let rendered = try WordFootprint.imageRendered(sheet, wordless: false)
@@ -204,7 +205,8 @@ final class AccountNumbersEntryTests: XCTestCase {
         // need and every account with nothing recorded would open scrolling
         // (L10). What this pins is that the margin left for the chrome is
         // enough for the chrome and no more.
-        let sheet = AccountNumbersSheet(handle: "janecellist", stats: nil,
+        let sheet = AccountNumbersSheet(handle: "janecellist",
+                                        checkedProfileURL: nil, stats: nil,
                                         onSave: { _, _, _, _, _, _, _ in },
                                         onCancel: { })
         let rendered = try WordFootprint.imageRendered(sheet, wordless: false)

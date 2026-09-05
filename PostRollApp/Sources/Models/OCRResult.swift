@@ -80,9 +80,27 @@ struct Performer: Identifiable, Codable, Hashable, Sendable {
     var role: String
     var voiceOrInstrument: String
     var handle: String
+    /// The Instagram profile the research step fetched and checked this handle
+    /// against, where there was one (#987).
+    ///
+    /// `handle_matches_profile` in the enrichment step already compared the two
+    /// and dropped the pair when they named different people, and the address
+    /// it compared against was then thrown away, so every later reader rebuilt
+    /// it by convention and nothing recorded that the handle had been checked
+    /// at all.
+    ///
+    /// Nil on a handle Dan typed and on one the account book filled in, which
+    /// is most of them. That absence is NOT a claim that the handle is wrong:
+    /// those are his own answers rather than a model's, and marking them
+    /// unverified would accuse the accounts most likely to be right. It means
+    /// only that no fetched address is on record, so a reader falls back to the
+    /// constructed one.
+    var profileURL: String?
 
-    init(id: UUID = UUID(), name: String = "", role: String = "", voiceOrInstrument: String = "", handle: String = "") {
+    init(id: UUID = UUID(), name: String = "", role: String = "", voiceOrInstrument: String = "", handle: String = "",
+         profileURL: String? = nil) {
         self.id = id; self.name = name; self.role = role; self.voiceOrInstrument = voiceOrInstrument; self.handle = handle
+        self.profileURL = profileURL
     }
 
     // Python JSON won't include id — generate one on decode
@@ -98,11 +116,16 @@ struct Performer: Identifiable, Codable, Hashable, Sendable {
         role              = FieldText.singleLine((try? c.decode(String.self, forKey: .role)) ?? "")
         voiceOrInstrument = FieldText.singleLine((try? c.decode(String.self, forKey: .voiceOrInstrument)) ?? "")
         handle            = FieldText.singleLine((try? c.decode(String.self, forKey: .handle)) ?? "")
+        // Every performer stored before #987 has no such key, so an absent one
+        // decodes as nil rather than failing the whole file.
+        profileURL        = (try? c.decode(String.self, forKey: .profileURL))
+            .map(FieldText.singleLine).flatMap { $0.isEmpty ? nil : $0 }
     }
 
     enum CodingKeys: String, CodingKey {
         case id, name, role, handle
         case voiceOrInstrument = "voice_or_instrument"
+        case profileURL = "profile_url"
     }
 
     /// A short label for what this performer plays or does, shown next to their
