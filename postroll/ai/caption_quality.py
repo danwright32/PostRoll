@@ -123,6 +123,8 @@ Caption:
 # the shared lists look like the single source of truth, so a change to how
 # they are APPLIED lands in whichever file the author had open (L370).
 
+from typing import Any                                   # noqa: E402
+
 from .blog_findings import Finding                       # noqa: E402
 from .blog_quality import inferred_state_hits            # noqa: E402
 
@@ -151,33 +153,51 @@ def check_caption_alt_texts(
 
     for index, raw in enumerate(alt_texts or []):
         where = names[index] if index < len(names) else str(index + 1)
-        alt = "" if raw is None else str(raw)
+        found.extend(check_one_alt_text(raw, band=band, where=where))
 
-        if not alt.split():
-            found.append(Finding(
-                "alt_text_empty",
-                "This photo has no alt text, so the picture is described to "
-                "nobody who cannot see it.",
-                where))
-            # Nothing else can be said about a description that is not there,
-            # and saying it is also too short would be a second finding about
-            # one fault (L260).
-            continue
+    return found
 
-        words = len(alt.split())
-        if band and not (band[0] <= words <= band[1]):
-            found.append(Finding(
-                "alt_text_length",
-                f"Alt text for this post should be {band[0]} to {band[1]} words.",
-                f"{where}: {words} words. {alt[:90]}"))
 
-        # The same matcher the blog path uses, not a copy of it (#1224).
-        hits = inferred_state_hits(alt.lower())
-        if hits:
-            found.append(Finding(
-                "alt_text_inferred_state",
-                "Alt text describes what the camera recorded, not what someone "
-                "felt.",
-                f"{where}: {', '.join(hits)} in '{alt[:80]}'"))
+def check_one_alt_text(raw: Any, *, band: tuple[int, int] | None,
+                       where: str) -> list[Finding]:
+    """Every checkable rule ONE alt text breaks.
+
+    Extracted so a repair pass can re-run exactly the rules that selected an
+    alt text, rather than a second copy of them that reads the same and drifts
+    (#1155, L263). Its acceptance check is literally this call: rewrite, re-run,
+    refuse if any finding remains.
+
+    `where` names the photograph this description belongs to, because a finding
+    about one of eight descriptions is unusable without saying which one (L80).
+    """
+    alt = "" if raw is None else str(raw)
+    found: list[Finding] = []
+
+    if not alt.split():
+        found.append(Finding(
+            "alt_text_empty",
+            "This photo has no alt text, so the picture is described to "
+            "nobody who cannot see it.",
+            where))
+        # Nothing else can be said about a description that is not there,
+        # and saying it is also too short would be a second finding about
+        # one fault (L260).
+        return found
+
+    words = len(alt.split())
+    if band and not (band[0] <= words <= band[1]):
+        found.append(Finding(
+            "alt_text_length",
+            f"Alt text for this post should be {band[0]} to {band[1]} words.",
+            f"{where}: {words} words. {alt[:90]}"))
+
+    # The same matcher the blog path uses, not a copy of it (#1224).
+    hits = inferred_state_hits(alt.lower())
+    if hits:
+        found.append(Finding(
+            "alt_text_inferred_state",
+            "Alt text describes what the camera recorded, not what someone "
+            "felt.",
+            f"{where}: {', '.join(hits)} in '{alt[:80]}'"))
 
     return found

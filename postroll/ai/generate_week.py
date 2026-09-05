@@ -334,6 +334,13 @@ def generate_week(manifest: dict[str, Any], output_path: Path,
                     existing_captions=existing_captions if existing_captions else None,
                     event_url=event_url,
                     post_photo_count=post_photo_count,
+                    # The alt text repair pass gets what is left of this
+                    # process's ceiling, never a constant (#1155, L227, L522).
+                    # Seven days of captions and then the blog share one
+                    # budget, and this is the same absolute deadline the blog
+                    # pass is given below.
+                    repair_deadline=deadline_from(started_at=t_start,
+                                                  now=time.time),
                 )
                 results[day_name] = result
                 if result.get("skipped_photos"):
