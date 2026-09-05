@@ -281,9 +281,14 @@ jobs:
   # redo a share they had already proved.
   #
   # This IS a new check name, which the reporting steps below were deliberately
-  # kept out of a job to avoid. That cost is paid once, and by re-recording
-  # tests/fixtures/gh_pr_checks_real.json from a real pull request carrying it,
-  # never by hand-editing the fixture to agree with what it verifies (L48, L58).
+  # kept out of a job to avoid. That cost is paid once, and by re-recording the
+  # check fixtures from a real pull request carrying it, never by hand-editing
+  # one to agree with what it verifies (L48, L58):
+  #
+  #     venv/bin/python tools/record_check_fixtures.py --pr <n> --write
+  #
+  # which refuses a pull request that is not green and one whose checks are not
+  # the bar derived at its own head (#1343).
   due:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest

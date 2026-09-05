@@ -1,0 +1,16 @@
+{
+  "repo": "danwright32/PostRoll",
+  "pull_request": 1374,
+  "head_sha": "bbf83914f4515d6c8d9d99fa18326c29c9bd482a",
+  "recorded_on": "2026-09-04",
+  "checks": [
+    "Guard proofs / changed",
+    "Guard proofs / due",
+    "Guard proofs / full",
+    "Tests / macos",
+    "Tests / python",
+    "macOS / reference-frames (goldens)",
+    "macOS / reference-frames (legibility)",
+    "macOS / swift-unit"
+  ]
+}

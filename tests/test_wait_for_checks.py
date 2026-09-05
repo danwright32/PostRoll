@@ -20,38 +20,32 @@ commit's run. The mirror is a superseded run that PASSED reporting green for a
 commit nothing has judged. So every row here is now sourced through the head
 SHA and refused if it names another one (L173).
 
-The fixtures are real replies for pull request 1341 at
-825b338131f9f9cd1f6dbb2881a54e6c8c6b9cb4, recorded on 2026-09-04, not shapes
-invented here (L48):
+The fixtures are real replies about ONE green pull request at ONE commit, not
+shapes invented here (L48). Which pull request, and which commit, is in
+`tests/fixtures/gh_check_fixtures_meta.json`, written by the run that wrote
+them, and the sha below is read from there rather than typed twice (L70).
 
-    gh api "repos/danwright32/PostRoll/actions/runs?head_sha=<sha>&per_page=100"
-    gh api "repos/danwright32/PostRoll/actions/runs/<id>/jobs?per_page=100"
+They are re-recorded together, by command rather than by hand (#1343):
 
-Each run's `repository`, `head_repository`, `pull_requests`, `head_commit`,
-`actor` and `triggering_actor`, and each job's `steps`, were deleted whole
-because nothing here reads them and they are most of the bytes. Every field
-this tool touches is as GitHub sent it.
+    venv/bin/python tools/record_check_fixtures.py --pr <n> --write
 
-`tests/fixtures/gh_pr_checks_real.json` is kept beside them: a real
-`gh pr checks --json name,state,bucket,workflow` reply, which is what the
-verdict rules were calibrated against and still are.
+which takes all four from one head, prunes the fields nothing here reads (each
+run's `repository`, `head_repository`, `pull_requests`, `head_commit`, `actor`
+and `triggering_actor`, and each job's `steps`, which are most of the bytes),
+and REFUSES a pull request that is red, still in flight, or whose reported
+checks are not the bar derived at that commit. Every field this file touches is
+as GitHub sent it.
 
-Re-recorded by #1259 from pull request 1341, all eight checks settled and
-green, because that change ADDED the `Guard proofs / due` job. Before it, by
-#1095 from pull request 1102, because that one removed
-`reference-frames (thursday-reel)` and the recording from pull request 561 on
-2026-08-14 described eight. It is a whole
-reply as GitHub gave it, not the old one with a row taken out: an intermediate
-commit did delete that row to get the pull request green, and it was replaced
-with this the moment a real green reply of the new shape existed, because a
-fixture adjusted to agree with the thing it verifies is no longer evidence of
-anything (L48, L58).
+That last refusal is the loop these names live in. They are CHECK names and the
+bar is derived from the workflows, so a pull request carrying a changed set can
+only go green once the recording matches it, and the recording can only come
+from a green pull request. Removing a name is the cheap direction: delete the
+row, go green, re-record. Adding one costs a knowingly red run to record from.
 
-That is the loop these names live in. They are CHECK names and the bar is
-derived from the workflows, so a pull request carrying a changed set can only go
-green once the recording matches it, and the recording can only come from a
-green pull request. Removing a name is the cheap direction: delete the row,
-go green, re-record. Adding one costs a knowingly red run to record from.
+Before the recorder, this was prose telling the next person which fields to
+delete: #1095 did it by hand and #1259 with a throwaway script. A fixture
+adjusted to agree with the thing it verifies is no longer evidence of anything
+(L48, L58), and there was nothing but care standing between the two.
 
 """
 
@@ -104,10 +98,16 @@ REAL_JOBS = REPO_ROOT / "tests" / "fixtures" / "gh_actions_jobs_real.json"
 #: that same commit, pruned to the fields this reads (#1342).
 REAL_LISTING = REPO_ROOT / "tests" / "fixtures" / "gh_workflow_listing_real.json"
 
-#: The head commit of pull request 1341, which every recorded reply is about.
-HEAD_SHA = "825b338131f9f9cd1f6dbb2881a54e6c8c6b9cb4"
+#: The commit every recorded reply is about, read from the recording rather
+#: than typed here (#1343). The recorder writes it, so the fixtures and the sha
+#: the tests ask about cannot come apart: they are one derivation, not two
+#: somebody has to keep in step (L70).
+RECORDED = json.loads(
+    (REPO_ROOT / "tests" / "fixtures" / "gh_check_fixtures_meta.json")
+    .read_text(encoding="utf-8"))
+HEAD_SHA = RECORDED["head_sha"]
+REPO = RECORDED["repo"]
 OTHER_SHA = "0ef38b2c1d4e5f60718293a4b5c6d7e8f9a0b1c2"
-REPO = "danwright32/PostRoll"
 
 
 def real_reply() -> list[dict[str, str]]:
