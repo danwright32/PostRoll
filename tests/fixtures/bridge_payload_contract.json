@@ -1113,6 +1113,7 @@
         "feedback": "always",
         "org": "always",
         "photo_filenames": "always",
+        "photo_paths": "always",
         "program": "always",
         "shoot_type": "always",
         "venue": "always",

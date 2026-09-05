@@ -43,7 +43,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .blog_findings import RepairState
-from .blog_quality import check_blog_targeted, finding_entry
+from .blog_quality import (check_blog_targeted, finding_entry,
+                           refuse_colliding_filenames)
 from .blog_repair import deadline_from, repair_alt_text
 from .claude_client import ClaudeError, run_json_prompt
 from .progress import ProgressWriter
@@ -95,6 +96,15 @@ def retry_blog_repair(
     now = now or time.monotonic
     if deadline is None:
         deadline = deadline_from(started_at=now(), now=now)
+
+    # Refused before the mapping is built, and so before any paid call (#1364).
+    # The dict below is keyed by basename, so two source photographs sharing one
+    # collapse into a single entry: one of them is silently missing and a marker
+    # naming it attaches the other, which reads as correct and is not. The
+    # repairer cannot notice, because by the time it has the mapping the pair is
+    # already one key (#1130, L30).
+    refuse_colliding_filenames([Path(p).name for p in photo_paths],
+                               [str(p) for p in photo_paths])
 
     paths = {Path(p).name: p for p in photo_paths}
 

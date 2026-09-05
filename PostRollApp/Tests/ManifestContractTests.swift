@@ -334,6 +334,23 @@ final class ManifestContractTests: XCTestCase {
             "the name must arrive as it reads on disk, not percent escaped")
     }
 
+    func testABlogRevisionSendsThePathsBesideTheNames() throws {
+        // #1364: the names alone cannot tell one photograph listed twice, which
+        // is harmless, from two photographs sharing a name, which makes a
+        // marker resolve to the wrong file. Python refuses the second, and it
+        // needs the full paths to say WHICH two.
+        var event = fullEvent()
+        event.blogPhotoPaths = [URL(fileURLWithPath: "/photos/day 1/DSC4821.jpg"),
+                                URL(fileURLWithPath: "/photos/day 2/DSC4821.jpg")]
+
+        let manifest = PythonBridge.buildBlogRevisionManifest(
+            event: event, program: ["performers": []],
+            existing: ["body": "before"], feedback: "make it shorter")
+
+        XCTAssertEqual(manifest["photo_paths"] as? [String],
+                       ["/photos/day 1/DSC4821.jpg", "/photos/day 2/DSC4821.jpg"])
+    }
+
     func testABlogRevisionForAnEventWithNoPhotosStillSendsTheKey() throws {
         // An empty list and an absent key mean the same thing to Python here
         // (the rules stay off), but only the key being present proves the app
