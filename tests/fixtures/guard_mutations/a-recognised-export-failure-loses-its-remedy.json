@@ -1,0 +1,8 @@
+{
+  "name": "a-recognised-export-failure-loses-its-remedy",
+  "file": "PostRollApp/Sources/Services/MediaErrorSummary.swift",
+  "find": "        return hint.isEmpty ? said : \"\\(said) \\(Sentence.closed(hint))\"",
+  "replace": "        return said",
+  "test": "PostRollTests/MediaErrorSummaryTests/testTheReasonIsHumanisedWhenItIsRecognised",
+  "breaks": "a failure the app CAN name a fix for (ffmpeg absent, a model retired, a payload too large) shows only the machine's own words on the export screen, while the generation screen shows the remedy for the very same failure. One vocabulary for one failure is the point (L118)"
+}
