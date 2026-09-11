@@ -1,0 +1,8 @@
+{
+  "name": "a-reel-question-leaves-its-run-active",
+  "file": "PostRollApp/Sources/Services/ExportManager.swift",
+  "find": "                              isFullExport: onlyDay == nil), for: eventID)\n            tracker.deactivate(eventID)\n            return\n        }",
+  "replace": "                              isFullExport: onlyDay == nil), for: eventID)\n            return\n        }",
+  "test": "PostRollTests/ReelRelayoutNoticeTests/testAnsweringActuallyStartsTheExportItWasWaitingOn",
+  "breaks": "the run waiting on the reel question stays ACTIVE, so `clear` refuses it and `start` refuses to begin another, and both buttons on the question become dead controls. Nothing is exporting and nothing can be: the only way out of the screen is quitting the app, and a screen cannot report that about itself (#1407, L109)"
+}

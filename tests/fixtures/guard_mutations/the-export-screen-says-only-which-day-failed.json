@@ -1,0 +1,8 @@
+{
+  "name": "the-export-screen-says-only-which-day-failed",
+  "file": "PostRollApp/Sources/Services/MediaErrorSummary.swift",
+  "find": "        let lines = keys.map { \"\\(displayName($0)): \\(reason(day: $0, raw: errors[$0] ?? \"\"))\" }",
+  "replace": "        let lines = keys.map { displayName($0) }",
+  "test": "PostRollTests/MediaErrorSummaryTests/testTheFailureCarriesItsReason",
+  "breaks": "the export banner goes back to naming the failed day and nothing else, which is what sent Dan to re-export 150 photographs from Lightroom for a failure that was neither about photographs nor fixed by re-exporting them (#1405). The reason is in hand at this line; dropping it is free to do and invisible afterwards"
+}

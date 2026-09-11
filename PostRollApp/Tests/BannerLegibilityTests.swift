@@ -119,6 +119,12 @@ final class BannerLegibilityTests: XCTestCase {
         let mediaWarning = MediaErrorSummary.warningSentence([
             "thursday": "the chosen black and white photo has moved",
         ]) ?? ""
+        // The real sentences, from the shipping code, not hand written copy: a
+        // preview of invented text would show something the app never says.
+        let relayoutKeepable = ReelRelayoutNotice.Question(
+            day: .thursday, canKeepApproved: true).message
+        let relayoutUnkeepable = ReelRelayoutNotice.Question(
+            day: .thursday, canKeepApproved: false).message
         let unfamiliar = RunOutcomeNotice.unfamiliarFailureNote(week: week) ?? ""
         let analytics = AnalyticsStore.recoveryText(setAsideAs: "analytics.json.broken",
                                                     restorable: false)
@@ -229,6 +235,13 @@ final class BannerLegibilityTests: XCTestCase {
                 folderName: "2026-08-12 Spring Gala",
                 mediaError: mediaError,
                 mediaWarning: nil))),
+            // Both shapes of the reel question (#1407), because the difference
+            // between them is whether there is a way out that keeps the video,
+            // and a state with no way out must not read like one that has one.
+            ("reel relayout, video can be kept", AnyView(ReelRelayoutChoice(
+                message: relayoutKeepable, canKeepApproved: true))),
+            ("reel relayout, video is gone", AnyView(ReelRelayoutChoice(
+                message: relayoutUnkeepable, canKeepApproved: false))),
             // The real halt screen body, both shapes: a run that saved some
             // days and one that saved none, because the sentence about what
             // survived is the whole point of the screen.

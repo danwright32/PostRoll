@@ -1134,6 +1134,39 @@ extension Event {
         return ev
     }
 
+    /// Decides the Thursday reel's masonry layout, if a render is about to run
+    /// without one, and answers whether anything changed.
+    ///
+    /// The export was the render path that minted nothing (#1403).
+    /// `ensureReelSeed` had two callers, the photo screen's save and the
+    /// caption screen's regenerate, so a Thursday that had not passed through
+    /// one of those two screens since #1062 reached Python with no seed.
+    /// `build_collage_strip` refuses outright rather than reshuffling, which is
+    /// correct of it and left the export dead with the cause only in the log.
+    /// Measured in the live store on 2026-09-11, 19 of 21 Thursday days carried
+    /// no seed, so this was most of the back catalogue.
+    ///
+    /// The BOOLEAN is the point of the shape: a caller writes to the store only
+    /// when the layout was actually undecided. Returning the event
+    /// unconditionally would let an export stamp a fresh seed each time and
+    /// relay out the reel on every export, which is the defect #1062 closed
+    /// wearing a stored value.
+    ///
+    /// A day that is absent renders nothing, so there is no layout to decide
+    /// and none is invented for it.
+    ///
+    /// `generate` is a parameter for the same reason `ensureReelSeed`'s is, so
+    /// a test can pin the value rather than assert around a random one.
+    @discardableResult
+    mutating func ensureReelSeedForRender(
+        using generate: () -> Int = { Int.random(in: 1...999_999_999) }
+    ) -> Bool {
+        guard var pd = days[DayName.thursday.rawValue], pd.reelSeed == nil else { return false }
+        pd.ensureReelSeed(using: generate)
+        days[DayName.thursday.rawValue] = pd
+        return true
+    }
+
     /// Drops every reference to the given photos across every day and the blog
     /// photo list. Counterpart to `rebindingPhotos` for the "Remove missing"
     /// route.

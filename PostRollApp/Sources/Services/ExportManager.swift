@@ -52,6 +52,32 @@ final class ExportManager {
         /// The run was abandoned. Nothing was committed and nothing is
         /// stamped: this is not a failure and not an export.
         case cancelled
+        /// Nothing has started. A day's reel cannot be re-rendered as it
+        /// stands, so Dan decides before anything is written (#1407).
+        ///
+        /// Its own phase rather than a `.failed` carrying a question, because
+        /// the two need opposite responses: a failure is over and this one is
+        /// waiting on an answer, and a screen that cannot tell them apart
+        /// offers a retry where it owes a choice (L11).
+        ///
+        /// Carries the folder that was already picked AND the scope that was
+        /// asked for, so answering resumes THAT export: not a second request
+        /// for a folder already chosen, and not the whole week when what was
+        /// pressed was one day's re-export (L166).
+        case awaitingReelDecision(ReelRelayoutNotice.Question,
+                                  destination: URL, onlyDay: DayName?)
+    }
+
+    /// What Dan answered about a reel that cannot be re-rendered as it stands.
+    ///
+    /// No default anywhere it is taken, for the reason `regeneratingDays` has
+    /// none: an export that could omit it would silently re-lay-out the reel,
+    /// and the omission would look like ordinary code (L72).
+    enum ReelDecision: Equatable {
+        /// Export the video that is already there, untouched.
+        case keepApproved
+        /// Render it again, accepting a different arrangement.
+        case relayOut
     }
 
     struct Run {
@@ -104,7 +130,8 @@ final class ExportManager {
     /// ship the stale copy again, and the omission would look like ordinary
     /// code (L72: the default must be the safe state, so there isn't one).
     func start(eventID: Event.ID, to destinationRoot: URL, onlyDay: DayName? = nil,
-               appState: AppState, regeneratingDays: Set<DayName>) {
+               appState: AppState, regeneratingDays: Set<DayName>,
+               reelDecision: ReelDecision? = nil) {
         guard !isExporting(eventID) else { return }
 
         // Refuse while any day is still rebuilding: the asset copy step would
@@ -134,7 +161,43 @@ final class ExportManager {
             return
         }
 
-        guard let ev = appState.events.first(where: { $0.id == eventID }) else { return }
+        guard var ev = appState.events.first(where: { $0.id == eventID }) else { return }
+
+        // Before anything is decided or written (#1407). A reel laid out before
+        // layouts were recorded cannot be reproduced, so re-rendering it is a
+        // change to something Dan has already approved and posted, and it used
+        // to happen with nothing said. Asked here rather than in the export
+        // screen because three buttons there reach this method and the fourth
+        // somebody adds would miss a check written beside the other three.
+        //
+        // Ordered ahead of the seed minting below deliberately: minting is what
+        // fixes a new arrangement in place, so the question has to come first
+        // or it is asked about a decision already taken.
+        if reelDecision == nil, let question = ReelRelayoutNotice.question(for: ev) {
+            tracker.begin(Run(phase: .awaitingReelDecision(question,
+                                                            destination: destinationRoot,
+                                                            onlyDay: onlyDay),
+                              isFullExport: onlyDay == nil), for: eventID)
+            tracker.deactivate(eventID)
+            return
+        }
+
+        // The export dispatches the reel render, so it decides the reel's
+        // layout, and it was the one render path that decided nothing (#1403).
+        // Python refuses a reel with no seed rather than reshuffling it, so an
+        // event older than #1062 could not be exported at all, and the export
+        // screen reports only that the day's graphics could not be generated.
+        //
+        // PERSISTED, not carried in the snapshot alone: a seed living for one
+        // run would let the next export lay the same reel out differently, so
+        // the refusal would be traded for the reshuffle it exists to prevent.
+        //
+        // After the readiness gate above on purpose. An export that is refused
+        // renders nothing, so it has no layout to decide, and deciding one on
+        // the way to a refusal would change a reel nobody exported.
+        if reelDecision != .keepApproved, ev.ensureReelSeedForRender() {
+            appState.updateEvent(ev)
+        }
 
         guard destinationRoot.startAccessingSecurityScopedResource() else {
             // A failed access isn't an active run; store it deactivated so the
@@ -160,7 +223,7 @@ final class ExportManager {
             guard let self else { return }
             await self.runExport(eventID: eventID, snapshot: ev,
                                  destinationRoot: destinationRoot, onlyDay: onlyDay,
-                                 appState: appState)
+                                 appState: appState, reelDecision: reelDecision)
         }
         tracker.update(eventID) { $0.task = task }
     }
@@ -232,10 +295,12 @@ final class ExportManager {
         switch run.phase {
         case .exportingText, .generatingMedia:
             break
-        case .cancelling, .cancelled, .done, .failed:
+        case .cancelling, .cancelled, .done, .failed, .awaitingReelDecision:
             // A second press, or one that landed on a run already over. Both
             // are no-ops, and saying so is the point: pressing twice must not
-            // do anything a single press did not (#1047).
+            // do anything a single press did not (#1047). A run waiting on an
+            // answer is here for the same reason: nothing has started, so there
+            // is nothing to stop, and the way out of it is answering.
             return false
         }
         tracker.update(eventID) { $0.phase = .cancelling }
@@ -266,7 +331,8 @@ final class ExportManager {
     // MARK: - Pipeline
 
     private func runExport(eventID: Event.ID, snapshot capturedEvent: Event,
-                           destinationRoot: URL, onlyDay: DayName?, appState: AppState) async {
+                           destinationRoot: URL, onlyDay: DayName?, appState: AppState,
+                           reelDecision: ReelDecision?) async {
         let scopedDays: Set<DayName>? = onlyDay.map { [$0] }
 
         // Every account this week tags is remembered, so the book doubles as a
@@ -399,6 +465,13 @@ final class ExportManager {
                 // has crop offsets, force a Python regen so they bake in.
                 let hasUnflattenedEdits: Bool = {
                     guard let pd = capturedEvent.days[day.rawValue] else { return false }
+                    // Keeping the approved video means taking the copy, which
+                    // is exactly what this flag exists to refuse (#1407). The
+                    // crops it would otherwise bake in are already in that
+                    // video: it was rendered from them. What a re-render would
+                    // add is a different arrangement, which is the thing Dan
+                    // just said no to.
+                    if day == .thursday, reelDecision == .keepApproved { return false }
                     if day == .thursday { return !pd.reelCropOffsets.isEmpty }
                     return false
                 }()
