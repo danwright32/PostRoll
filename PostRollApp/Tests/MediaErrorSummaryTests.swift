@@ -66,13 +66,66 @@ final class MediaErrorSummaryTests: XCTestCase {
         XCTAssertTrue(s.lowercased().contains("regenerate"), s)
     }
 
-    func testItDoesNotPasteRawToolOutputAtTheUser() throws {
-        // The reasons are ffmpeg stderr. They belong in the log, not on a screen
-        // whose next action is "look in that day's folder".
+    // #1405: the reason travels with the day.
+    //
+    // `testItDoesNotPasteRawToolOutputAtTheUser` stood here and asserted the
+    // opposite. It was the guard on #262's decision to keep reasons off this
+    // screen, whose premise was that a reason is a wall of ffmpeg stderr
+    // telling Dan nothing. That premise expired (L316): measured against
+    // `tests/fixtures/real_failure_text.json`, the 17 recorded real failures
+    // run 22 to 311 characters with a median of 153, and
+    // `GenerationFailureText` now turns the recognised ones into a sentence
+    // naming what to do. So the test was deleted rather than adjusted, because
+    // a test defending a reversed decision becomes the guard on the rejected
+    // behaviour (L252). What it protected, that the banner stays readable, is
+    // covered by `testTheReasonIsHumanisedWhenItIsRecognised` below, which
+    // pins the actionable sentence rather than the raw text, and by
+    // `BannerLegibilityTests`, which renders this message on the real screen.
+    //
+    // The cost of withholding it, measured 2026-09-11: an export failed on a
+    // missing reel layout seed, the banner said only that Thursday's graphics
+    // could not be generated, and it was answered with a Lightroom re-export
+    // of 150 files that changed nothing.
+
+    func testTheFailureCarriesItsReason() throws {
         let s = try XCTUnwrap(MediaErrorSummary.sentence([
-            "tuesday": "ffmpeg: Invalid data found when processing input (exit 1)",
+            "thursday": "scroll reel failed: build_collage_strip needs a layout seed",
         ]))
-        XCTAssertFalse(s.contains("Invalid data found"), s)
+        XCTAssertTrue(s.contains("needs a layout seed"),
+                      "the cause is the part Dan can act on, and it was already in hand: \(s)")
+    }
+
+    func testTheReasonIsHumanisedWhenItIsRecognised() throws {
+        // Not the raw text alone. The same failure has to read the same here as
+        // it does on the generation screen, which routes through
+        // `GenerationFailureText` (L118).
+        let s = try XCTUnwrap(MediaErrorSummary.sentence([
+            "thursday": "ffmpeg: command not found",
+        ]))
+        XCTAssertTrue(s.contains("brew install ffmpeg"),
+                      "a recognised failure owes Dan the step that fixes it: \(s)")
+    }
+
+    func testEachFailedDayCarriesItsOwnReason() throws {
+        // One reason standing for two days is how the second one goes unread.
+        let s = try XCTUnwrap(MediaErrorSummary.sentence([
+            "tuesday": "before and after story failed: the edited photo is not there",
+            "thursday": "scroll reel failed: build_collage_strip needs a layout seed",
+        ]))
+        XCTAssertTrue(s.contains("the edited photo is not there"), s)
+        XCTAssertTrue(s.contains("needs a layout seed"), s)
+    }
+
+    func testTheReasonDoesNotRunIntoTheSentenceAfterIt() throws {
+        // Python's own wording carries no terminator, so the joiner supplies
+        // one, and must not supply a second to a reason that already ends in a
+        // stop (#405).
+        for reason in ["the edited photo is not there",
+                       "the edited photo is not there."] {
+            let s = try XCTUnwrap(MediaErrorSummary.sentence(["tuesday": reason]))
+            XCTAssertFalse(s.contains(".."), "double stop in: \(s)")
+            XCTAssertFalse(s.contains(" ."), "orphaned stop in: \(s)")
+        }
     }
 
     // ── warnings ──────────────────────────────────────────────────────────────
