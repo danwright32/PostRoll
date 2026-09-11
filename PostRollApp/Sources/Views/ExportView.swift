@@ -116,6 +116,12 @@ struct ExportView: View {
                     cancellingContent
                 case .cancelled:
                     cancelledContent
+                case .awaitingReelDecision(let question, let destination, let scope):
+                    ReelRelayoutChoice(
+                        message: question.message,
+                        canKeepApproved: question.canKeepApproved,
+                        onKeep: { resumeExport(to: destination, scope: scope, decision: .keepApproved) },
+                        onRelayOut: { resumeExport(to: destination, scope: scope, decision: .relayOut) })
                 }
             }
         }
@@ -525,6 +531,22 @@ struct ExportView: View {
             }
             .padding(Spacing.xl)
         }
+    }
+
+    /// Answers the reel question and starts the export that was waiting on it.
+    ///
+    /// The folder comes from the phase rather than being asked for again: it
+    /// was already picked, and asking twice for something already chosen reads
+    /// as the first answer having been lost.
+    ///
+    /// The waiting run is cleared first, because `start` refuses while a run is
+    /// recorded for this event and the answer would otherwise do nothing at all.
+    private func resumeExport(to destination: URL, scope: DayName?,
+                              decision: ExportManager.ReelDecision) {
+        exportManager.clear(eventID: event.id)
+        exportManager.start(eventID: event.id, to: destination, onlyDay: scope,
+                            appState: appState, regeneratingDays: regeneratingDays,
+                            reelDecision: decision)
     }
 
     private func errorContent(_ message: String) -> some View {

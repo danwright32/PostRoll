@@ -1,0 +1,8 @@
+{
+  "name": "an-export-relays-out-an-approved-reel-without-asking",
+  "file": "PostRollApp/Sources/Services/ExportManager.swift",
+  "find": "        if reelDecision == nil, let question = ReelRelayoutNotice.question(for: ev) {\n            tracker.begin(Run(phase: .awaitingReelDecision(question,\n                                                            destination: destinationRoot,\n                                                            onlyDay: onlyDay),\n                              isFullExport: onlyDay == nil), for: eventID)\n            tracker.deactivate(eventID)\n            return\n        }",
+  "replace": "        _ = reelDecision",
+  "test": "PostRollTests/ReelRelayoutNoticeTests/testAnExportStopsAndAsksRatherThanRelayingOutSilently",
+  "breaks": "the export goes back to re-rendering a reel that cannot be reproduced, so the video Dan reviewed and posted is replaced by a different arrangement with nothing said. Measured 2026-09-11, 18 of 21 events are in that state, and the only signal was the finished video looking wrong afterwards (#1407)"
+}
