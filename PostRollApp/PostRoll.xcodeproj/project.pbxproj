@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		00173F2EE3009B510038FB1A /* ExportFailureScreenFitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17D5700CAE3B2323C33CF23E /* ExportFailureScreenFitTests.swift */; };
 		0147518CCC16C8CA8883C03F /* ExportManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE393495DB84AE72DACAF36A /* ExportManifest.swift */; };
 		01C46B9BAFAA78A034F385F5 /* CoverReviewDisplay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A48BAAC376D511DC5794DF5 /* CoverReviewDisplay.swift */; };
 		026865A9BAFBCB3D20493F57 /* StoredErrorPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4E04908B60C2C7D3E1CA6A5 /* StoredErrorPolicy.swift */; };
@@ -893,7 +892,6 @@
 		1764A2F35F0D395B0D2CC917 /* GlobalTagMerge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalTagMerge.swift; sourceTree = "<group>"; };
 		1783C90085D65E30DC18F1E3 /* OutdatedDesignsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutdatedDesignsSheet.swift; sourceTree = "<group>"; };
 		17CA661F528639B67099B6E0 /* PostingPresetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostingPresetTests.swift; sourceTree = "<group>"; };
-		17D5700CAE3B2323C33CF23E /* ExportFailureScreenFitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportFailureScreenFitTests.swift; sourceTree = "<group>"; };
 		182F1E03AC0117569D98DEA5 /* ExportReadiness.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportReadiness.swift; sourceTree = "<group>"; };
 		199CB7885D591B3019F8B2F0 /* EventHandleSuggestionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventHandleSuggestionsTests.swift; sourceTree = "<group>"; };
 		19A497F26DF593629246405A /* BlogSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlogSection.swift; sourceTree = "<group>"; };
@@ -1878,7 +1876,6 @@
 				40B38A37FC257CB8A9A4DF32 /* ExportCompletenessTests.swift */,
 				3E9371999E8FEAA1ED6E4A19 /* ExportCompletionTests.swift */,
 				607CEB9A7CD7F07499B36618 /* ExportedMarkerNamesTests.swift */,
-				17D5700CAE3B2323C33CF23E /* ExportFailureScreenFitTests.swift */,
 				6F3AB5796D9489BEEA9353D3 /* ExportFolderRelocationTests.swift */,
 				B64F3D95EB7E5B6129902E7E /* ExportFolderStatusTests.swift */,
 				1A1A02011F643C5C2D2DA9CA /* ExportManagerReadinessTests.swift */,
@@ -2710,7 +2707,6 @@
 				77180F9779C68E544B7359F5 /* ExportCompletenessTests.swift in Sources */,
 				CF20FF564271565E864B9C0E /* ExportCompletionTests.swift in Sources */,
 				E5D036B356722876CB531E91 /* ExportDoneSummary.swift in Sources */,
-				00173F2EE3009B510038FB1A /* ExportFailureScreenFitTests.swift in Sources */,
 				13BB1A6261B1251E0A00BECF /* ExportFolderBanner.swift in Sources */,
 				F8BA0223350B45B5C75BA271 /* ExportFolderRelocation.swift in Sources */,
 				E947C585B7407D4C97C0F573 /* ExportFolderRelocationTests.swift in Sources */,
