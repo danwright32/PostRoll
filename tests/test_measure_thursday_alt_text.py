@@ -278,3 +278,33 @@ def test_a_zero_is_not_reported_as_the_restore_being_inert(tmp_path):
         f"nothing in the report says {RESTORE_CAVEAT!r}, so a zero here reads "
         f"as the restore never firing when it equally means no week has been "
         f"generated since it shipped")
+
+
+def test_the_zero_caveat_is_not_printed_over_a_reading_that_is_not_zero():
+    """#1219 follow-up: the caveat may only be said about the reading it is about.
+
+    `RESTORE_CAVEAT` explains that a zero cannot tell a restore that never fires
+    from a store nothing has been generated into. It was printed unconditionally,
+    so a run that DID see the restore fire was still told its number could not be
+    told apart from an absence, which is the opposite of what that reading means
+    (L11: a message may claim only what its check measured).
+
+    Found on 2026-09-11 while measuring three isolated generations for #1219.
+    """
+    from tools.measure_thursday_alt_text import Reading, RESTORE_CAVEAT, render
+
+    fired = Reading(events=1, reels=1, alt_texts=1, per_frame=0, under_floor=0,
+                    events_under_floor=0, rewritten_reels=1, rewritten_findings=2)
+    assert RESTORE_CAVEAT not in render(fired), (
+        "a reading that saw the restore fire was told a zero cannot be "
+        "distinguished from an absence")
+
+
+def test_the_zero_caveat_is_still_printed_over_an_actual_zero():
+    """The positive control. Without it the assertion above is satisfied by
+    deleting the caveat outright, which loses the one thing it exists to say."""
+    from tools.measure_thursday_alt_text import Reading, RESTORE_CAVEAT, render
+
+    silent = Reading(events=1, reels=1, alt_texts=1, per_frame=0, under_floor=0,
+                     events_under_floor=0, rewritten_reels=0, rewritten_findings=0)
+    assert RESTORE_CAVEAT in render(silent)

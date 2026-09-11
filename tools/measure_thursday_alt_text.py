@@ -186,7 +186,12 @@ def render(reading: Reading) -> str:
         f"({RESTORE_CODE}):",
         f"  {rate(reading.rewritten_reels, reading.reels)} reels, "
         f"{reading.rewritten_findings} finding(s)",
-        f"  {RESTORE_CAVEAT}.",
+        # Only over an actual zero. Printed unconditionally, it told a run that
+        # HAD seen the restore fire that its number could not be told apart
+        # from an absence, which is the opposite of what that reading means
+        # (L11). A reading above zero needs no caveat: the restore fired, and
+        # that is the whole thing the count was asked to establish.
+        *([f"  {RESTORE_CAVEAT}."] if reading.rewritten_findings == 0 else []),
         "",
         "NOT comparable to #1067's other figure. Its '12 of 21 described a",
         "single moment rather than the reel' was a judgement about the PROSE of",
