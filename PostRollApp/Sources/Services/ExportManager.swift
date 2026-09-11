@@ -134,7 +134,22 @@ final class ExportManager {
             return
         }
 
-        guard let ev = appState.events.first(where: { $0.id == eventID }) else { return }
+        guard var ev = appState.events.first(where: { $0.id == eventID }) else { return }
+
+        // The export dispatches the reel render, so it decides the reel's
+        // layout, and it was the one render path that decided nothing (#1403).
+        // Python refuses a reel with no seed rather than reshuffling it, so an
+        // event older than #1062 could not be exported at all, and the export
+        // screen reports only that the day's graphics could not be generated.
+        //
+        // PERSISTED, not carried in the snapshot alone: a seed living for one
+        // run would let the next export lay the same reel out differently, so
+        // the refusal would be traded for the reshuffle it exists to prevent.
+        //
+        // After the readiness gate above on purpose. An export that is refused
+        // renders nothing, so it has no layout to decide, and deciding one on
+        // the way to a refusal would change a reel nobody exported.
+        if ev.ensureReelSeedForRender() { appState.updateEvent(ev) }
 
         guard destinationRoot.startAccessingSecurityScopedResource() else {
             // A failed access isn't an active run; store it deactivated so the
