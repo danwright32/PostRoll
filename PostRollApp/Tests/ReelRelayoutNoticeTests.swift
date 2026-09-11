@@ -258,4 +258,35 @@ final class ReelRelayoutNoticeTests: XCTestCase {
         // emphasised one.
         XCTAssertFalse(ReelRelayoutChoice(message: "m", canKeepApproved: true).relayOutIsPrimary)
     }
+
+    func testAnsweringActuallyStartsTheExportItWasWaitingOn() throws {
+        // The buttons answer by clearing the waiting run and starting again,
+        // and `clear` refuses while a run is active while `start` refuses while
+        // one is recorded. Either refusing leaves a button that does nothing at
+        // all, which is the one failure a screen cannot report about itself
+        // (L109). Driven as the view drives it rather than by calling `start`
+        // with an answer directly, because that is the sequence that can jam.
+        let manager = ExportManager()
+        let event = try unanswerable()
+        let state = self.state([event])
+        let folder = try destination()
+
+        manager.start(eventID: event.id, to: folder, appState: state, regeneratingDays: [])
+        guard case .awaitingReelDecision? = manager.run(for: event.id)?.phase else {
+            return XCTFail("the fixture must actually reach the question")
+        }
+
+        manager.clear(eventID: event.id)
+        XCTAssertNil(manager.run(for: event.id),
+                     "the waiting run has to go, or starting again is refused")
+
+        manager.start(eventID: event.id, to: folder, appState: state,
+                      regeneratingDays: [], reelDecision: .relayOut)
+
+        if case .awaitingReelDecision? = manager.run(for: event.id)?.phase {
+            XCTFail("answering asked the same question again instead of acting on it")
+        }
+        XCTAssertNotNil(manager.run(for: event.id),
+                        "the answer has to leave a run behind, or the button did nothing")
+    }
 }
