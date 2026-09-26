@@ -2053,7 +2053,8 @@ private struct ThursdayReelSection: View {
                             .tracking(0.8)
                             .foregroundStyle(PaintedSurfaces.secondaryText)
                         HStack(spacing: Spacing.sm) {
-                            Slider(value: $scrollDuration, in: 15...60, step: 5)
+                            Slider(value: $scrollDuration, in: ScrollReelTiming.reelLengthRange,
+                                   step: ScrollReelTiming.reelLengthStep)
                                 .tint(PaintedSurfaces.iconAccent)
                             Text("\(Int(scrollDuration))s")
                                 .font(.system(size: 11, weight: .medium))
