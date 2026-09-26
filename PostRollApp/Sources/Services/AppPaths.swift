@@ -53,19 +53,59 @@ enum AppPaths {
     /// written after a verified copy, the app reads live data from Documents
     /// (working, but prompting) until the move is genuinely complete, then
     /// switches to the unprotected location and never prompts at launch again.
+    /// The one copy of the app that uses Dan's real data (#1425).
+    static let installedBundle = URL(fileURLWithPath: "/Applications/PostRoll.app")
+
+    /// Where every OTHER copy keeps its data: a build opened from a worktree
+    /// to look at a change, a Debug build, the unit test host. On 2026-09-26
+    /// four such builds each re-saved the real events.json, harmless that day
+    /// and a permanent change the first time one of them encodes the store
+    /// differently (L267, L719).
+    static var checkingRoot: URL {
+        appSupportRoot.deletingLastPathComponent().appendingPathComponent("PostRoll-Checking")
+    }
+
+    /// Replaces the checking copy's events with the real ones, so a copy
+    /// opened to look at a change has the real events to look at, and
+    /// whatever it saved last time is gone. Only the events file is copied:
+    /// the photos, audio and previews it names are read by absolute path.
+    /// Never writes to `real`.
+    static func refreshCheckingCopy(from real: URL, to checking: URL) {
+        let fm = FileManager.default
+        let source = real.appendingPathComponent("events.json")
+        let target = checking.appendingPathComponent("events.json")
+        try? fm.createDirectory(at: checking, withIntermediateDirectories: true)
+        try? fm.removeItem(at: target)
+        guard fm.fileExists(atPath: source.path) else { return }
+        do {
+            try fm.copyItem(at: source, to: target)
+        } catch {
+            NSLog("PostRoll test copy: could not copy the real events for checking: \(error)")
+        }
+    }
+
     static func resolveRoot(
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        fileManager fm: FileManager = .default
+        fileManager fm: FileManager = .default,
+        bundleURL: URL = Bundle.main.bundleURL,
+        refresh: (URL, URL) -> Void = refreshCheckingCopy
     ) -> URL {
         if let override = environment["POSTROLL_DATA_DIR"],
            !override.trimmingCharacters(in: .whitespaces).isEmpty {
             return URL(fileURLWithPath: override, isDirectory: true).standardizedFileURL
         }
         let appSupport = appSupportRoot
-        if fm.fileExists(atPath: appSupport.appendingPathComponent(migrationMarker).path) {
-            return appSupport
+        let real = fm.fileExists(atPath: appSupport.appendingPathComponent(migrationMarker).path)
+            ? appSupport : legacyDataRoot
+        guard bundleURL.standardizedFileURL.path == installedBundle.path else {
+            // A test run gets the separate folder too, and never a copy of the
+            // real events: nothing in a suite should be reading Dan's data.
+            if environment["XCTestConfigurationFilePath"] == nil {
+                refresh(real, checkingRoot)
+            }
+            return checkingRoot
         }
-        return legacyDataRoot
+        return real
     }
 
     /// The Info.plist key the build stamps with the checkout it was built from,
