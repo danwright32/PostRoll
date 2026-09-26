@@ -207,8 +207,14 @@ fi
 # it can be a build from somewhere else, even a folder since deleted, and an app
 # pointing at a checkout that is gone cannot generate anything. The build phase
 # records where it was built from; read it back and refuse a stranger.
-RECORDED_ROOT="$(/usr/libexec/PlistBuddy -c "Print :POSTROLLProjectRoot" \
-  "${BUILT_APP}/Contents/Info.plist" 2>/dev/null || true)"
+# Read with Python's plistlib rather than PlistBuddy, which exists only on a
+# Mac: this script's tests run on the Linux CI image too. Unreadable reads as
+# unrecorded, which is refused below.
+RECORDED_ROOT="$(/usr/bin/env python3 -c '
+import plistlib, sys
+with open(sys.argv[1], "rb") as f:
+    print(plistlib.load(f).get("POSTROLLProjectRoot", ""))
+' "${BUILT_APP}/Contents/Info.plist" 2>/dev/null || true)"
 if [[ "${RECORDED_ROOT}" != "${REPO_ROOT}" ]]; then
   echo "Error: the build in ${BUILT_APP} was made from" >&2
   echo "       ${RECORDED_ROOT:-an unrecorded checkout}, not from ${REPO_ROOT}," >&2
