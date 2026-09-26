@@ -593,6 +593,10 @@ def _fake_product(tmp_path: Path, recorded_root: str) -> Path:
 
 def _installer_env(tmp_path: Path) -> dict:
     stubs = _stub_dir(tmp_path, xcodebuild_exit=0)
+    # PostRoll reported as running, and a quit that only records being asked, so
+    # the guard on quitting is exercised without anything real being quit.
+    _write_stub(stubs / "pgrep", "exit 0\n")
+    _write_stub(stubs / "osascript", f'echo "$*" >> "{tmp_path}/osascript-calls"\n')
     env = dict(os.environ)
     env["PATH"] = f"{stubs}:{env['PATH']}"
     env["SKIP_INSTALL_TESTS"] = "1"
@@ -608,6 +612,11 @@ def _real_install_stamp():
 @pytest.mark.skipif(not BUILD_INSTALL.exists(), reason="build-install.sh missing")
 def test_an_install_goes_where_it_is_told_and_nowhere_else(tmp_path):
     _fake_product(tmp_path, str(REPO_ROOT))
+    # An earlier install already there, as there always is for real: the quit
+    # and the replace only happen when the destination exists.
+    earlier = tmp_path / "Applications" / "PostRoll.app"
+    (earlier / "Contents").mkdir(parents=True)
+    (earlier / "Contents" / "old-marker").write_text("earlier install")
     before = _real_install_stamp()
 
     result = run_installer(BUILD_INSTALL, _installer_env(tmp_path), tmp_path)
@@ -619,6 +628,10 @@ def test_an_install_goes_where_it_is_told_and_nowhere_else(tmp_path):
     assert _real_install_stamp() == before, "the real /Applications/PostRoll.app was replaced"
     assert "Quitting running PostRoll" not in combined, (
         "an install somewhere else still quit the PostRoll Dan has open")
+    assert not (tmp_path / "osascript-calls").exists(), (
+        "an install somewhere else asked the running PostRoll to quit")
+    assert not (dest / "Contents" / "old-marker").exists(), (
+        "the earlier install at the destination was not replaced")
     assert "register-url-scheme" not in combined and "registrations" not in combined, (
         "an install somewhere else still rewrote the machine's link registrations")
 
