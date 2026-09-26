@@ -26,9 +26,11 @@ final class LogPathMessagingTests: XCTestCase {
         // The property that matters and holds on every machine: the string
         // tracks the real root, migrated or not. A hardcoded literal would
         // stop matching the moment the root differs from it.
-        // The root's own name rather than "PostRoll": this process is not the
-        // installed copy, so since #1425 its root is PostRoll-Checking.
-        XCTAssertTrue(AppPaths.logsDirDisplayPath.hasSuffix(AppPaths.root.lastPathComponent + "/logs"),
+        // Written out rather than read from AppPaths.root, which is what the
+        // path is built from and so could only ever agree with it (L70). A
+        // test process is not the installed copy, so since #1425 its root is
+        // PostRoll-Checking.
+        XCTAssertTrue(AppPaths.logsDirDisplayPath.hasSuffix("PostRoll-Checking/logs"),
                       AppPaths.logsDirDisplayPath)
         XCTAssertTrue(AppPaths.logsDir.path.hasSuffix(
             AppPaths.logsDirDisplayPath.replacingOccurrences(of: "~", with: "")))

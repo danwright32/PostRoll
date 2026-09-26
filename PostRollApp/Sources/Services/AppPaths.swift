@@ -45,14 +45,6 @@ enum AppPaths {
         return base.appendingPathComponent("PostRoll")
     }
 
-    /// Split out so tests can exercise the override logic with an injected
-    /// environment; the static `root` resolves once per process.
-    ///
-    /// Returns Application Support once `DataMigration` has dropped its marker
-    /// there, otherwise the legacy Documents folder. Because the marker is only
-    /// written after a verified copy, the app reads live data from Documents
-    /// (working, but prompting) until the move is genuinely complete, then
-    /// switches to the unprotected location and never prompts at launch again.
     /// The one copy of the app that uses Dan's real data (#1425).
     static let installedBundle = URL(fileURLWithPath: "/Applications/PostRoll.app")
 
@@ -84,6 +76,14 @@ enum AppPaths {
         }
     }
 
+    /// Split out so tests can exercise the override logic with an injected
+    /// environment; the static `root` resolves once per process.
+    ///
+    /// Returns Application Support once `DataMigration` has dropped its marker
+    /// there, otherwise the legacy Documents folder. Because the marker is only
+    /// written after a verified copy, the app reads live data from Documents
+    /// (working, but prompting) until the move is genuinely complete, then
+    /// switches to the unprotected location and never prompts at launch again.
     static func resolveRoot(
         environment: [String: String] = ProcessInfo.processInfo.environment,
         fileManager fm: FileManager = .default,
