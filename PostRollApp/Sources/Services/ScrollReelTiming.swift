@@ -163,12 +163,6 @@ enum ScrollReelTiming {
     static let reelLengthRange: ClosedRange<Double> = 15...90
     static let reelLengthStep: Double = 1
 
-    /// The length to rebuild the reel at when the slider is let go, or nil
-    /// when that would change nothing.
-    ///
-    /// Every commit costs a rebuild, so a release on the length the reel
-    /// already has, or a second commit when the popover closes after one,
-    /// must not start another.
     /// A slider position as a length on the grid: rounded to the step and
     /// held to the range (#1420). The popover's slider is continuous, because
     /// macOS draws a tick for every step of a stepped one and 75 of them read
@@ -178,6 +172,12 @@ enum ScrollReelTiming {
         return min(max(snapped, reelLengthRange.lowerBound), reelLengthRange.upperBound)
     }
 
+    /// The length to rebuild the reel at when the slider is let go, or nil
+    /// when that would change nothing.
+    ///
+    /// Every commit costs a rebuild, so a release on the length the reel
+    /// already has, or a second commit when the popover closes after one,
+    /// must not start another.
     static func reelLengthToCommit(draft: Double, current: Double) -> Double? {
         let held = snappedReelLength(draft)
         return held == current ? nil : held
