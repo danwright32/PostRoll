@@ -11,7 +11,6 @@ import os
 import re
 import shutil
 import stat
-import subprocess
 from pathlib import Path
 
 import pytest
