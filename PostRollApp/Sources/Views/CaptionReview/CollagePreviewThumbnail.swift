@@ -26,6 +26,11 @@ struct CollagePreviewThumbnail: View {
     /// per-cell crop keys still resolve.
     var photoURLs: [URL] = []
 
+    /// The surface this is drawn on, which decides its ink (#1414): the dark
+    /// preview panel in caption review, the page anywhere else.
+    @Environment(\.inkSurface) private var inkSurface
+    private var ink: SurfaceInk { PaintedSurfaces.ink(on: inkSurface) }
+
     @State private var image: NSImage?
     @State private var cells: [CollageCell] = []
 
@@ -301,7 +306,7 @@ struct CollagePreviewThumbnail: View {
                         VStack(spacing: 6) {
                             Image(systemName: "arrow.clockwise.circle.fill")
                                 .font(.system(size: 22))
-                                .foregroundStyle(PaintedSurfaces.iconAccent)
+                                .foregroundStyle(ink.accentMark)
                             // Names the control rather than drawing it (#538).
                             // Drawn, this sentence said nothing at all to anyone
                             // who cannot see the glyph, and nothing connected the
@@ -452,12 +457,12 @@ struct CollagePreviewThumbnail: View {
 
                     Image(systemName: "photo")
                         .font(.system(size: 9))
-                        .foregroundStyle(PaintedSurfaces.secondaryText)
+                        .foregroundStyle(ink.sentence)
                     Slider(value: scaleBinding, in: 0.25...2.5)
-                    .tint(PaintedSurfaces.iconAccent)
+                    .tint(ink.accentMark)
                     Image(systemName: "photo.fill")
                         .font(.system(size: 12))
-                        .foregroundStyle(PaintedSurfaces.secondaryText)
+                        .foregroundStyle(ink.sentence)
                     if hasAdjust {
                         // A symbol rather than a typed glyph, and named, because
                         // this is a control: nothing else on the row says what it
@@ -470,7 +475,7 @@ struct CollagePreviewThumbnail: View {
                         } label: {
                             Image(systemName: "arrow.counterclockwise")
                                 .font(.system(size: 11))
-                                .foregroundStyle(PaintedSurfaces.iconAccent)
+                                .foregroundStyle(ink.accentMark)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Reset zoom")
@@ -492,10 +497,10 @@ struct CollagePreviewThumbnail: View {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 11))
-                        .foregroundStyle(PaintedSurfaces.iconAccent)
+                        .foregroundStyle(ink.accentMark)
                     Text("Frame changes saved. They'll appear in the exported collage")
                         .font(.system(size: 11))
-                        .foregroundStyle(PaintedSurfaces.secondaryText)
+                        .foregroundStyle(ink.sentence)
                     Spacer()
                 }
                 .padding(.horizontal, 2)

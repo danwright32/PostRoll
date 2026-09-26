@@ -924,6 +924,7 @@ enum PaintedSurfaces {
         "storyPanel": storyPanel,
         "storyPanelLabel": storyPanelLabel,
         "storyPanelDetail": storyPanelDetail,
+        "storyPanelAccent": storyPanelAccent,
         "dragHandleFill": dragHandleFill,
         "dragHandleActiveFill": dragHandleActiveFill,
         "dragHandleIcon": dragHandleIcon,
@@ -951,7 +952,7 @@ enum PaintedSurfaces {
     // border that stopped drawing at all would move (L129).
 
     static var all: [Pair] {
-        var pairs: [Pair] = []
+        var pairs: [Pair] = inkPairs
 
         for style in BrandBannerStyle.allCases {
             let behind = BrandBanner.background(style)
@@ -1231,5 +1232,110 @@ enum PaintedSurfaces {
                           dockWorkingClock, on: dockWorkingBand, .bodyText))
 
         return pairs
+    }
+}
+
+// MARK: - Ink by surface (#1414)
+
+/// Which painted surface a view's type is drawn over.
+///
+/// The reel and collage editors sit on the near black `storyPanel` in caption
+/// review, and the collage editor is ALSO drawn on the page in the media strip,
+/// so no one fixed colour can be right for it. They drew page ink everywhere,
+/// dark brown on near black, which Dan called basically unreadable, and nothing
+/// reported it because each of those names was registered against the page
+/// alone (L213, L569). So the surface says what it is, through the environment,
+/// and the views ask it for ink by role.
+enum InkSurface: CaseIterable {
+    case page
+    case storyPanel
+}
+
+/// The ink a view needs on one surface, by role rather than by colour.
+struct SurfaceInk {
+    /// The line that is the point: an instruction, a value.
+    let strong: Color
+    /// The line under it: a hint, a warning sentence, a quiet mark.
+    let sentence: Color
+    /// A text button that reads as a link.
+    let accentText: Color
+    /// An icon or a slider's fill in the accent.
+    let accentMark: Color
+
+    /// Every role with the level it is measured to, so `PaintedSurfaces.all`
+    /// registers each one and a fifth cannot arrive unmeasured (L113).
+    var roles: [(name: String, colour: Color, kind: PaintedSurfaces.Kind)] {
+        [("strong", strong, .bodyText),
+         ("sentence", sentence, .bodyText),
+         ("accent text", accentText, .bodyText),
+         ("accent mark", accentMark, .interfaceElement)]
+    }
+}
+
+extension PaintedSurfaces {
+    /// The rose on the dark panel. The page's two accents cannot be used there:
+    /// `roseGold` measures 3.98:1 on the panel and `roseDeep` 2.59:1, against
+    /// the 4.5:1 an 11pt link needs. This one is 7.08:1 and still reads as the
+    /// brand's rose rather than as a different colour.
+    static let storyPanelAccent = Color(red: 205/255, green: 150/255, blue: 138/255)
+
+    static func fill(of surface: InkSurface) -> Color {
+        switch surface {
+        case .page: return page
+        case .storyPanel: return storyPanel
+        }
+    }
+
+    static func ink(on surface: InkSurface) -> SurfaceInk {
+        switch surface {
+        case .page:
+            return SurfaceInk(strong: bodyText, sentence: secondaryText,
+                              accentText: pageAccentText, accentMark: iconAccent)
+        case .storyPanel:
+            return SurfaceInk(strong: storyPanelLabel, sentence: storyPanelDetail,
+                              accentText: storyPanelAccent, accentMark: storyPanelAccent)
+        }
+    }
+
+    /// Every role on every surface, and the swap banner's words over its wash
+    /// on the dark panel, which is darker than the panel is.
+    static var inkPairs: [Pair] {
+        var pairs: [Pair] = []
+        for surface in InkSurface.allCases {
+            for role in ink(on: surface).roles {
+                pairs.append(Pair("\(surface) ink", role.name, role.colour,
+                                  on: fill(of: surface), role.kind))
+            }
+        }
+        let panelInk = ink(on: .storyPanel)
+        let wash = taggedAccountsFill.composited(over: storyPanel)
+        pairs.append(Pair("storyPanel ink on the swap banner", "strong",
+                          panelInk.strong, on: wash, .bodyText))
+        pairs.append(Pair("storyPanel ink on the swap banner", "accent text",
+                          panelInk.accentText, on: wash, .bodyText))
+        return pairs
+    }
+}
+
+private struct InkSurfaceKey: EnvironmentKey {
+    static let defaultValue: InkSurface = .page
+}
+
+extension EnvironmentValues {
+    /// The surface the views below are drawn on. The page unless a dark panel
+    /// says otherwise through `storyPanelSurface()`.
+    var inkSurface: InkSurface {
+        get { self[InkSurfaceKey.self] }
+        set { self[InkSurfaceKey.self] = newValue }
+    }
+}
+
+extension View {
+    /// Fills this view with the dark preview panel and tells everything inside
+    /// it so. One call, so the panel cannot be painted while what is on it
+    /// keeps the page's ink; `DarkPanelInkTests` refuses the fill on its own.
+    func storyPanelSurface() -> some View {
+        background(PaintedSurfaces.storyPanel)
+            .environment(\.inkSurface, .storyPanel)
     }
 }

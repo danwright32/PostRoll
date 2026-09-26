@@ -37,6 +37,11 @@ struct ReelStripPreviewThumbnail: View {
     /// Whether the reel length slider is open (#1415).
     @State private var showingReelLength = false
 
+    /// The surface this is drawn on, which decides its ink (#1414): the dark
+    /// preview panel in caption review, the page anywhere else.
+    @Environment(\.inkSurface) private var inkSurface
+    private var ink: SurfaceInk { PaintedSurfaces.ink(on: inkSurface) }
+
     @State private var image: NSImage?
     @State private var cells: [CollageCell] = []
     @State private var stripW: CGFloat = 1080
@@ -72,12 +77,12 @@ struct ReelStripPreviewThumbnail: View {
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.left.arrow.right")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(PaintedSurfaces.iconAccent)
+                        .foregroundStyle(ink.accentMark)
                     Text(swapSourceIdx == nil
                          ? "Tap the photo you want to move"
                          : "Tap the spot you want to swap it with")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(PaintedSurfaces.bodyText)
+                        .foregroundStyle(ink.strong)
                     Spacer()
                     Button("Cancel") {
                         swapMode = false
@@ -85,7 +90,7 @@ struct ReelStripPreviewThumbnail: View {
                     }
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
-                    .foregroundStyle(PaintedSurfaces.pageAccentText)
+                    .foregroundStyle(ink.accentText)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
@@ -263,7 +268,7 @@ struct ReelStripPreviewThumbnail: View {
             if let speedNotice {
                 Text(speedNotice)
                     .font(.light(11))
-                    .foregroundStyle(PaintedSurfaces.secondaryText)
+                    .foregroundStyle(ink.sentence)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 2)
             }
@@ -280,7 +285,7 @@ struct ReelStripPreviewThumbnail: View {
                         .font(.system(size: 11))
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(PaintedSurfaces.iconAccent)
+                .foregroundStyle(ink.accentText)
                 .padding(.horizontal, 2)
                 .popover(isPresented: $showingPace, arrowEdge: .bottom) {
                     if let image {
@@ -311,12 +316,12 @@ struct ReelStripPreviewThumbnail: View {
 
                     Image(systemName: "photo")
                         .font(.system(size: 9))
-                        .foregroundStyle(PaintedSurfaces.secondaryText)
+                        .foregroundStyle(ink.sentence)
                     Slider(value: scaleBinding, in: 0.25...2.5)
-                        .tint(PaintedSurfaces.iconAccent)
+                        .tint(ink.accentMark)
                     Image(systemName: "photo.fill")
                         .font(.system(size: 12))
-                        .foregroundStyle(PaintedSurfaces.secondaryText)
+                        .foregroundStyle(ink.sentence)
                     if hasAdjust {
                         // A symbol rather than a typed glyph, and named, because
                         // this is a control: nothing else on the row says what it
@@ -329,7 +334,7 @@ struct ReelStripPreviewThumbnail: View {
                         } label: {
                             Image(systemName: "arrow.counterclockwise")
                                 .font(.system(size: 11))
-                                .foregroundStyle(PaintedSurfaces.iconAccent)
+                                .foregroundStyle(ink.accentMark)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Reset zoom")
@@ -350,7 +355,7 @@ struct ReelStripPreviewThumbnail: View {
                          ? "Rebuilding reel…"
                          : "Drag photos to pan · tap for zoom")
                         .font(.system(size: 11))
-                        .foregroundStyle(PaintedSurfaces.secondaryText)
+                        .foregroundStyle(ink.sentence)
                     Spacer()
                     if onSwapPhotos != nil && !swapMode {
                         Button {
@@ -360,7 +365,7 @@ struct ReelStripPreviewThumbnail: View {
                         } label: {
                             Label("Swap photos", systemImage: "arrow.left.arrow.right")
                                 .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(PaintedSurfaces.pageAccentText)
+                                .foregroundStyle(ink.accentText)
                         }
                         .buttonStyle(.plain)
                         .disabled(isRegenerating || cells.count < 2)
