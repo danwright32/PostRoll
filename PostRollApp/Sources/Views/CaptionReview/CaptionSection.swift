@@ -479,7 +479,7 @@ struct CaptionSection: View {
                             Text(splitPreviewLabel)
                                 .font(.system(size: 9, weight: .medium))
                                 .tracking(0.8)
-                                .foregroundStyle(PaintedSurfaces.secondaryText)
+                                .foregroundStyle(PaintedSurfaces.storyPanelDetail)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .padding(.horizontal, Spacing.md)
                                 .padding(.top, Spacing.sm)
@@ -497,7 +497,7 @@ struct CaptionSection: View {
                             Spacer(minLength: 0)
                         }
                         .frame(maxWidth: .infinity, maxHeight: storyExpandedMaxHeight)
-                        .background(PaintedSurfaces.storyPanel)
+                        .storyPanelSurface()
                         .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
                         .padding(.horizontal, Spacing.xl)
                         .padding(.vertical, Spacing.md)
@@ -758,7 +758,7 @@ struct CaptionSection: View {
                                 Text(splitPreviewLabel)
                                     .font(.system(size: 9, weight: .medium))
                                     .tracking(0.8)
-                                    .foregroundStyle(PaintedSurfaces.secondaryText)
+                                    .foregroundStyle(PaintedSurfaces.storyPanelDetail)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(.horizontal, Spacing.md)
                                     .padding(.top, Spacing.sm)
@@ -784,7 +784,7 @@ struct CaptionSection: View {
                                                 .font(.system(size: 12, weight: .medium))
                                         }
                                         .buttonStyle(.plain)
-                                        .foregroundStyle(PaintedSurfaces.pageAccentText)
+                                        .foregroundStyle(PaintedSurfaces.storyPanelAccent)
                                         .disabled(isRegeneratingGraphic)
                                         .padding(.bottom, Spacing.xs)
                                     }
@@ -936,7 +936,7 @@ struct CaptionSection: View {
                                 Spacer(minLength: 0)
                             }
                             .frame(maxWidth: .infinity, maxHeight: storyExpandedMaxHeight)
-                            .background(PaintedSurfaces.storyPanel)
+                            .storyPanelSurface()
                             .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
                             .padding(.horizontal, Spacing.xl)
                             .padding(.vertical, Spacing.md)
