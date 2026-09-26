@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import shutil
 
 import pytest
@@ -201,3 +202,33 @@ def _source_tree_is_read_only():
         "leaves an edit in the working tree that nobody made. Copy what you need "
         "into tmp_path and work on the copy (#497)."
     )
+
+
+# ── #1423: no test may install anything for real ─────────────────────────────
+#
+# These tests run the REAL build-install.sh with a stub xcodebuild, and the
+# stub builds nothing, but the script copies whatever product sits in the build
+# folder. The shared one holds a real Release build whenever anybody has run
+# `make build`, so on 2026-09-26 these tests quit Dan's PostRoll and installed a
+# build from a deleted worktree over /Applications/PostRoll.app during a `make
+# test`. Every run of the installer goes through this, which points the
+# destination and the build folder into tmp_path and refuses to run a script
+# that would not honour them (L2, L284).
+
+INSTALL_DEST_VAR = "POSTROLL_INSTALL_DEST"
+INSTALL_BUILD_DIR_VAR = "POSTROLL_INSTALL_BUILD_DIR"
+
+
+def run_installer(script: Path, env: dict, tmp_path: Path, *args: str):
+    text = script.read_text()
+    assert INSTALL_DEST_VAR in text and INSTALL_BUILD_DIR_VAR in text, (
+        f"{script} does not take {INSTALL_DEST_VAR} and {INSTALL_BUILD_DIR_VAR}, so "
+        "running it here would install over /Applications/PostRoll.app. Refusing.")
+    env = dict(env)
+    # The folder exists, as the real /Applications always does.
+    (tmp_path / "Applications").mkdir(exist_ok=True)
+    env[INSTALL_DEST_VAR] = str(tmp_path / "Applications" / "PostRoll.app")
+    env[INSTALL_BUILD_DIR_VAR] = str(tmp_path / "DerivedData")
+    return subprocess.run(["/bin/bash", str(script), *args],
+                          capture_output=True, text=True, env=env, timeout=600)
+

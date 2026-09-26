@@ -10,7 +10,15 @@ PROJECT="PostRoll.xcodeproj"
 SCHEME="PostRoll"
 CONFIG="Release"
 APP_NAME="PostRoll.app"
-DEST="/Applications/${APP_NAME}"
+REAL_DEST="/Applications/${APP_NAME}"
+# Overridable for the tests alone (#1423): they run this script with a stub
+# xcodebuild, and on 2026-09-26 it copied a real build left in the shared build
+# folder over Dan's app. Anywhere but the real destination, it neither quits the
+# running PostRoll, nor signs with the keychain identity, nor touches the
+# machine's link registrations.
+DEST="${POSTROLL_INSTALL_DEST:-${REAL_DEST}}"
+FOR_REAL=0
+[[ "${DEST}" == "${REAL_DEST}" ]] && FOR_REAL=1
 # One cache location for every build this repo runs, shared with the
 # Makefile so the two cannot drift, and outside the iCloud-synced checkout
 # (#485).
@@ -22,7 +30,7 @@ if [[ ! -f "${CACHE_PATH_FILE}" ]]; then
   exit 1
 fi
 . "${CACHE_PATH_FILE}"
-BUILD_DIR="${POSTROLL_DERIVED_DATA}"
+BUILD_DIR="${POSTROLL_INSTALL_BUILD_DIR:-${POSTROLL_DERIVED_DATA}}"
 
 # What the gate is about to vouch FOR, checked before it spends four minutes
 # proving something about it (#957).
@@ -194,10 +202,25 @@ if [[ ! -d "${BUILT_APP}" ]]; then
   exit 1
 fi
 
+# The product must be the one this checkout just built (#1423). The build
+# folder is shared by every checkout and worktree of this repo, so what sits in
+# it can be a build from somewhere else, even a folder since deleted, and an app
+# pointing at a checkout that is gone cannot generate anything. The build phase
+# records where it was built from; read it back and refuse a stranger.
+RECORDED_ROOT="$(/usr/libexec/PlistBuddy -c "Print :POSTROLLProjectRoot" \
+  "${BUILT_APP}/Contents/Info.plist" 2>/dev/null || true)"
+if [[ "${RECORDED_ROOT}" != "${REPO_ROOT}" ]]; then
+  echo "Error: the build in ${BUILT_APP} was made from" >&2
+  echo "       ${RECORDED_ROOT:-an unrecorded checkout}, not from ${REPO_ROOT}," >&2
+  echo "       which is the checkout being installed. Installing it would give" >&2
+  echo "       you an app pointing at the wrong code. Nothing was installed." >&2
+  exit 1
+fi
+
 echo "==> Installing to ${DEST}"
 if [[ -d "${DEST}" ]]; then
   # If the app is running, quit it first so the replace doesn't fail.
-  if pgrep -xq "PostRoll"; then
+  if [[ "${FOR_REAL}" == "1" ]] && pgrep -xq "PostRoll"; then
     echo "    Quitting running PostRoll..."
     osascript -e 'tell application "PostRoll" to quit' || true
     sleep 1
@@ -215,6 +238,12 @@ xattr -cr "${DEST}" 2>/dev/null || true
 # Sign with a stable self-signed identity if one exists (run ./setup-signing.sh
 # once to create it). A stable identity keeps macOS folder-permission grants
 # (Downloads, etc.) from re-prompting on every rebuild. Falls back to ad-hoc.
+if [[ "${FOR_REAL}" != "1" ]]; then
+  echo "==> Copied to ${DEST}, which is not ${REAL_DEST}: not signing it and"
+  echo "    not touching the running app or the machine's link handlers."
+  exit 0
+fi
+
 SIGN_IDENTITY="PostRoll Local Signing"
 if security find-identity -v -p codesigning 2>/dev/null | grep -qF "${SIGN_IDENTITY}"; then
   # Show codesign's stderr on failure: an unsigned bundle silently breaks TCC

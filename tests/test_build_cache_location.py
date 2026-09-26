@@ -149,16 +149,14 @@ def test_the_install_script_says_so_when_the_shared_definition_is_missing(tmp_pa
     thing to say.
     """
     import shutil
-    import subprocess
 
     scratch = tmp_path / "PostRollApp"
     scratch.mkdir()
     shutil.copy2(BUILD_INSTALL, scratch / "build-install.sh")
     # Deliberately NOT copying derived-data-path.sh.
 
-    result = subprocess.run(
-        ["/bin/bash", str(scratch / "build-install.sh")],
-        capture_output=True, text=True, timeout=120)
+    from conftest import run_installer
+    result = run_installer(scratch / "build-install.sh", dict(os.environ), tmp_path)
 
     assert result.returncode != 0
     combined = result.stdout + result.stderr

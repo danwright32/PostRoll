@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import ffmpeg_required, should_skip_ffmpeg_tests
+from conftest import ffmpeg_required, run_installer, should_skip_ffmpeg_tests
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BUILD_INSTALL = REPO_ROOT / "PostRollApp" / "build-install.sh"
@@ -117,10 +117,7 @@ def _run_install(tmp_path: Path, *, xcodebuild_exit: int, env_extra: dict | None
     # The checkout gate has its own tests below, with git stubbed.
     env["ALLOW_DIRTY_INSTALL"] = "1"
     env.update(env_extra or {})
-    return subprocess.run(
-        ["/bin/bash", str(BUILD_INSTALL)],
-        capture_output=True, text=True, env=env, timeout=600,
-    )
+    return run_installer(BUILD_INSTALL, env, tmp_path)
 
 
 @pytest.mark.skipif(not BUILD_INSTALL.exists(), reason="build-install.sh missing")
@@ -167,10 +164,7 @@ def test_a_missing_venv_is_refused_rather_than_counted_as_a_pass(tmp_path, monke
     env = dict(os.environ)
     env["PATH"] = f"{stubs}:{env['PATH']}"
     env.pop("SKIP_INSTALL_TESTS", None)
-    result = subprocess.run(
-        ["/bin/bash", str(fake_repo / "PostRollApp" / "build-install.sh")],
-        capture_output=True, text=True, env=env, timeout=600,
-    )
+    result = run_installer(fake_repo / "PostRollApp" / "build-install.sh", env, tmp_path)
 
     assert result.returncode != 0
     combined = result.stdout + result.stderr
@@ -233,10 +227,7 @@ def _run_green_install(tmp_path: Path, *, with_xcbeautify: bool):
     env = dict(os.environ)
     env["PATH"] = f"{stubs}:{BARE_PATH_DIRS}"
     env.pop("SKIP_INSTALL_TESTS", None)
-    result = subprocess.run(
-        ["/bin/bash", str(fake_repo / "PostRollApp" / "build-install.sh")],
-        capture_output=True, text=True, env=env, timeout=600,
-    )
+    result = run_installer(fake_repo / "PostRollApp" / "build-install.sh", env, tmp_path)
     return result.stdout + result.stderr
 
 
@@ -490,8 +481,7 @@ def _run_install_with_git(tmp_path: Path, *, status: str = "",
     env.pop("SKIP_INSTALL_TESTS", None)
     env.pop("ALLOW_DIRTY_INSTALL", None)
     env.update(env_extra or {})
-    return subprocess.run(["/bin/bash", str(BUILD_INSTALL)],
-                          capture_output=True, text=True, env=env, timeout=600)
+    return run_installer(BUILD_INSTALL, env, tmp_path)
 
 
 @pytest.mark.skipif(not BUILD_INSTALL.exists(), reason="build-install.sh missing")
@@ -580,7 +570,87 @@ def test_a_copy_that_is_not_a_checkout_says_it_names_no_commit(tmp_path):
     env["PATH"] = f"{stubs}:{env['PATH']}"
     env["SKIP_INSTALL_TESTS"] = "1"
     env.pop("ALLOW_DIRTY_INSTALL", None)
-    result = subprocess.run(["/bin/bash", str(BUILD_INSTALL)],
-                            capture_output=True, text=True, env=env, timeout=600)
+    result = run_installer(BUILD_INSTALL, env, tmp_path)
 
     assert "names no commit" in result.stdout, result.stdout[-800:]
+
+
+def _fake_product(tmp_path: Path, recorded_root: str) -> Path:
+    """A Release product where the installer looks for one, recording the
+    checkout it claims to be built from, the way the build phase does."""
+    app = tmp_path / "DerivedData" / "Build" / "Products" / "Release" / "PostRoll.app"
+    (app / "Contents" / "MacOS").mkdir(parents=True)
+    plist = app / "Contents" / "Info.plist"
+    plist.write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
+        '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+        '<plist version="1.0"><dict>'
+        f'<key>POSTROLLProjectRoot</key><string>{recorded_root}</string>'
+        '</dict></plist>\n')
+    return app
+
+
+def _installer_env(tmp_path: Path) -> dict:
+    stubs = _stub_dir(tmp_path, xcodebuild_exit=0)
+    env = dict(os.environ)
+    env["PATH"] = f"{stubs}:{env['PATH']}"
+    env["SKIP_INSTALL_TESTS"] = "1"
+    env["ALLOW_DIRTY_INSTALL"] = "1"
+    return env
+
+
+def _real_install_stamp():
+    real = Path("/Applications/PostRoll.app")
+    return real.stat().st_mtime if real.exists() else None
+
+
+@pytest.mark.skipif(not BUILD_INSTALL.exists(), reason="build-install.sh missing")
+def test_an_install_goes_where_it_is_told_and_nowhere_else(tmp_path):
+    _fake_product(tmp_path, str(REPO_ROOT))
+    before = _real_install_stamp()
+
+    result = run_installer(BUILD_INSTALL, _installer_env(tmp_path), tmp_path)
+
+    combined = result.stdout + result.stderr
+    dest = tmp_path / "Applications" / "PostRoll.app"
+    assert (dest / "Contents" / "Info.plist").exists(), (
+        f"nothing was installed at the destination it was given: {combined[-1500:]}")
+    assert _real_install_stamp() == before, "the real /Applications/PostRoll.app was replaced"
+    assert "Quitting running PostRoll" not in combined, (
+        "an install somewhere else still quit the PostRoll Dan has open")
+    assert "register-url-scheme" not in combined and "registrations" not in combined, (
+        "an install somewhere else still rewrote the machine's link registrations")
+
+
+@pytest.mark.skipif(not BUILD_INSTALL.exists(), reason="build-install.sh missing")
+def test_a_product_built_from_another_checkout_is_refused(tmp_path):
+    """What reached Dan: the build folder held a product from a worktree that
+    had since been deleted, and the installer copied it without looking."""
+    elsewhere = "/Users/nobody/Apps/PostRoll-deleted-worktree"
+    _fake_product(tmp_path, elsewhere)
+
+    result = run_installer(BUILD_INSTALL, _installer_env(tmp_path), tmp_path)
+
+    combined = result.stdout + result.stderr
+    assert result.returncode != 0, "a product from another checkout was installed"
+    assert not (tmp_path / "Applications" / "PostRoll.app").exists(), (
+        "it refused after copying rather than before")
+    assert elsewhere in combined and str(REPO_ROOT) in combined, (
+        f"the refusal does not say which two checkouts disagree: {combined[-1500:]}")
+
+
+def test_every_run_of_the_installer_goes_through_the_isolating_helper():
+    """A new test that calls the script directly would be back on the real
+    /Applications, so the file is read for any other way in."""
+    tests_dir = Path(__file__).resolve().parent
+    offenders = []
+    for path in sorted(tests_dir.glob("test_*.py")):
+        source = path.read_text()
+        for match in re.finditer(r"subprocess\.run\(", source):
+            call = source[match.start():match.start() + 300]
+            if "build-install" in call or "BUILD_INSTALL" in call or "build_install" in call:
+                offenders.append(f"{path.name}:{source[:match.start()].count(chr(10)) + 1}")
+    assert offenders == [], (
+        "these run build-install.sh without conftest.run_installer, so they can install over "
+        f"the real app: {offenders}")
