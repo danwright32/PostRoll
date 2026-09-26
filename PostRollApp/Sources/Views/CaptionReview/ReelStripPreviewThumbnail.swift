@@ -12,6 +12,22 @@ struct ReelStripLayout: Decodable {
         case stripHeight = "strip_height"
         case cells
     }
+
+    /// The layout `generate_reel_scroll.py` writes beside the strip, or nil
+    /// when there is none yet (a reel not rendered with a sidecar) or it does
+    /// not decode. Blocking file I/O: call it off the main actor.
+    static func load(from url: URL) -> ReelStripLayout? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(ReelStripLayout.self, from: data)
+    }
+
+    /// How fast this strip reads at a given length (#1420), from the strip
+    /// itself, so every surface offering the length can say it.
+    func paceNotice(scrollSeconds: Double) -> String? {
+        ScrollReelTiming.speedNotice(stripHeight: Double(stripHeight),
+                                     photoCount: cells.count,
+                                     scrollSeconds: scrollSeconds)
+    }
 }
 /// Vertical scroll editor for the Thursday reel strip. Shows the full masonry
 /// strip inside a ScrollView, overlays per-cell pan/zoom controls on top of
@@ -248,12 +264,7 @@ struct ReelStripPreviewThumbnail: View {
                         isPresented: $showingReelLength,
                         current: currentReelLength,
                         isRegenerating: isRegenerating,
-                        paceNotice: { seconds in
-                            ScrollReelTiming.speedNotice(
-                                stripHeight: Double(stripH),
-                                photoCount: cells.count,
-                                scrollSeconds: seconds)
-                        },
+                        layoutURL: layoutURL,
                         onCommit: onChangeReelLength)
                     .padding(10)
                 }
@@ -387,7 +398,7 @@ struct ReelStripPreviewThumbnail: View {
             // depends on the pixels beyond drawing them.
             async let loaded = ImageLoad.read(url, fitting: maxHeight)
             async let decoded = Task.detached {
-                (try? JSONDecoder().decode(ReelStripLayout.self, from: Data(contentsOf: layoutURL)))
+                ReelStripLayout.load(from: layoutURL)
             }.value
             let (load, layout) = await (loaded, decoded)
             let loadedImage = load.image
@@ -405,7 +416,7 @@ struct ReelStripPreviewThumbnail: View {
                 Task {
                     async let loaded = ImageLoad.read(url, fitting: maxHeight)
                     async let decoded = Task.detached {
-                        (try? JSONDecoder().decode(ReelStripLayout.self, from: Data(contentsOf: layoutURL)))
+                        ReelStripLayout.load(from: layoutURL)
                     }.value
                     let (load, layout) = await (loaded, decoded)
                     let loadedImage = load.image

@@ -29,6 +29,9 @@ struct InstagramMockup: View {
     /// "Reel length…" item (Thursday scroll reel only). nil hides it.
     var currentReelLength: Double? = nil
     var onChangeReelLength: ((Double) -> Void)? = nil
+    /// The Thursday strip's layout sidecar, so the length popover can say how
+    /// fast the reel reads (#1420). nil where there is no strip.
+    var reelLayoutURL: URL? = nil
     /// Optional B&W after controls (Tuesday reel). `hasBW` toggles the label
     /// between "Add" and "Change" and gates the Remove item.
     var onChangeBW: (() -> Void)? = nil
@@ -208,6 +211,7 @@ struct InstagramMockup: View {
                         isPresented: $showingReelLength,
                         current: currentReelLength,
                         isRegenerating: isRegenerating,
+                        layoutURL: reelLayoutURL,
                         onCommit: onChangeReelLength)
                 } else {
                     Image(systemName: "ellipsis")
