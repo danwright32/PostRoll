@@ -9,7 +9,7 @@ import SwiftUI
 ///
 /// Every change rebuilds the reel, so the value is committed when the slider
 /// is let go, never on each step of a drag. While dragging, the seconds and
-/// (where the caller knows the strip) the pace sentence follow the thumb, so
+/// the pace sentence, read from the strip's layout, follow the thumb, so
 /// the place where the reel stops being too fast can be found before letting
 /// go. Closing the popover commits too, which is what a keyboard adjustment
 /// needs, since arrow keys never report the end of an edit.
@@ -17,11 +17,12 @@ struct ReelLengthPopover: View {
     /// The scroll length the reel has now.
     let current: Double
     let isRegenerating: Bool
-    /// The pace sentence for a given length. Only the reel editor can answer
-    /// it, because it holds the strip; the phone mockup passes nil and shows
-    /// the slider alone.
-    var paceNotice: ((Double) -> String?)? = nil
+    /// The strip's layout sidecar, which the pace sentence is read from.
+    /// Both menus pass it, so both popovers say the same thing (#1420).
+    let layoutURL: URL?
     let onCommit: (Double) -> Void
+
+    @State private var layout: ReelStripLayout?
 
     @State private var draft: Double = ScrollReelTiming.reelLengthRange.lowerBound
     /// What this popover last committed, so closing it after a release does
@@ -31,9 +32,11 @@ struct ReelLengthPopover: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             HStack(spacing: Spacing.sm) {
-                Slider(value: $draft,
-                       in: ScrollReelTiming.reelLengthRange,
-                       step: ScrollReelTiming.reelLengthStep) { editing in
+                // Continuous, with the seconds kept whole by snapping: a
+                // stepped Slider draws a tick for every second (#1420).
+                Slider(value: Binding(get: { draft },
+                                      set: { draft = ScrollReelTiming.snappedReelLength($0) }),
+                       in: ScrollReelTiming.reelLengthRange) { editing in
                     if !editing { commit() }
                 }
                 .tint(PaintedSurfaces.iconAccent)
@@ -54,7 +57,7 @@ struct ReelLengthPopover: View {
                         .font(.light(11))
                         .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
-            } else if let notice = paceNotice?(draft) {
+            } else if let notice = layout?.paceNotice(scrollSeconds: draft) {
                 Text(notice)
                     .font(.light(11))
                     .foregroundStyle(PaintedSurfaces.secondaryText)
@@ -64,6 +67,10 @@ struct ReelLengthPopover: View {
         .padding(Spacing.md)
         .frame(width: 300)
         .onAppear { draft = current }
+        .task(id: layoutURL) {
+            guard let layoutURL else { layout = nil; return }
+            layout = await Task.detached { ReelStripLayout.load(from: layoutURL) }.value
+        }
         .onDisappear(perform: commit)
     }
 
@@ -87,7 +94,7 @@ extension View {
     func reelLengthPopover(isPresented: Binding<Bool>,
                            current: Double?,
                            isRegenerating: Bool,
-                           paceNotice: ((Double) -> String?)? = nil,
+                           layoutURL: URL?,
                            onCommit: ((Double) -> Void)?) -> some View {
         background {
             Color.clear
@@ -95,7 +102,7 @@ extension View {
                     if let current, let onCommit {
                         ReelLengthPopover(current: current,
                                           isRegenerating: isRegenerating,
-                                          paceNotice: paceNotice,
+                                          layoutURL: layoutURL,
                                           onCommit: onCommit)
                     }
                 }

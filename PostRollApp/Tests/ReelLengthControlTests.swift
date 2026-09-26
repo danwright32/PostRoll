@@ -113,4 +113,72 @@ final class ReelLengthControlTests: XCTestCase {
                        "these write the reel length range out themselves rather than "
                        + "reading ScrollReelTiming.reelLengthRange")
     }
+
+    // MARK: - #1420: no tick for every second, and the pace in both popovers
+
+    func testADraggedPositionReadsAsAWholeSecondInsideTheRange() {
+        // The slider is continuous so macOS draws no tick for each of its 75
+        // steps, and this is what keeps the number and the rebuild on whole
+        // seconds anyway.
+        XCTAssertEqual(ScrollReelTiming.snappedReelLength(37.4), 37)
+        XCTAssertEqual(ScrollReelTiming.snappedReelLength(37.6), 38)
+        XCTAssertEqual(ScrollReelTiming.snappedReelLength(3), 15)
+        XCTAssertEqual(ScrollReelTiming.snappedReelLength(140), 90)
+    }
+
+    /// The popover reads the pace from the reel's own layout file, so the
+    /// phone mockup's copy, which knows nothing about the strip, says what the
+    /// reel editor's says. Written in the shape `generate_reel_scroll.py`
+    /// writes, at DiGangi's measured size (18695px, 149 photographs), which
+    /// needs about 63 seconds.
+    func testThePaceComesFromTheReelsOwnLayoutFile() throws {
+        let cells: [[String: Any]] = (0..<149).map {
+            ["photo_path": "/photos/\($0).jpg", "x": 0, "y": $0 * 100, "w": 1080, "h": 100]
+        }
+        let body: [String: Any] = ["strip_width": 1080, "strip_height": 18695, "cells": cells]
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("reel_preview_layout_\(UUID().uuidString).json")
+        try JSONSerialization.data(withJSONObject: body).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let layout = try XCTUnwrap(ReelStripLayout.load(from: url), "the layout did not decode")
+        let notice = try XCTUnwrap(layout.paceNotice(scrollSeconds: 40), "a 40 second DiGangi reel is too fast")
+        XCTAssertEqual(notice, ScrollReelTiming.speedNotice(
+            stripHeight: 18695, photoCount: 149, scrollSeconds: 40))
+        XCTAssertTrue(notice.contains("Try 63 seconds"), notice)
+        XCTAssertNil(layout.paceNotice(scrollSeconds: 70), "70 seconds is comfortable for DiGangi")
+    }
+
+    func testAMissingLayoutGivesNoPaceRatherThanAWrongOne() {
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("no_such_layout_\(UUID().uuidString).json")
+        XCTAssertNil(ReelStripLayout.load(from: missing))
+    }
+
+    func testThePopoverSliderIsNotSteppedSoItDrawsNoTicks() throws {
+        let code = try String(contentsOf: sourcesDirectory
+            .appendingPathComponent("Views/CaptionReview/ReelLengthPopover.swift"), encoding: .utf8)
+        let start = try XCTUnwrap(code.range(of: "Slider("), "the popover has no slider")
+        let call = try XCTUnwrap(code[start.upperBound...].range(of: "{"))
+        XCTAssertFalse(code[start.upperBound..<call.lowerBound].contains("step:"),
+                       "a stepped Slider draws a tick for every second of the range")
+    }
+
+    /// Built is not wired (L3, L718): the mockup can take the layout and
+    /// still be handed nothing by the one screen that draws it.
+    func testThePhoneMockupIsHandedTheReelsLayout() throws {
+        let code = try String(contentsOf: sourcesDirectory
+            .appendingPathComponent("Views/CaptionReview/CaptionSection.swift"), encoding: .utf8)
+        // Every mockup that offers the reel length, not the first one drawn:
+        // Tuesday's two come earlier in the file and offer no length at all.
+        let calls = code.components(separatedBy: "InstagramMockup(").dropFirst()
+            .map { $0.components(separatedBy: "isRegenerating: isRegeneratingGraphic")[0] }
+        let offeringLength = calls.filter { $0.contains("onChangeReelLength:") }
+        XCTAssertFalse(offeringLength.isEmpty, "no phone mockup offers the reel length any more")
+        for call in offeringLength {
+            XCTAssertTrue(call.contains("reelLayoutURL: day == .thursday ? thursdayReelLayoutURL : nil"),
+                          "a phone mockup offers the reel length without the reel's layout, "
+                          + "so its popover has no pace")
+        }
+    }
 }

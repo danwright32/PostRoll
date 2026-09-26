@@ -673,6 +673,7 @@ struct CaptionSection: View {
                                     onChangePhotos: day == .thursday ? onChangeReelPhotos : (isCollageCarouselDay ? onChangeCollagePhotos : nil),
                                     currentReelLength: day == .thursday ? reelLength : nil,
                                     onChangeReelLength: day == .thursday ? onChangeReelLength : nil,
+                                    reelLayoutURL: day == .thursday ? thursdayReelLayoutURL : nil,
                                     isRegenerating: isRegeneratingGraphic
                                 )
                                 .id("\(day.rawValue)-mockup-\(graphicVersion)")
