@@ -98,15 +98,21 @@ def test_a_reel_is_the_scroll_plus_the_holds():
 def test_the_slider_range_in_the_contract_is_the_one_the_editor_offers():
     """A contract describing a slider nobody has would produce warnings about
     lengths that cannot be chosen."""
+    # ScrollReelTiming holds the one declaration both sliders read (#1415), and
+    # ReelLengthControlTests refuses a copy anywhere else in Sources.
     swift = (Path(__file__).resolve().parent.parent / "PostRollApp" / "Sources"
-             / "Views" / "PhotoAssignmentView.swift").read_text()
+             / "Services" / "ScrollReelTiming.swift").read_text()
     doc = _fixture()["slider"]
-    wanted = (f"Slider(value: $scrollDuration, in: {doc['min_s']:g}...{doc['max_s']:g}, "
-              f"step: {doc['step_s']:g})")
-    assert wanted in swift, (
-        f"the contract records a {doc['min_s']:g} to {doc['max_s']:g} slider in "
-        f"steps of {doc['step_s']:g}, and PhotoAssignmentView does not declare "
-        f"one: looked for {wanted!r}")
+    wanted = [
+        f"static let reelLengthRange: ClosedRange<Double> = "
+        f"{doc['min_s']:g}...{doc['max_s']:g}",
+        f"static let reelLengthStep: Double = {doc['step_s']:g}",
+    ]
+    for line in wanted:
+        assert line in swift, (
+            f"the contract records a {doc['min_s']:g} to {doc['max_s']:g} slider in "
+            f"steps of {doc['step_s']:g}, and ScrollReelTiming does not declare "
+            f"it: looked for {line!r}")
 
 
 # ── the speed half (#1066) ───────────────────────────────────────────────────
@@ -148,8 +154,8 @@ def test_the_reported_reel_reaches_the_comfortable_speed_at_the_recorded_duratio
 def test_the_reported_reel_is_still_too_fast_at_the_sliders_maximum():
     """Why the warning cannot name only the duration (L111).
 
-    At 234 photographs the slider's 60 second maximum still leaves the reel
-    faster than the DiGangi one Dan had already called too fast, so a message
+    At 234 photographs the slider's maximum (90 seconds since #1415) still
+    leaves the reel faster than the DiGangi one Dan had already called too fast, so a message
     pointing only at that control would name a remedy the person cannot take.
     """
     doc = _fixture()

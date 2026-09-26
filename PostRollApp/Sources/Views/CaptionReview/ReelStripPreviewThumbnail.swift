@@ -28,15 +28,14 @@ struct ReelStripPreviewThumbnail: View {
     var onUploadAudio: (() -> Void)? = nil
     var onChangePhotos: (() -> Void)? = nil
     var onSwapPhotos: ((URL, URL) -> Void)? = nil
-    /// Current reel length (scroll seconds) — drives the checkmark in the
-    /// "Reel length" submenu. nil hides the submenu.
+    /// Current reel length (scroll seconds), shown on the "Reel length…" item
+    /// and where its popover starts. nil hides the item.
     var currentReelLength: Double? = nil
     var onChangeReelLength: ((Double) -> Void)? = nil
     var maxHeight: CGFloat = 600
 
-    /// Preset reel lengths offered in the menu (scroll seconds, 15–60 range).
-    /// The PhotoAssignmentView slider still covers in-between values.
-    private static let reelLengthPresets: [Int] = [15, 20, 30, 40, 50, 60]
+    /// Whether the reel length slider is open (#1415).
+    @State private var showingReelLength = false
 
     @State private var image: NSImage?
     @State private var cells: [CollageCell] = []
@@ -185,21 +184,11 @@ struct ReelStripPreviewThumbnail: View {
                             }
                             .disabled(isRegenerating)
                         }
-                        if let onChangeReelLength {
-                            Menu {
-                                ForEach(Self.reelLengthPresets, id: \.self) { secs in
-                                    Button {
-                                        onChangeReelLength(Double(secs))
-                                    } label: {
-                                        if let current = currentReelLength, Int(current.rounded()) == secs {
-                                            Label("\(secs)s", systemImage: "checkmark")
-                                        } else {
-                                            Text("\(secs)s")
-                                        }
-                                    }
-                                }
+                        if onChangeReelLength != nil, let currentReelLength {
+                            Button {
+                                DispatchQueue.main.async { showingReelLength = true }
                             } label: {
-                                Label("Reel length", systemImage: "timer")
+                                Label("Reel length (\(Int(currentReelLength.rounded()))s)…", systemImage: "timer")
                             }
                             .disabled(isRegenerating)
                         }
@@ -250,6 +239,17 @@ struct ReelStripPreviewThumbnail: View {
                     .accessibilityLabel("Graphic options")
                     .help("Graphic options")
                     .fixedSize()
+                    .reelLengthPopover(
+                        isPresented: $showingReelLength,
+                        current: currentReelLength,
+                        isRegenerating: isRegenerating,
+                        paceNotice: { seconds in
+                            ScrollReelTiming.speedNotice(
+                                stripHeight: Double(stripH),
+                                photoCount: cells.count,
+                                scrollSeconds: seconds)
+                        },
+                        onCommit: onChangeReelLength)
                     .padding(10)
                 }
             }

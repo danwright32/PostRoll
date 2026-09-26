@@ -29,11 +29,13 @@ from postroll.media.easing import cruise_factor  # noqa: E402
 
 FIXTURE = REPO_ROOT / "tests" / "fixtures" / "scroll_reel_timing.json"
 
-#: What the editor's slider offers, from PhotoAssignmentView. Recorded here so
-#: the reel lengths below span the range a person can actually ask for.
+#: What the editor's slider offers, from `ScrollReelTiming.reelLengthRange` and
+#: `reelLengthStep`, which the reel length popover and the photo assignment
+#: slider both read (#1415). Recorded here so the reel lengths below span the
+#: range a person can actually ask for.
 SLIDER_MIN_S = 15.0
-SLIDER_MAX_S = 60.0
-SLIDER_STEP_S = 5.0
+SLIDER_MAX_S = 90.0
+SLIDER_STEP_S = 1.0
 
 
 def build() -> dict:

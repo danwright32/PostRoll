@@ -117,7 +117,7 @@ enum ScrollReelTiming {
     ///
     /// It names BOTH remedies with real numbers, and which one it leads with is
     /// decided by whether the slider can actually reach the answer. At 234
-    /// photographs the slider's 60 second maximum still leaves the reel faster
+    /// photographs the slider's 90 second maximum still leaves the reel faster
     /// than one Dan had already called too fast, so naming only the duration
     /// would point at a control that cannot solve the problem (L80, L111).
     static func speedNotice(stripHeight: Double, photoCount: Int,
@@ -145,9 +145,35 @@ enum ScrollReelTiming {
             + "\(photoCount)."
     }
 
-    /// The longest scroll the editor offers, from the reel length presets.
-    /// Named here because the notice's choice of remedy turns on it.
-    static let sliderMaximumSeconds: Double = 60
+    /// The longest scroll the editor offers. Named here because the notice's
+    /// choice of remedy turns on it, and taken from the range so the two
+    /// cannot disagree about what the slider can reach.
+    static var sliderMaximumSeconds: Double { reelLengthRange.upperBound }
+
+    /// The scroll lengths a person can choose, and the step they move in
+    /// (#1415). The one declaration: the reel length popover and the photo
+    /// assignment slider both read it, `tests/fixtures/scroll_reel_timing.json`
+    /// records it, and `ReelLengthControlTests` refuses a second copy.
+    ///
+    /// One second because Dan asked to move it a second at a time, and 90 at
+    /// the top because he asked for that too: the 60 it replaced was only the
+    /// top of the old preset list. The renderer takes any number of seconds
+    /// and Instagram takes a reel of up to three minutes, so nothing
+    /// downstream sets either the grid or the ceiling.
+    static let reelLengthRange: ClosedRange<Double> = 15...90
+    static let reelLengthStep: Double = 1
+
+    /// The length to rebuild the reel at when the slider is let go, or nil
+    /// when that would change nothing.
+    ///
+    /// Every commit costs a rebuild, so a release on the length the reel
+    /// already has, or a second commit when the popover closes after one,
+    /// must not start another.
+    static func reelLengthToCommit(draft: Double, current: Double) -> Double? {
+        let snapped = (draft / reelLengthStep).rounded() * reelLengthStep
+        let held = min(max(snapped, reelLengthRange.lowerBound), reelLengthRange.upperBound)
+        return held == current ? nil : held
+    }
 
     // MARK: - Watching the pace (#1071)
     //

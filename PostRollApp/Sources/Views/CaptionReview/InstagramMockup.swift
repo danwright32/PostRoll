@@ -25,8 +25,8 @@ struct InstagramMockup: View {
     var onSwapAudio: (() -> Void)? = nil
     var onUploadAudio: (() -> Void)? = nil
     var onChangePhotos: (() -> Void)? = nil
-    /// Current reel length (scroll seconds) and change handler — drives the
-    /// "Reel length" submenu (Thursday scroll reel only). nil hides it.
+    /// Current reel length (scroll seconds) and change handler, behind the
+    /// "Reel length…" item (Thursday scroll reel only). nil hides it.
     var currentReelLength: Double? = nil
     var onChangeReelLength: ((Double) -> Void)? = nil
     /// Optional B&W after controls (Tuesday reel). `hasBW` toggles the label
@@ -36,8 +36,8 @@ struct InstagramMockup: View {
     var hasBW: Bool = false
     var isRegenerating: Bool = false
 
-    /// Preset reel lengths offered in the menu (scroll seconds, 15–60 range).
-    private static let reelLengthPresets: [Int] = [15, 20, 30, 40, 50, 60]
+    /// Whether the reel length slider is open (#1415).
+    @State private var showingReelLength = false
 
     private var regenerateLabelText: String {
         if isRegenerating { return "Regenerating…" }
@@ -132,21 +132,11 @@ struct InstagramMockup: View {
                             }
                             .disabled(isRegenerating)
                         }
-                        if let onChangeReelLength {
-                            Menu {
-                                ForEach(Self.reelLengthPresets, id: \.self) { secs in
-                                    Button {
-                                        onChangeReelLength(Double(secs))
-                                    } label: {
-                                        if let current = currentReelLength, Int(current.rounded()) == secs {
-                                            Label("\(secs)s", systemImage: "checkmark")
-                                        } else {
-                                            Text("\(secs)s")
-                                        }
-                                    }
-                                }
+                        if onChangeReelLength != nil, let currentReelLength {
+                            Button {
+                                DispatchQueue.main.async { showingReelLength = true }
                             } label: {
-                                Label("Reel length", systemImage: "timer")
+                                Label("Reel length (\(Int(currentReelLength.rounded()))s)…", systemImage: "timer")
                             }
                             .disabled(isRegenerating)
                         }
@@ -214,6 +204,11 @@ struct InstagramMockup: View {
                     .fixedSize()
                     .accessibilityLabel("Post options")
                     .help("Post options")
+                    .reelLengthPopover(
+                        isPresented: $showingReelLength,
+                        current: currentReelLength,
+                        isRegenerating: isRegenerating,
+                        onCommit: onChangeReelLength)
                 } else {
                     Image(systemName: "ellipsis")
                         .font(.system(size: 14, weight: .medium))

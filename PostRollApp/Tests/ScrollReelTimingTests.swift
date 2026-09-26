@@ -184,11 +184,11 @@ extension ScrollReelTimingTests {
     /// A reel the slider CAN fix names the duration, with the number.
     ///
     /// The strip is CONSTRUCTED rather than taken from the two measured reels,
-    /// because neither of them is this case: DiGangi needs 63 seconds and
-    /// Battery Dance needs 100, so both are past the slider's maximum. That is
-    /// the finding behind #1064, and it means this branch has no real reel to
-    /// be exercised by. Derived from the contract so it lands where a 45 second
-    /// answer is, rather than a height chosen until the test passed.
+    /// so the case is pinned by construction rather than by whichever real
+    /// reel happens to fall inside the range this year (DiGangi does since
+    /// #1415, and is checked on its own below). Derived from the contract so
+    /// it lands where a 45 second answer is, rather than a height chosen until
+    /// the test passed.
     func testAReelTheSliderCanFixIsToldWhichLengthToUse() throws {
         let fixture = try loadSpeedFixture()
         let target = 45.0
@@ -209,21 +209,30 @@ extension ScrollReelTimingTests {
                        "a reel the slider can fix should not be told to lose photographs")
     }
 
-    /// Both reels on disk need longer than the slider offers.
+    /// Of the two reels on disk, the slider now fixes one and not the other.
     ///
-    /// Recorded as an assertion rather than left in prose, because it is the
-    /// whole reason the notice has two shapes, and if a future change to the
-    /// layout or the threshold makes the slider sufficient again, the branch
-    /// that names the photo count becomes unreachable and should be revisited
-    /// rather than left as dead code nobody notices.
-    func testNeitherMeasuredReelCanBeFixedByTheSliderAlone() throws {
+    /// Until #1415 raised the maximum from 60 to 90 seconds neither could be
+    /// fixed by length alone (DiGangi needs 63, Battery Dance 100), which is
+    /// why the notice grew a second shape. Now DiGangi is told a length and
+    /// Battery Dance is still told to lose photographs, so both shapes have a
+    /// real reel behind them. If a change to the layout, the threshold or the
+    /// range moves either across the line, this says so rather than leaving a
+    /// branch unreachable with nobody noticing.
+    func testTheSliderFixesDiGangiButNotBatteryDance() throws {
         let fixture = try loadSpeedFixture()
-        XCTAssertFalse(fixture.measured_reels.isEmpty)
-        for reel in fixture.measured_reels {
-            let needed = ScrollReelTiming.comfortableScrollSeconds(stripHeight: reel.strip_h)
-            XCTAssertGreaterThan(needed, fixture.slider.max_s,
-                                 "\(reel.name) now fits inside the slider's range")
-        }
+        let digangi = try XCTUnwrap(fixture.measured_reels.first { $0.photos == 149 })
+        let battery = try XCTUnwrap(fixture.measured_reels.first { $0.photos == 234 })
+
+        let digangiNeeds = ScrollReelTiming.comfortableScrollSeconds(stripHeight: digangi.strip_h)
+        XCTAssertLessThanOrEqual(digangiNeeds, fixture.slider.max_s,
+                                 "DiGangi no longer fits inside the slider's range")
+        let notice = try XCTUnwrap(ScrollReelTiming.speedNotice(
+            stripHeight: digangi.strip_h, photoCount: digangi.photos, scrollSeconds: 40))
+        XCTAssertTrue(notice.contains("Try \(Int(digangiNeeds.rounded())) seconds"), notice)
+
+        XCTAssertGreaterThan(
+            ScrollReelTiming.comfortableScrollSeconds(stripHeight: battery.strip_h),
+            fixture.slider.max_s, "Battery Dance now fits inside the slider's range")
     }
 
     /// And one it CANNOT names the photo count instead, because a message that
