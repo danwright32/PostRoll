@@ -159,8 +159,16 @@ final class ReelLengthControlTests: XCTestCase {
         let code = try String(contentsOf: sourcesDirectory
             .appendingPathComponent("Views/CaptionReview/ReelLengthPopover.swift"), encoding: .utf8)
         let start = try XCTUnwrap(code.range(of: "Slider("), "the popover has no slider")
-        let call = try XCTUnwrap(code[start.upperBound...].range(of: "{"))
-        XCTAssertFalse(code[start.upperBound..<call.lowerBound].contains("step:"),
+        // Up to the trailing editing closure, not the first brace: the value is
+        // a Binding whose own closures open with braces, and stopping at the
+        // first of those read four words of the call and passed whatever
+        // followed them.
+        let end = try XCTUnwrap(code[start.upperBound...].range(of: ") { editing in"),
+                                "the slider no longer reports the end of a drag")
+        let arguments = code[start.upperBound..<end.lowerBound]
+        XCTAssertTrue(arguments.contains("ScrollReelTiming.reelLengthRange"),
+                      "the span read is not the slider's arguments: \(arguments)")
+        XCTAssertFalse(arguments.contains("step:"),
                        "a stepped Slider draws a tick for every second of the range")
     }
 
