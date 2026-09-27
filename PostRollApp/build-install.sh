@@ -134,7 +134,10 @@ else
     # rather than warns, because a warning printed above three minutes of test
     # output is a warning nobody reads.
     echo "==> Checking this Mac's compiler against CI's"
-    "${REPO_ROOT}/venv/bin/python" "${REPO_ROOT}/tools/check_toolchain.py"
+    # Warns and carries on when only Xcode is ahead of CI's, refuses on
+    # anything else (#1441).
+    . "$(pwd)/toolchain-gate.sh"
+    toolchain_gate "${REPO_ROOT}/venv/bin/python" "${REPO_ROOT}/tools/check_toolchain.py" || exit 1
 
     # The FAST subset, not the whole suite (#432, approved 2026-08-13).
     #
@@ -281,6 +284,12 @@ fi
 echo "    Signature verified"
 
 echo "==> Installed: ${DEST}"
+# Said again here, where it is read, rather than only above minutes of test
+# output (#1441).
+if [[ "${XCODE_AHEAD:-0}" == "1" ]]; then
+  echo "    WARNING: installed with this Mac's Xcode newer than CI's. It built and"
+  echo "    passed here; CI's older compiler can still refuse the same code."
+fi
 
 # Which copy of PostRoll macOS hands a postroll:// link to (#840). Fourteen
 # PostRoll.app bundles were registered with LaunchServices when that issue was
