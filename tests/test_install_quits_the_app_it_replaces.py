@@ -22,6 +22,8 @@ from pathlib import Path
 
 import pytest
 
+from source_text import without_prose
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HELPER = REPO_ROOT / "PostRollApp" / "quit-running-app.sh"
 BUILD_INSTALL = REPO_ROOT / "PostRollApp" / "build-install.sh"
@@ -142,7 +144,8 @@ def test_a_copy_at_another_path_is_left_alone(tmp_path, processes):
 def test_the_installer_quits_through_the_helper():
     # Built is not wired (L3): the real script has to use it, and the name based
     # quit with its fixed sleep has to be gone.
-    source = BUILD_INSTALL.read_text()
+    # Comments blanked, so a line ABOUT the old quit cannot answer the check.
+    source = without_prose(BUILD_INSTALL)
     assert 'quit_running_app "${DEST}/Contents/MacOS/PostRoll"' in source
     assert 'tell application "PostRoll" to quit' not in source
     assert 'pgrep -xq "PostRoll"' not in source
