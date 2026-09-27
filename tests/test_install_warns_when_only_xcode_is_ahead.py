@@ -40,9 +40,14 @@ def run_gate(check_exit: int):
     """Drive the gate with a stand-in check that exits as asked, and report
     whether the gate let the install on and what it left for the end."""
     script = (f'source "{GATE}"; toolchain_gate bash -c "exit {check_exit}"; '
-              'rc=$?; echo "rc=$rc ahead=${XCODE_AHEAD:-0}"')
+              'rc=$?; echo "rc=$rc ahead=${XCODE_AHEAD:-0}"; '
+              'echo "addopts=${PYTEST_ADDOPTS:-}"')
+    # Without any PYTEST_ADDOPTS of its own: the installer runs this suite
+    # with the gate's deselect already exported, and an inherited one would
+    # answer for the gate (L439).
+    env = {k: v for k, v in os.environ.items() if k != "PYTEST_ADDOPTS"}
     return subprocess.run(["bash", "-c", script], capture_output=True, text=True,
-                          env={**os.environ}, timeout=30)
+                          env=env, timeout=30)
 
 
 def test_a_clean_check_lets_the_install_on_quietly():
@@ -75,3 +80,32 @@ def test_the_installer_uses_the_gate_and_repeats_the_warning_at_the_end():
     assert body.index("toolchain_gate ") < body.index('echo "==> Installed: ${DEST}"')
     tail = body[body.index('echo "==> Installed: ${DEST}"'):]
     assert "XCODE_AHEAD" in tail, "the warning is not repeated once the install is done"
+
+
+MACHINE_TEST = ("tests/test_toolchain_matches_ci.py::"
+                "test_this_machine_is_not_ahead_of_the_compiler_ci_will_use")
+
+
+def test_a_waived_xcode_gap_is_not_refused_again_by_the_same_comparison_as_a_test():
+    # The first real install after the gate shipped still refused: the gate
+    # warned and went on, then the fast Python run failed on the machine test,
+    # which makes the same comparison (#1441, reopened). Waiving the gap once
+    # has to waive it for the install's own test run too, and nothing else.
+    result = run_gate(3)
+    assert f"--deselect {MACHINE_TEST}" in result.stdout, result.stdout
+
+
+def test_a_clean_or_refused_check_leaves_the_test_run_alone():
+    for code in (0, 1):
+        assert f"--deselect {MACHINE_TEST}" not in run_gate(code).stdout
+
+
+def test_the_deselection_names_a_test_that_exists():
+    # A misspelt id deselects nothing and says nothing, and the install would
+    # refuse again on this Mac for the same reason (L100).
+    import sys
+    listed = subprocess.run(
+        [sys.executable, "-m", "pytest", "--collect-only", "-q",
+         "--deselect", MACHINE_TEST, "tests/test_toolchain_matches_ci.py"],
+        capture_output=True, text=True, cwd=REPO_ROOT, timeout=120)
+    assert "1 deselected" in listed.stdout, listed.stdout[-800:]
