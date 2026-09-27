@@ -492,21 +492,28 @@ def _full_job(guards: str) -> str:
     return guards.split("  full:", 1)[1]
 
 
-def test_the_whole_registry_is_reproved_on_a_daily_cadence(guards):
+def test_the_whole_registry_is_reproved_only_when_somebody_asks(guards):
     """The half that catches a guard broken by something UNDERNEATH it.
 
     The diff-scoped leg re-proves an entry when the code it guards, its record,
     or its own test file changes. It cannot know about the shared conftest
     nearly every test imports, or a shared fixture module: a change there can
     stop a guard failing on broken code while touching none of the three, so no
-    pull request would re-prove it (L88). That is why the full sweep exists at
-    all, and it is unaffected by moving from a merge cadence to a daily one:
-    the shared change is found within a day rather than within 25 minutes, on a
-    signal nobody read at 25 minutes either.
+    pull request would re-prove it (L88). That is why the full sweep exists.
+
+    It runs when somebody asks for it and never on the clock (#1428). PostRoll
+    is going private at zero spend, which leaves 200 macOS minutes a month, and
+    one sweep costs about 150 of them. The cost accepted in exchange: a runner
+    image or Xcode moving underneath the guards goes unnoticed until a pull
+    request or a requested sweep meets it.
     """
-    assert re.search(r'schedule:\s*\n\s*- cron: "0 \d+ \* \* \*"', guards), (
-        "the full sweep has no daily cron, so the only cadences left are a "
-        "pull request diff and somebody remembering to type it")
+    condition = re.search(r"^    if:[ \t]*(.+?)[ \t]*$", _full_job(guards), re.M)
+    halves = [half.strip() for half in condition.group(1).split("&&")] if (
+        condition and "||" not in condition.group(1)) else []
+    assert "github.event_name == 'workflow_dispatch'" in halves, (
+        "the full sweep can start without anybody asking for it, so the clock "
+        "spends the macOS allowance a private repository has for a month "
+        "(#1428)")
 
     # It has to be the FULL sweep. Scoping this one to a diff would report green
     # every day while proving nothing, because the tip of main has no diff
@@ -572,19 +579,18 @@ def test_every_expensive_step_of_the_sweep_is_behind_the_due_gate(guards):
 
 
 def test_the_steps_that_report_are_not_behind_the_gate(guards):
-    """The failure this pairing exists to prevent.
+    """The daily monitors ride on the gate job, not on the sweep.
 
-    The sweep's steps are conditional now, so a gate stuck shut produces runs
-    that complete, conclude success, and prove nothing. The two steps that would
-    SAY so are the freshness check and the duration series. Behind the gate they
-    would go quiet in exactly the situation they exist to report, and the
-    workflow would look healthy for as long as it lasted (L106, a liveness
-    signal emitted over dead work).
+    The issue figures check and the duration series are the reason the
+    schedule still exists at all once the sweep runs only on request (#1428).
+    Behind the gate's answer they would run only on the rare day somebody asks
+    for a sweep, and the repository would look quiet for as long as it lasted
+    (L106, a liveness signal emitted over dead work).
     """
     reporters = [(name, text)
                  for _, body in _job_blocks(guards)
                  for name, text in _steps(body)
-                 if "check_guard_sweep_freshness" in text
+                 if "check_issue_figures" in text
                  or "check_job_durations" in text]
 
     # The positive control, and the reason this is here rather than inside the
@@ -593,7 +599,7 @@ def test_the_steps_that_report_are_not_behind_the_gate(guards):
     # nothing and the guard passed by finding nothing, which is how its
     # registered mutation SURVIVED (L98, L100).
     assert len(reporters) >= 2, (
-        f"the freshness check and the duration series are not in this workflow "
+        f"the issue figures check and the duration series are not in this workflow "
         f"at all, so nothing here is being checked: found {reporters}")
 
     # Any spelling of the answer, not one step id. The old form named
@@ -822,29 +828,6 @@ def test_both_test_legs_run_on_a_pull_request():
         f"still reading as present: {job_conditions}")
 
 
-# ── the guards are re-proved on a schedule too (#551) ─────────────────────────
-
-
-def test_the_full_sweep_also_runs_on_a_schedule(guards):
-    """The proofs depend on things no commit here touches: the runner image, the
-    Xcode the pin selects, and Homebrew packages. Any of those can move without
-    a commit, and with proofs that only run on a merge the first sign is a red
-    merge on whatever unrelated change happens to land next, which is the worst
-    moment to meet it and the hardest to attribute (L1).
-    """
-    assert re.search(r"schedule:\s*\n\s*- cron:", guards), (
-        "the full sweep runs only when something merges, so through a quiet "
-        "period nothing re-proves the guards at all")
-
-
-def test_the_scheduled_sweep_is_admitted_by_the_full_job(guards):
-    """A schedule trigger the job's own condition excludes is a trigger that
-    fires and runs nothing, which reports success (L98)."""
-    assert "if: github.event_name != 'pull_request'" in guards, (
-        "the full job's condition changed; re-check that a scheduled run still "
-        "reaches it")
-
-
 # ── what the legs actually ran against is recorded (#552) ─────────────────────
 
 
@@ -891,36 +874,6 @@ def test_both_legs_record_the_ffmpeg_version_they_ran_against():
         f"the job summary: {unrecorded}. A red run on that leg then cannot be "
         "attributed: our own change and ffmpeg having moved underneath us look "
         "identical.")
-
-
-def test_the_guard_job_says_whether_the_schedule_is_still_alive(guards):
-    """The weekly trigger's failure mode is silence, so something has to ask the
-    question out loud (#554, L13)."""
-    assert "check_guard_sweep_freshness.py" in guards, (
-        "nothing reports whether the scheduled sweep is still happening, so it "
-        "could stop with nothing saying so")
-    assert "if: always()" in guards, (
-        "the freshness check is skipped when the sweep above it goes red, so "
-        "two failures would hide each other (L73)")
-
-
-def test_the_freshness_question_is_asked_once_not_once_per_shard(guards):
-    """The sweep is a matrix; the question is about the workflow.
-
-    Asked on every shard it is answered four times, which is noise on a check
-    whose only value is being noticed. Scoping it to one shard keeps it a single
-    answer.
-
-    It was briefly its own job instead, which is tidier and wrong: a new job is
-    a new CHECK NAME, and tests/test_wait_for_checks.py calibrates the checks it
-    waits for against a RECORDED reply from a real pull request. A name added to
-    the workflows with no new recording would have meant hand-editing that
-    fixture, and a fixture edited to match the thing it is meant to verify is no
-    longer evidence of anything (L48, L58).
-    """
-    assert "matrix.shard == 1" in guards, (
-        "the freshness question is asked on every shard of the sweep, so it is "
-        "answered once per runner")
 
 
 # ── every job has a deadline (#832) ──────────────────────────────────────────

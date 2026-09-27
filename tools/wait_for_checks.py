@@ -106,10 +106,13 @@ EXIT_UNUSABLE = 4
 EXIT_NOT_MERGED = 5
 EXIT_BEHIND = 6
 
-#: The two job conditions this can classify. Anything else is refused rather
-#: than guessed at, because a guessed bar reads as authoritative.
+#: The job conditions this can classify. Anything else is refused rather than
+#: guessed at, because a guessed bar reads as authoritative.
 RUNS_ON_PULL_REQUEST = "github.event_name == 'pull_request'"
 SKIPS_ON_PULL_REQUEST = "github.event_name != 'pull_request'"
+#: A job that runs only when somebody starts it by hand, which the full guard
+#: sweep does since #1428. False on a pull request, so it skips there.
+ONLY_WHEN_ASKED_FOR = "github.event_name == 'workflow_dispatch'"
 
 
 class UnreadableWorkflow(Exception):
@@ -293,7 +296,7 @@ def _skips_on_pull_request(job: str, body: str) -> bool:
     text = re.sub(r"^\$\{\{\s*|\s*\}\}$", "", text)
     if text == RUNS_ON_PULL_REQUEST:
         return False
-    if text == SKIPS_ON_PULL_REQUEST:
+    if text in (SKIPS_ON_PULL_REQUEST, ONLY_WHEN_ASKED_FOR):
         return True
     # A conjunction whose first half is the known condition (#1259). The guard
     # sweep waits to be told whether it has anything to prove, so it carries
@@ -305,7 +308,7 @@ def _skips_on_pull_request(job: str, body: str) -> bool:
     # of the bar, and a check nobody waits for cannot block a merge (L98).
     if "||" not in text:
         halves = [half.strip() for half in text.split("&&")]
-        if SKIPS_ON_PULL_REQUEST in halves:
+        if SKIPS_ON_PULL_REQUEST in halves or ONLY_WHEN_ASKED_FOR in halves:
             return True
         if RUNS_ON_PULL_REQUEST in halves:
             return False

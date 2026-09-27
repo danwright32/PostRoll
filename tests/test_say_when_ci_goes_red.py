@@ -289,7 +289,7 @@ def test_the_job_reading_this_is_the_one_that_cannot_gate():
     every check above would be answered by the wrong text (L100)."""
     full, changed = _job("full"), _job("changed")
 
-    assert "github.event_name != 'pull_request'" in full
+    assert "github.event_name == 'workflow_dispatch'" in full
     assert "github.event_name == 'pull_request'" in changed
     assert "say_when_ci_goes_red.py" not in changed, (
         "the reporter is in the pull request job, where a failure already "

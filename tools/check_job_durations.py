@@ -16,8 +16,7 @@ the number from before the change (L309).
 A job getting slower does not make the change being merged wrong, and failing a
 run for it would stop unrelated work for an unrelated reason, which is how a
 check teaches everyone to bypass it (L36). Every state exits 0. The visibility
-is the warning annotation and the job summary, exactly as
-`tools/check_guard_sweep_freshness.py` decided for the same reason.
+is the warning annotation and the job summary.
 
 ## Why it compares halves rather than the latest run
 

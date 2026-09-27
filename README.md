@@ -364,6 +364,16 @@ seconds each. Run it when a guard is added or changed; for just the entries your
 diff touches, `. ./venv-python.sh && "$POSTROLL_PYTHON" tools/check_guards.py
 --changed`.
 
+CI proves the entries a pull request touches on every pull request. The whole
+registry is proved in CI only when somebody asks for it, because one full sweep
+costs about 150 of the 200 macOS minutes a private repository gets a month
+(#1428). Ask for one after anything that might have moved underneath the guards,
+a new macOS runner image or a new pinned Xcode:
+
+```
+gh workflow run guards.yml
+```
+
 That two part form is worth knowing generally. `venv/` is gitignored, so it
 lives in the primary checkout and a git worktree has none, and every command in
 this file and in the tools' own usage lines that begins `venv/bin/python`

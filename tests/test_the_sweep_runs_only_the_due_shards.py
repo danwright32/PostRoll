@@ -46,7 +46,6 @@ TREE = "a" * 40
 
 def swept(passed: set[int], *, days_ago: float = 1.0) -> list[Sweep]:
     return [Sweep(run_id=100, head_sha=TREE, created_at=NOW - timedelta(days=days_ago),
-                  event="schedule", ran_shards=frozenset(range(1, SHARD_COUNT + 1)),
                   passed_shards=frozenset(passed))]
 
 

@@ -38,10 +38,9 @@ there second converges on the same answer as the first.
 ## What it does not do
 
 The other half of #1011, noticing that a scheduled run has stopped happening at
-all, is already answered for this workflow by
-`tools/check_guard_sweep_freshness.py`, which reports when the sweep last proved
-anything. That is a different failure (absence rather than redness) and it has
-its own step.
+all, is not answered here. It was, for the guard sweep, by a freshness check that
+went with the sweep's schedule in #1428: the sweep runs only when somebody asks
+now, so there is no schedule for it to stop.
 """
 
 from __future__ import annotations

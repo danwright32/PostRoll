@@ -49,7 +49,7 @@ import pytest
 from tools.guard_sweep_history import (
     PROOF_STEP,
     Sweep,
-    proof_outcome,
+    proved,
     shard_of_job_name,
     sweeps_from_jobs,
 )
@@ -71,8 +71,6 @@ def sweep(sha: str = TREE, *, shard: int = 1, days_ago: float = 1.0,
         run_id=run_id,
         head_sha=sha,
         created_at=NOW - timedelta(days=days_ago),
-        event="schedule",
-        ran_shards=frozenset({shard}),
         passed_shards=frozenset({shard}) if passed else frozenset(),
     )
 
@@ -118,7 +116,6 @@ def test_a_skipped_proof_step_is_not_a_proof():
     tree's sha and concludes success, and believing it means every later day
     finds the previous day's skip and skips again."""
     skipped = Sweep(run_id=100, head_sha=TREE, created_at=NOW - timedelta(days=1),
-                    event="schedule", ran_shards=frozenset(),
                     passed_shards=frozenset())
     result = call([skipped])
     assert result.run is True
@@ -211,21 +208,17 @@ def test_the_shard_number_comes_out_of_the_matrix_job_name():
 
 
 def test_a_proof_step_that_ran_and_passed_is_a_proof():
-    ran, passed = proof_outcome(job("full (1)", (PROOF_STEP, "success")))
-    assert (ran, passed) == (True, True)
+    assert proved(job("full (1)", (PROOF_STEP, "success"))) is True
 
 
-def test_a_proof_step_that_ran_and_failed_ran_but_did_not_pass():
-    """The freshness check asks whether the sweep is still HAPPENING and the
-    gate asks whether the tree is PROVED. A red shard answers yes to the first
-    and no to the second, so the two are read as two values (L261)."""
-    ran, passed = proof_outcome(job("full (1)", (PROOF_STEP, "failure")))
-    assert (ran, passed) == (True, False)
+def test_a_proof_step_that_ran_and_failed_is_not_a_proof():
+    """A red shard is an unproved share of the registry, so the next sweep
+    re-takes it."""
+    assert proved(job("full (1)", (PROOF_STEP, "failure"))) is False
 
 
-def test_a_skipped_proof_step_neither_ran_nor_passed():
-    ran, passed = proof_outcome(job("full (1)", (PROOF_STEP, "skipped")))
-    assert (ran, passed) == (False, False)
+def test_a_skipped_proof_step_is_not_a_proof_either():
+    assert proved(job("full (1)", (PROOF_STEP, "skipped"))) is False
 
 
 def test_a_job_with_no_such_step_at_all_is_not_a_proof():
@@ -233,8 +226,7 @@ def test_a_job_with_no_such_step_at_all_is_not_a_proof():
     sweep, not as a proof, and the name is asserted here so a rename goes red on
     something that names it rather than silently reporting every tree unproved
     forever."""
-    ran, passed = proof_outcome(job("full (1)", ("Install ffmpeg", "success")))
-    assert (ran, passed) == (False, False)
+    assert proved(job("full (1)", ("Install ffmpeg", "success"))) is False
 
 
 def test_the_proof_step_name_is_the_one_the_workflow_actually_runs():
@@ -247,7 +239,7 @@ def test_the_proof_step_name_is_the_one_the_workflow_actually_runs():
     assert f"- name: {PROOF_STEP}" in workflow
 
 
-def test_a_run_is_summarised_by_which_shards_ran_and_which_passed():
+def test_a_run_is_summarised_by_which_shards_passed():
     jobs = [job("full (1)", (PROOF_STEP, "success")),
             job("full (2)", (PROOF_STEP, "failure")),
             job("full (3)", (PROOF_STEP, "skipped")),
@@ -256,7 +248,6 @@ def test_a_run_is_summarised_by_which_shards_ran_and_which_passed():
         run={"id": 7, "head_sha": TREE, "event": "schedule",
              "created_at": "2026-08-29T07:00:00Z"},
         jobs=jobs)
-    assert summary.ran_shards == frozenset({1, 2})
     assert summary.passed_shards == frozenset({1})
     assert summary.run_id == 7
 
@@ -295,8 +286,6 @@ def sweep_call(history, *, shards: int = 7, sha: str = TREE) -> SweepDecision:
 def proved_all(shards: int = 7) -> list[Sweep]:
     """One run that proved every shard, which is what a normal sweep leaves."""
     return [Sweep(run_id=100, head_sha=TREE, created_at=NOW - timedelta(days=1),
-                  event="schedule",
-                  ran_shards=frozenset(range(1, shards + 1)),
                   passed_shards=frozenset(range(1, shards + 1)))]
 
 
@@ -313,7 +302,6 @@ def test_one_unproved_shard_is_enough_to_start_the_sweep():
     the per-shard gate inside each shard is what stops the other six redoing
     work they have already done."""
     history = [Sweep(run_id=100, head_sha=TREE, created_at=NOW - timedelta(days=1),
-                     event="schedule", ran_shards=frozenset(range(1, 8)),
                      passed_shards=frozenset({1, 2, 3, 4, 5, 7}))]
 
     result = sweep_call(history)
@@ -327,7 +315,6 @@ def test_it_says_which_shards_it_is_starting_the_sweep_for():
     yes for every shard, and those are a 21 second run and a 25 minute one
     (L11)."""
     history = [Sweep(run_id=100, head_sha=TREE, created_at=NOW - timedelta(days=1),
-                     event="schedule", ran_shards=frozenset(range(1, 8)),
                      passed_shards=frozenset({1, 2, 3, 4, 5, 7}))]
 
     assert "6" in sweep_call(history).message
@@ -351,7 +338,6 @@ def test_a_proof_older_than_the_window_starts_the_sweep_on_an_unchanged_tree():
     """The runner image, the pinned Xcode and Homebrew all move with no commit
     here, so an unchanged tree is not an unchanged proof (#551)."""
     stale = [Sweep(run_id=100, head_sha=TREE, created_at=NOW - timedelta(days=9),
-                   event="schedule", ran_shards=frozenset(range(1, 8)),
                    passed_shards=frozenset(range(1, 8)))]
 
     assert sweep_call(stale).run is True
@@ -362,7 +348,6 @@ def test_it_asks_about_every_shard_rather_than_the_first_one():
     quiet day whenever shard 1 happened to be proved, and the six shards it
     never asked about would go unswept with nothing saying so (L98)."""
     history = [Sweep(run_id=100, head_sha=TREE, created_at=NOW - timedelta(days=1),
-                     event="schedule", ran_shards=frozenset(range(1, 8)),
                      passed_shards=frozenset({1}))]
 
     assert sweep_call(history).due_shards == (2, 3, 4, 5, 6, 7)

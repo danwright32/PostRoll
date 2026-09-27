@@ -414,6 +414,42 @@ def test_a_job_that_could_run_on_a_pull_request_through_an_or_is_refused(
         expected_checks(workflows)
 
 
+def test_a_job_that_runs_only_when_asked_for_reads_as_skipping(
+        tmp_path: Path) -> None:
+    """The full sweep runs only on a manual run (#1428).
+
+    `github.event_name == 'workflow_dispatch'` is false on a pull request, so a
+    job requiring it skips there whatever else its condition says, and a pull
+    request must not wait for it.
+    """
+    workflows = tmp_path / "workflows"
+    workflows.mkdir()
+    (workflows / "guards.yml").write_text(
+        "name: Guard proofs\non:\n  pull_request:\n  workflow_dispatch:\njobs:\n"
+        "  full:\n    if: github.event_name == 'workflow_dispatch' && "
+        "needs.due.outputs.due == 'true'\n    runs-on: macos-26\n",
+        encoding="utf-8")
+
+    checks = expected_checks(workflows)
+
+    assert {(c.name, c.skips_on_pull_request) for c in checks} == {("full", True)}
+
+
+def test_a_job_asked_for_or_something_else_is_still_refused(tmp_path: Path) -> None:
+    """The same OR rule as above: `asked for || B` can run on a pull request
+    through B, so it is not a skip."""
+    workflows = tmp_path / "workflows"
+    workflows.mkdir()
+    (workflows / "guards.yml").write_text(
+        "name: Guard proofs\non:\n  pull_request:\njobs:\n"
+        "  full:\n    if: github.event_name == 'workflow_dispatch' || "
+        "needs.due.outputs.due == 'true'\n    runs-on: macos-26\n",
+        encoding="utf-8")
+
+    with pytest.raises(UnreadableWorkflow, match="if:"):
+        expected_checks(workflows)
+
+
 def test_a_matrix_this_cannot_expand_refuses_to_answer(tmp_path: Path) -> None:
     workflows = tmp_path / "workflows"
     workflows.mkdir()
