@@ -68,7 +68,8 @@ struct EventExporter {
                        preset: PostingPreset = .balanced,
                        collaboratorStats: (String) -> AccountStats? = { _ in nil },
                        asOf now: Date = Date(),
-                       collaboratorNotes: [String] = []) throws -> Outcome {
+                       collaboratorNotes: [String] = [],
+                       collaboratorFetchFailed: Bool = false) throws -> Outcome {
         // Every intended copy is accounted for: a source that isn't there, or a
         // copy that fails, is recorded rather than skipped, because an export
         // folder short a photo gets uploaded looking complete (#79).
@@ -210,7 +211,8 @@ struct EventExporter {
 
             let masterCaptions = masterCaptionText(event: event, result: result, preset: preset,
                                                    collaboratorStats: collaboratorStats, asOf: now,
-                                                   collaboratorNotes: collaboratorNotes)
+                                                   collaboratorNotes: collaboratorNotes,
+                                                   collaboratorFetchFailed: collaboratorFetchFailed)
             try masterCaptions.write(to: folder.appendingPathComponent("CAPTIONS.txt"),
                                       atomically: true, encoding: .utf8)
         }
@@ -232,7 +234,8 @@ struct EventExporter {
                                           preset: PostingPreset,
                                           collaboratorStats: (String) -> AccountStats?,
                                           asOf now: Date,
-                                          collaboratorNotes: [String]) -> String {
+                                          collaboratorNotes: [String],
+                                          collaboratorFetchFailed: Bool) -> String {
         var sections: [String] = []
         let (weekTags, droppedTags) = CaptionBlocks.weekTags(event: event)
         for day in DayName.allCases {
@@ -314,7 +317,8 @@ struct EventExporter {
             block += "\n\n" + CollaboratorPick.captionBlock(
                 CollaboratorPick.suggest(event: event, day: day, preset: preset,
                                          stats: collaboratorStats, asOf: now,
-                                         notes: collaboratorNotes))
+                                         notes: collaboratorNotes,
+                                         fetchFailed: collaboratorFetchFailed))
             sections.append(block)
         }
         return sections.joined(separator: "\n\n") + "\n"

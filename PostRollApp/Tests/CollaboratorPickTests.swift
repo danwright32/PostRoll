@@ -1372,6 +1372,27 @@ final class CollaboratorPickTests: XCTestCase {
                           + "alike")
     }
 
+    func testANothingToRankDayWhoseFetchFailedDoesNotSendDanToTypeNumbers() {
+        // Every real figures fetch crashed for 17 days in September 2026 and
+        // the panel told Dan to add numbers by hand, with the cause in a grey
+        // line under the last row (#1431). Typing is not the remedy for a
+        // fetch the app owns, so the sentence names the fetch instead.
+        var failed = nothingCountable
+        failed.fetchFailed = true
+
+        let line = CollaboratorPick.panelSubtitle(for: failed)
+        XCTAssertFalse(line.contains("Add numbers"),
+                       "the screen offers typing as the fix for a failed fetch: \(line)")
+        XCTAssertTrue(line.contains("fetch"), "the sentence does not say the fetch "
+                      + "is why nothing has numbers: \(line)")
+        XCTAssertTrue(line.contains("7 accounts are tagged"), line)
+
+        let block = CollaboratorPick.captionBlock(failed)
+        XCTAssertFalse(block.contains("Add numbers"),
+                       "CAPTIONS.txt and the screen describe the day differently: \(block)")
+        XCTAssertTrue(block.contains("fetch"), block)
+    }
+
     func testThePanelDrawsItsSentenceFromTheSharedWording() {
         // Naming the sentence where a check can read it proves nothing on its
         // own: typed back into the view it would leave the constant correct,
