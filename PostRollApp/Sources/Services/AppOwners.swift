@@ -57,8 +57,11 @@ extension AppOwners {
         // And the export, which copies what it needs before detaching, gets
         // everything the fetch has to say. Re-read on every trigger rather
         // than once, because the list changes with each run.
-        accountNumbers.onNoteChanged = { [export] notes in
+        accountNumbers.onNoteChanged = { [export, weak accountNumbers] notes in
             export.accountNumbersNotes = notes
+            // Beside the notes rather than read off them, because a note can be
+            // a healthy report and wording is not a thing to branch on (#1431).
+            export.accountNumbersFetchFailed = accountNumbers?.fetchFailed ?? false
         }
     }
 

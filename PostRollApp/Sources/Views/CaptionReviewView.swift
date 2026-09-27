@@ -1454,7 +1454,8 @@ struct CaptionReviewView: View {
                                  // one by one, so a note added there arrives
                                  // without this line being edited (L41).
                                  notes: [accounts.recoveryNote].compactMap { $0 }
-                                      + accountNumbers.notes)
+                                      + accountNumbers.notes,
+                                 fetchFailed: accountNumbers.fetchFailed)
     }
 
     private func applyCollageLayout(day: DayName, seed: Int) {

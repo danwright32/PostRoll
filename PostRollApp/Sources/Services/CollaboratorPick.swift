@@ -228,6 +228,12 @@ enum CollaboratorPick {
         /// see it being honoured rather than wonder where a tag went (L152).
         var excluded: [Candidate]
         var notes: [String]
+        /// Whether the automatic figures fetch failed on its last run (#1431).
+        /// A fact from the fetch owner rather than something read off `notes`,
+        /// because a note can equally be a healthy launch report and wording is
+        /// not something to branch on (L35). Decides which way out the
+        /// nothing-to-rank sentence names.
+        var fetchFailed = false
     }
 
     // MARK: - The pick
@@ -676,25 +682,29 @@ enum CollaboratorPick {
     /// - Parameter notes: anything the caller knows that the figures cannot
     ///   show, such as the account book having failed to load, which otherwise
     ///   reads identically to nobody having entered any numbers.
+    /// - Parameter fetchFailed: the fetch owner's own answer (#1431). No
+    ///   default, so neither surface can forget to pass it.
     static func suggest(event: Event, day: DayName, preset: PostingPreset,
                         stats: (String) -> AccountStats?, asOf now: Date,
-                        notes: [String] = []) -> Result {
+                        notes: [String] = [], fetchFailed: Bool) -> Result {
         let kind: MembershipKind = preset.isCollageCarousel(day) ? .firstPhoto : .onScreen
         let membership = kind == .firstPhoto
             ? firstPhotoHandles(event: event, day: day, preset: preset)
             : onScreenHandles(event: event, day: day)
-        return suggest(handles: CaptionBlocks.dayTagCandidates(event: event, day: day,
-                                                               preset: preset),
-                       firstPhoto: membership.handles.map(Set.init),
-                       eventAccounts: Set(EventHandleSuggestions
-                                            .accounts(in: event.eventHandles)
-                                            .map(CaptionBlocks.bareUsername)),
-                       membership: kind,
-                       stats: stats, asOf: now, notes: notes + membership.notes,
-                       // The addresses the research step checked, off the same
-                       // event the candidates come from (#987).
-                       checkedProfiles: ProfileLink.checked(
-                           in: event.ocrResult?.performers ?? []))
+        var result = suggest(handles: CaptionBlocks.dayTagCandidates(event: event, day: day,
+                                                                     preset: preset),
+                             firstPhoto: membership.handles.map(Set.init),
+                             eventAccounts: Set(EventHandleSuggestions
+                                                  .accounts(in: event.eventHandles)
+                                                  .map(CaptionBlocks.bareUsername)),
+                             membership: kind,
+                             stats: stats, asOf: now, notes: notes + membership.notes,
+                             // The addresses the research step checked, off the same
+                             // event the candidates come from (#987).
+                             checkedProfiles: ProfileLink.checked(
+                                 in: event.ocrResult?.performers ?? []))
+        result.fetchFailed = fetchFailed
+        return result
     }
 
     // MARK: - The block in CAPTIONS.txt (#278)
@@ -820,10 +830,19 @@ enum CollaboratorPick {
     /// Names the condition and the way out, in the shape the other three use.
     /// The count is always above `maxPerPost` by the time this is reached, so
     /// there is no singular form to write.
-    static func nothingToRankLine(_ count: Int) -> String {
-        "\(count) accounts are tagged and Instagram allows \(maxPerPost) "
-        + "collaborators per post, but none of them has any numbers yet, so "
-        + "there is nothing to rank. Add numbers and this will name \(maxPerPost)."
+    ///
+    /// When the fetch failed, the way out is the fetch, not typing (#1431):
+    /// every real fetch crashed for 17 days in September 2026 while this told
+    /// Dan to add numbers by hand. The note beside it says what went wrong.
+    static func nothingToRankLine(_ count: Int, fetchFailed: Bool) -> String {
+        let opening = "\(count) accounts are tagged and Instagram allows \(maxPerPost) "
+                    + "collaborators per post, but "
+        guard !fetchFailed else {
+            return opening + "the audience figures fetch could not count them, so "
+                 + "none has numbers and there is nothing to rank until it can."
+        }
+        return opening + "none of them has any numbers yet, so there is nothing "
+             + "to rank. Add numbers and this will name \(maxPerPost)."
     }
 
     /// The sentence the review screen puts under its heading, for any answer.
@@ -842,7 +861,7 @@ enum CollaboratorPick {
             return everyoneFitsLine(result.suggested.count)
                  + " A collaborator invite puts this post on their own grid."
         case .nothingToRank:
-            return nothingToRankLine(result.unranked.count)
+            return nothingToRankLine(result.unranked.count, fetchFailed: result.fetchFailed)
         case .ranked:
             return "Instagram allows \(maxPerPost) per post. "
                  + "A collaborator invite puts this post on their own grid."
@@ -874,7 +893,8 @@ enum CollaboratorPick {
                 lines.append("\(candidate.handle) (\(candidate.reason))")
             }
         case .nothingToRank:
-            lines.append(nothingToRankLine(result.unranked.count))
+            lines.append(nothingToRankLine(result.unranked.count,
+                                           fetchFailed: result.fetchFailed))
             lines.append(contentsOf: unrankedLines(result.unranked))
         case .ranked:
             lines.append("Instagram allows \(maxPerPost) collaborators per post. Invite these:")

@@ -98,7 +98,7 @@ final class CollaboratorPickForDayTests: XCTestCase {
 
         let result = CollaboratorPick.suggest(
             event: event, day: .thursday, preset: .balanced,
-            stats: { table[AccountBook.key($0)] }, asOf: now)
+            stats: { table[AccountBook.key($0)] }, asOf: now, fetchFailed: false)
 
         XCTAssertEqual(result.suggested.first?.handle, "onscreen",
                        "the strongest account was suggested for a reel it does "
@@ -118,7 +118,7 @@ final class CollaboratorPickForDayTests: XCTestCase {
 
         let result = CollaboratorPick.suggest(
             event: event, day: .thursday, preset: .balanced,
-            stats: { table[AccountBook.key($0)] }, asOf: now)
+            stats: { table[AccountBook.key($0)] }, asOf: now, fetchFailed: false)
 
         XCTAssertFalse(result.notes.isEmpty,
                        "the ranking is engagement only and nothing says so")
@@ -138,7 +138,7 @@ final class CollaboratorPickForDayTests: XCTestCase {
 
         let result = CollaboratorPick.suggest(
             event: event, day: .thursday, preset: .balanced,
-            stats: { table[AccountBook.key($0)] }, asOf: now)
+            stats: { table[AccountBook.key($0)] }, asOf: now, fetchFailed: false)
         let block = CollaboratorPick.captionBlock(result)
 
         XCTAssertFalse(block.lowercased().contains("first photo"),
@@ -152,7 +152,7 @@ final class CollaboratorPickForDayTests: XCTestCase {
         // one wording for both would be wrong on whichever day it did not fit.
         let result = CollaboratorPick.suggest(
             event: carouselEvent(), day: .wednesday, preset: .balanced,
-            stats: lookup(everyone), asOf: now)
+            stats: lookup(everyone), asOf: now, fetchFailed: false)
 
         XCTAssertTrue(CollaboratorPick.captionBlock(result).lowercased()
                         .contains("first photo"))
@@ -205,7 +205,7 @@ final class CollaboratorPickForDayTests: XCTestCase {
 
         let result = CollaboratorPick.suggest(
             event: event, day: .wednesday, preset: .balanced,
-            stats: { table[AccountBook.key($0)] }, asOf: now)
+            stats: { table[AccountBook.key($0)] }, asOf: now, fetchFailed: false)
         let order = result.suggested.map(\.handle)
 
         // Five people for five slots, so the org takes none of them however
@@ -256,7 +256,7 @@ final class CollaboratorPickForDayTests: XCTestCase {
                      "dciny": stats(50_000, 5_000, 900)]
         let result = CollaboratorPick.suggest(
             event: eventAccountEvent(), day: .wednesday, preset: .balanced,
-            stats: { table[AccountBook.key($0)] }, asOf: now)
+            stats: { table[AccountBook.key($0)] }, asOf: now, fetchFailed: false)
 
         XCTAssertEqual(result.coverage, .ranked)
         // Six people for five slots, so the org takes none of them. The first
@@ -286,7 +286,7 @@ final class CollaboratorPickForDayTests: XCTestCase {
 
         let result = CollaboratorPick.suggest(
             event: event, day: .wednesday, preset: .balanced,
-            stats: { table[AccountBook.key($0)] }, asOf: now)
+            stats: { table[AccountBook.key($0)] }, asOf: now, fetchFailed: false)
 
         XCTAssertTrue(result.suggested.map(\.handle).contains("dciny"),
                       "a slot was left empty rather than filled by the only "
@@ -314,7 +314,7 @@ final class CollaboratorPickForDayTests: XCTestCase {
 
         let result = CollaboratorPick.suggest(
             event: event, day: .wednesday, preset: .balanced,
-            stats: { table[AccountBook.key($0)] }, asOf: now)
+            stats: { table[AccountBook.key($0)] }, asOf: now, fetchFailed: false)
         let order = result.suggested.map(\.handle)
 
         XCTAssertTrue(order.contains("dciny"))
@@ -585,7 +585,7 @@ final class CollaboratorPickForDayTests: XCTestCase {
     func testTheFirstPhotoBiasBeatsEngagementOnARealDay() {
         let result = CollaboratorPick.suggest(
             event: carouselEvent(), day: .wednesday, preset: .balanced,
-            stats: lookup(everyone), asOf: now)
+            stats: lookup(everyone), asOf: now, fetchFailed: false)
         XCTAssertEqual(result.suggested.prefix(2).map(\.handle), ["first1", "first2"])
         XCTAssertEqual(result.fallbacks.count, 3)
     }
@@ -598,7 +598,8 @@ final class CollaboratorPickForDayTests: XCTestCase {
         event.weekResult?.thursday = DayCaption()
 
         let result = CollaboratorPick.suggest(event: event, day: .thursday, preset: .balanced,
-                                              stats: lookup(everyone + ["reelonly"]), asOf: now)
+                                              stats: lookup(everyone + ["reelonly"]), asOf: now,
+                                              fetchFailed: false)
         XCTAssertTrue(result.fallbacks.isEmpty, "nothing fell through anything")
         XCTAssertNil(result.strongestExcluded)
         XCTAssertTrue(result.suggested.allSatisfy { !$0.inFirstPhoto })
@@ -653,7 +654,7 @@ final class CollaboratorPickForDayTests: XCTestCase {
         let result = CollaboratorPick.suggest(
             event: event, day: .wednesday, preset: .balanced,
             stats: lookup(["other1", "other2", "other3", "other4", "other5", "other6"]),
-            asOf: now)
+            asOf: now, fetchFailed: false)
         XCTAssertEqual(result.notes, [CollaboratorPick.firstPhotoUnresolvedNote])
         XCTAssertTrue(result.suggested.allSatisfy { !$0.inFirstPhoto })
         XCTAssertTrue(result.fallbacks.isEmpty,
@@ -702,7 +703,8 @@ final class CollaboratorPickForDayTests: XCTestCase {
 
         let result = CollaboratorPick.suggest(event: event, day: .wednesday,
                                               preset: .balanced,
-                                              stats: lookup(everyone), asOf: now)
+                                              stats: lookup(everyone), asOf: now,
+                                              fetchFailed: false)
         let ranked = result.suggested + result.unranked
 
         XCTAssertEqual(ranked.first(where: { $0.handle == "first1" })?.profileURL,
@@ -726,7 +728,8 @@ final class CollaboratorPickForDayTests: XCTestCase {
         XCTAssertEqual(CaptionBlocks.dayTagCandidates(event: event, day: .wednesday,
                                                       preset: .balanced).count, 5)
         let result = CollaboratorPick.suggest(event: event, day: .wednesday, preset: .balanced,
-                                              stats: lookup(everyone), asOf: now)
+                                              stats: lookup(everyone), asOf: now,
+                                              fetchFailed: false)
         XCTAssertEqual(result.coverage, .allFit)
         XCTAssertEqual(result.suggested.count, 5)
     }
@@ -740,10 +743,36 @@ final class CollaboratorPickForDayTests: XCTestCase {
         event.days[DayName.wednesday.rawValue] = wed
 
         let result = CollaboratorPick.suggest(event: event, day: .wednesday, preset: .balanced,
-                                              stats: lookup(everyone), asOf: now)
+                                              stats: lookup(everyone), asOf: now,
+                                              fetchFailed: false)
         XCTAssertEqual(result.coverage, .nothingTagged)
         XCTAssertTrue(CollaboratorPick.captionBlock(result)
                         .contains(CollaboratorPick.nobodyTaggedLine))
+    }
+
+    func testAFailedFetchReachesTheDaysAnswer() {
+        // Carried rather than inferred from the notes: a note can be a healthy
+        // launch report, and only the fetch owner knows whether it failed.
+        let event = carouselEvent()
+        let failed = CollaboratorPick.suggest(event: event, day: .wednesday, preset: .balanced,
+                                              stats: { _ in nil }, asOf: now,
+                                              fetchFailed: true)
+        let healthy = CollaboratorPick.suggest(event: event, day: .wednesday, preset: .balanced,
+                                               stats: { _ in nil }, asOf: now,
+                                               fetchFailed: false)
+        XCTAssertTrue(failed.fetchFailed)
+        XCTAssertFalse(healthy.fetchFailed)
+    }
+
+    func testBothSurfacesPassTheFetchOwnersAnswer() throws {
+        // Built is not wired (L3). The review screen and the export each have
+        // to hand over the fetch owner's own fact, not a literal false.
+        XCTAssertTrue(try source("Views/CaptionReviewView.swift")
+                        .contains("fetchFailed: accountNumbers.fetchFailed"),
+                      "the review screen does not tell the pick the fetch failed")
+        XCTAssertTrue(try source("Services/ExportManager.swift")
+                        .contains("collaboratorFetchFailed: fetchFailed"),
+                      "the export does not tell CAPTIONS.txt the fetch failed")
     }
 
     // MARK: - One shared predicate with the export

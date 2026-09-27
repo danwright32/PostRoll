@@ -84,6 +84,13 @@ final class AccountNumbersManager {
     /// and one to forget (L41).
     var notes: [String] { [failureNote, backfillNote].compactMap { $0 } }
 
+    /// Whether the last fetch could not get figures, as a fact rather than a
+    /// sentence (#1431), for the collaborator panel choosing which way out to
+    /// name. True whenever `failureNote` is set: the call failed outright, or
+    /// most of it came back rate limited. Either way typing numbers by hand is
+    /// not the remedy the panel should lead with.
+    var fetchFailed: Bool { failureNote != nil }
+
     /// Told whenever anything it says changes, so a surface that copies its
     /// inputs before detaching has the current list (#1004, #1277).
     var onNoteChanged: (([String]) -> Void)?
