@@ -55,7 +55,8 @@ final class CollaboratorBlockTests: XCTestCase {
 
     private func suggestion() -> CollaboratorPick.Result {
         CollaboratorPick.suggest(event: event(), day: .wednesday, preset: .balanced,
-                                 stats: { table[AccountBook.key($0)] }, asOf: now)
+                                 stats: { table[AccountBook.key($0)] }, asOf: now,
+                                 fetchFailed: false)
     }
 
     // MARK: - The block
@@ -264,5 +265,23 @@ final class CollaboratorBlockTests: XCTestCase {
             contentsOf: exported.folder.appendingPathComponent("CAPTIONS.txt"), encoding: .utf8)
 
         XCTAssertTrue(captions.contains(AccountBook.unreadableNote(file: "accounts.json", folder: "~/Library/Application Support/PostRoll")), captions)
+    }
+
+    func testAFailedFetchIsSaidInTheFileNotJustOnScreen() throws {
+        // The same sentence the panel shows, so the file does not send Dan to
+        // type numbers for a fetch the app owns (#1431).
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("collab-fetch-failed-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+
+        let exported = try EventExporter.export(
+            event: event(), to: folder, preset: .balanced,
+            collaboratorStats: { _ in nil }, asOf: now,
+            collaboratorFetchFailed: true)
+        let captions = try String(
+            contentsOf: exported.folder.appendingPathComponent("CAPTIONS.txt"), encoding: .utf8)
+
+        XCTAssertFalse(captions.contains("Add numbers"), captions)
+        XCTAssertTrue(captions.contains("fetch"), captions)
     }
 }
