@@ -44,8 +44,8 @@ struct ReelStripPreviewThumbnail: View {
     var onUploadAudio: (() -> Void)? = nil
     var onChangePhotos: (() -> Void)? = nil
     var onSwapPhotos: ((URL, URL) -> Void)? = nil
-    /// Current reel length (scroll seconds), shown on the "Reel length…" item
-    /// and where its popover starts. nil hides the item.
+    /// The whole reel's length, holds included (#1433), shown on the "Reel
+    /// length…" item and where its popover starts. nil hides the item.
     var currentReelLength: Double? = nil
     var onChangeReelLength: ((Double) -> Void)? = nil
     var maxHeight: CGFloat = 600

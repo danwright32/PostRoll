@@ -39,10 +39,14 @@ SLIDER_STEP_S = 1.0
 
 
 def build() -> dict:
+    # The slider offers whole reel lengths (#1433), so walk those and record
+    # the scroll each one leaves, rather than treating the slider's numbers as
+    # scroll lengths.
+    holds = scroll.HOLD_END + scroll.CLOSING_FRAME_DURATION
     scroll_seconds = []
     current = SLIDER_MIN_S
     while current <= SLIDER_MAX_S:
-        scroll_seconds.append(current)
+        scroll_seconds.append(current - holds)
         current += SLIDER_STEP_S
 
     return {
