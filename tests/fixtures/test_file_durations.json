@@ -157,6 +157,7 @@
     "test_image_block_cache.py": 1.9300000000000002,
     "test_import_meta_csv.py": 0.0,
     "test_install_quits_the_app_it_replaces.py": 1.77,
+    "test_install_warns_when_only_xcode_is_ahead.py": 0.11,
     "test_jamendo_outage_short_circuit.py": 0.01,
     "test_jamendo_status_envelope.py": 0.01,
     "test_job_duration_drift.py": 0.04,
@@ -919,6 +920,10 @@
     "test_install_quits_the_app_it_replaces.py": {
       "run": "partial-2026-09-27T18:29Z",
       "scale": 1.32
+    },
+    "test_install_warns_when_only_xcode_is_ahead.py": {
+      "run": "partial-2026-09-27T18:54Z",
+      "scale": 1.222
     },
     "test_jamendo_outage_short_circuit.py": {
       "run": "full-2026-09-05T02:25Z",

@@ -191,6 +191,22 @@ def python_verdict(*, local: str, ci: str, base: str | None) -> Result:
                   f"Python {ci} on both sides, from {base}.")
 
 
+#: The exit when this Mac's Xcode is ahead of CI's and nothing else is wrong
+#: (#1441). The install gate warns on this one and carries on, by Dan's
+#: decision of 2026-09-27, because while CI cannot move to the newer Xcode it
+#: refused every install. Every other problem exits 1 and still refuses.
+XCODE_ONLY_AHEAD = 3
+
+
+def exit_code(*, xcode: Result, python: Result) -> int:
+    """0 when both match, XCODE_ONLY_AHEAD when only Xcode is ahead, else 1."""
+    if not python.ok:
+        return 1
+    if not xcode.ok:
+        return XCODE_ONLY_AHEAD
+    return 0
+
+
 def main(argv: list[str]) -> int:
     banner = subprocess.run(
         ["xcodebuild", "-version"], capture_output=True, text=True, check=True
@@ -205,7 +221,7 @@ def main(argv: list[str]) -> int:
         base=base_interpreter(cfg.read_text(encoding="utf-8")) if cfg.exists() else None)
     print(f"{python.outcome.value}: {python.detail}")
 
-    return 0 if result.ok and python.ok else 1
+    return exit_code(xcode=result, python=python)
 
 
 if __name__ == "__main__":
