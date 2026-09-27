@@ -61,7 +61,7 @@ def test_xcode_alone_ahead_warns_and_lets_the_install_on():
 def test_anything_else_the_check_finds_still_refuses():
     for code in (1, 2):
         result = run_gate(code)
-        assert f"rc=1 ahead=0" in result.stdout, (
+        assert "rc=1 ahead=0" in result.stdout, (
             f"a check exiting {code} let the install on: {result.stdout}{result.stderr}")
 
 
