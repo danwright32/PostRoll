@@ -30,6 +30,21 @@ enum PythonBridgeWork: CaseIterable {
         case .other:       return "The run"
         }
     }
+
+    /// What to do after a run of this kind finished and wrote nothing (#1439).
+    ///
+    /// Only a program read has a cause Dan can check himself, an unreadable
+    /// PDF. Every other run's empty result says nothing he can act on beyond
+    /// trying again and, if it repeats, reading the log; the PDF advice was
+    /// shown for all of them and sent him to a file that had no part in it.
+    var noOutputRemedy: String {
+        switch self {
+        case .programRead:
+            return "Check that the program PDF has readable text and try again."
+        case .generation, .export, .other:
+            return "Try again, and if it keeps failing, check \(AppPaths.logsDirDisplayPath)."
+        }
+    }
 }
 
 enum PythonBridgeError: LocalizedError {
@@ -63,7 +78,7 @@ enum PythonBridgeError: LocalizedError {
         case .scriptFailed(_, let stderr):
             return Self.humanise(stderr: stderr, work: work)
         case .outputMissing:
-            return "\(work.subject) finished but produced no output. Check that the program PDF has readable text and try again."
+            return "\(work.subject) finished but produced no output. \(work.noOutputRemedy)"
         case .invalidOutput(let reason):
             // Every call site writes a reason and this switch used to discard
             // all of them, so "No OCR result. Complete the OCR step first."
