@@ -29,7 +29,7 @@ from postroll.media.easing import cruise_factor  # noqa: E402
 
 FIXTURE = REPO_ROOT / "tests" / "fixtures" / "scroll_reel_timing.json"
 
-#: What the editor's slider offers, from `ScrollReelTiming.reelLengthRange` and
+#: What the editor's slider offers, as WHOLE reel lengths since #1433, from `ScrollReelTiming.reelLengthRange` and
 #: `reelLengthStep`, which the reel length popover and the photo assignment
 #: slider both read (#1415). Recorded here so the reel lengths below span the
 #: range a person can actually ask for.
@@ -39,10 +39,14 @@ SLIDER_STEP_S = 1.0
 
 
 def build() -> dict:
+    # The slider offers whole reel lengths (#1433), so walk those and record
+    # the scroll each one leaves, rather than treating the slider's numbers as
+    # scroll lengths.
+    holds = scroll.HOLD_END + scroll.CLOSING_FRAME_DURATION
     scroll_seconds = []
     current = SLIDER_MIN_S
     while current <= SLIDER_MAX_S:
-        scroll_seconds.append(current)
+        scroll_seconds.append(current - holds)
         current += SLIDER_STEP_S
 
     return {

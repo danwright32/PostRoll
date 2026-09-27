@@ -95,6 +95,21 @@ def test_a_reel_is_the_scroll_plus_the_holds():
             "invisible to any warning computed from this")
 
 
+def test_the_recorded_reels_are_the_lengths_the_slider_offers():
+    """The slider sets the whole reel since #1433, so the table has to span the
+    whole reel lengths it offers, not scroll lengths that happen to share its
+    numbers. Otherwise every Swift check over the table tests reels nobody can
+    choose and misses the shortest ones somebody can."""
+    doc = _fixture()
+    reels = sorted(doc["reel_seconds_for_scroll"].values())
+    assert reels[0] == pytest.approx(doc["slider"]["min_s"]), (
+        f"the shortest recorded reel is {reels[0]}s and the slider starts at "
+        f"{doc['slider']['min_s']}s")
+    assert reels[-1] == pytest.approx(doc["slider"]["max_s"]), (
+        f"the longest recorded reel is {reels[-1]}s and the slider stops at "
+        f"{doc['slider']['max_s']}s")
+
+
 def test_the_slider_range_in_the_contract_is_the_one_the_editor_offers():
     """A contract describing a slider nobody has would produce warnings about
     lengths that cannot be chosen."""
@@ -154,14 +169,19 @@ def test_the_reported_reel_reaches_the_comfortable_speed_at_the_recorded_duratio
 def test_the_reported_reel_is_still_too_fast_at_the_sliders_maximum():
     """Why the warning cannot name only the duration (L111).
 
-    At 234 photographs the slider's maximum (90 seconds since #1415) still
+    At 234 photographs the slider's maximum (a 90 second reel since #1415 and
+    #1433, so 84 seconds of scroll) still
     leaves the reel faster than the DiGangi one Dan had already called too fast, so a message
     pointing only at that control would name a remedy the person cannot take.
     """
     doc = _fixture()
     reel = next(r for r in doc["measured_reels"] if r["photos"] == 234)
     travel = scroll.max_scroll_for(reel["strip_h"])
-    at_max = travel / (doc["slider"]["max_s"] * scroll.FPS) * doc["cruise_factor"]
+    # The slider's top is a whole reel since #1433, so the scroll it leaves is
+    # that less the end hold and the closing graphic.
+    scroll_at_max = (doc["slider"]["max_s"] - scroll.HOLD_END
+                     - scroll.CLOSING_FRAME_DURATION)
+    at_max = travel / (scroll_at_max * scroll.FPS) * doc["cruise_factor"]
 
     assert at_max > doc["comfortable_travel_px"], (
         "the slider can now reach a comfortable speed on the reel this was "

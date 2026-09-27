@@ -29,7 +29,7 @@ struct PhotoAssignmentView: View {
     // Thursday: scroll reel
     @State private var thursdayAudio: URL?
     @State private var thursdayAudioMissing = false   // file set but gone from disk
-    @State private var thursdayScrollDuration: Double = 30.0
+    @State private var thursdayReelLength: Double = 30.0
     @State private var thursdayReelSeed: Int? = nil
 
     // Wednesday: collage
@@ -95,7 +95,8 @@ struct PhotoAssignmentView: View {
 
         let thu = event.days[DayName.thursday.rawValue]
         _thursdayAudio          = State(initialValue: thu?.audioPath)
-        _thursdayScrollDuration = State(initialValue: thu?.scrollDuration ?? 40.0)
+        // The whole reel, holds included (#1433), which is what the slider sets.
+        _thursdayReelLength     = State(initialValue: (thu ?? PostingDay(day: .thursday)).reelLength)
         _thursdayReelSeed       = State(initialValue: thu?.reelSeed)
 
         _dayCollageSeeds = State(initialValue: DayName.allCases.reduce(into: [:]) { acc, d in
@@ -272,14 +273,14 @@ struct PhotoAssignmentView: View {
                         ThursdayReelSection(
                             audio:          $thursdayAudio,
                             audioMissing:   thursdayAudioMissing,
-                            scrollDuration: $thursdayScrollDuration,
+                            reelLength:     $thursdayReelLength,
                             reelSeed:       $thursdayReelSeed,
                             onPickAudio:    { presentPicker(.thursdayAudio) },
                             onLocateAudio:  locateMissingAudio
                         )
                         .task(id: thursdayAudio) { await scanMissingAudio() }
                         .onChange(of: thursdayAudio)         { _, _ in save() }
-                        .onChange(of: thursdayScrollDuration){ _, _ in save() }
+                        .onChange(of: thursdayReelLength)    { _, _ in save() }
                         .onChange(of: thursdayReelSeed)      { _, _ in save() }
 
                     case .friday:
@@ -825,7 +826,7 @@ struct PhotoAssignmentView: View {
                 pd.reelTargetDuration  = tuesdayTargetDuration
             case .thursday:
                 pd.audioPath      = thursdayAudio
-                pd.scrollDuration = thursdayScrollDuration
+                pd.reelLength = thursdayReelLength
                 pd.reelSeed       = thursdayReelSeed
                 // The reel's layout is decided the moment its photos are, not
                 // the first time somebody presses "New layout" (#1062). Every
@@ -1998,7 +1999,8 @@ private struct CollageLayoutSection: View {
 private struct ThursdayReelSection: View {
     @Binding var audio: URL?
     var audioMissing: Bool = false
-    @Binding var scrollDuration: Double
+    /// The whole reel, holds included (#1433).
+    @Binding var reelLength: Double
     @Binding var reelSeed: Int?
     let onPickAudio: () -> Void
     var onLocateAudio: () -> Void = {}
@@ -2046,17 +2048,17 @@ private struct ThursdayReelSection: View {
                                         onPick: onPickAudio, onLocate: onLocateAudio)
                     }
 
-                    // Scroll duration slider
+                    // Reel length slider: the whole reel, start to finish (#1433)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("SCROLL DURATION")
+                        Text("REEL LENGTH")
                             .font(.system(size: 9, weight: .medium))
                             .tracking(0.8)
                             .foregroundStyle(PaintedSurfaces.secondaryText)
                         HStack(spacing: Spacing.sm) {
-                            Slider(value: $scrollDuration, in: ScrollReelTiming.reelLengthRange,
+                            Slider(value: $reelLength, in: ScrollReelTiming.reelLengthRange,
                                    step: ScrollReelTiming.reelLengthStep)
                                 .tint(PaintedSurfaces.iconAccent)
-                            Text("\(Int(scrollDuration))s")
+                            Text("\(Int(reelLength))s")
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(PaintedSurfaces.bodyText)
                                 .frame(width: 32, alignment: .trailing)
@@ -2069,13 +2071,11 @@ private struct ThursdayReelSection: View {
                         // track fits. Dan found out only because he happened
                         // to know a track's length.
                         //
-                        // The reel is the slider value plus six seconds of
-                        // holds, which is why this asks ScrollReelTiming
-                        // rather than comparing against `scrollDuration`: a
-                        // track that covers the scroll and not the reel is the
-                        // one somebody is most likely to think is fine.
+                        // The slider is the whole reel (#1433), so the notice
+                        // and the number beside the slider are the same length.
                         if let notice = ScrollReelTiming.musicNotice(
-                            trackSeconds: trackSeconds, scrollSeconds: scrollDuration) {
+                            trackSeconds: trackSeconds,
+                            scrollSeconds: ScrollReelTiming.scrollSeconds(reelSeconds: reelLength)) {
                             Text(notice)
                                 .font(.light(11))
                                 .foregroundStyle(PaintedSurfaces.secondaryText)

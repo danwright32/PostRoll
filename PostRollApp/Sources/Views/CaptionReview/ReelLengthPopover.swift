@@ -14,7 +14,7 @@ import SwiftUI
 /// go. Closing the popover commits too, which is what a keyboard adjustment
 /// needs, since arrow keys never report the end of an edit.
 struct ReelLengthPopover: View {
-    /// The scroll length the reel has now.
+    /// The whole reel's length now, holds included (#1433).
     let current: Double
     let isRegenerating: Bool
     /// The strip's layout sidecar, which the pace sentence is read from.
@@ -57,7 +57,7 @@ struct ReelLengthPopover: View {
                         .font(.light(11))
                         .foregroundStyle(PaintedSurfaces.secondaryText)
                 }
-            } else if let notice = layout?.paceNotice(scrollSeconds: draft) {
+            } else if let notice = layout?.paceNotice(reelSeconds: draft) {
                 Text(notice)
                     .font(.light(11))
                     .foregroundStyle(PaintedSurfaces.secondaryText)

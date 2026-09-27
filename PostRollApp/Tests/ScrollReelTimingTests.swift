@@ -53,7 +53,7 @@ final class ScrollReelTimingTests: XCTestCase {
 
     func testATrackShorterThanTheReelSaysSoWithBothLengths() throws {
         let fixture = try loadFixture()
-        let scrollSeconds = fixture.slider.min_s
+        let scrollSeconds = ScrollReelTiming.scrollSeconds(reelSeconds: fixture.slider.min_s)
         let reelSeconds = ScrollReelTiming.reelSeconds(scrollSeconds: scrollSeconds)
 
         let notice = ScrollReelTiming.musicNotice(trackSeconds: reelSeconds - 8,
@@ -73,7 +73,7 @@ final class ScrollReelTimingTests: XCTestCase {
     /// REEL is the one a person is most likely to think is fine.
     func testATrackThatCoversTheScrollButNotTheReelStillSaysSo() throws {
         let fixture = try loadFixture()
-        let scrollSeconds = fixture.slider.min_s
+        let scrollSeconds = ScrollReelTiming.scrollSeconds(reelSeconds: fixture.slider.min_s)
 
         let notice = ScrollReelTiming.musicNotice(trackSeconds: scrollSeconds + 1,
                                                   scrollSeconds: scrollSeconds)
@@ -84,7 +84,7 @@ final class ScrollReelTimingTests: XCTestCase {
 
     func testATrackThatCoversTheReelSaysNothing() throws {
         let fixture = try loadFixture()
-        let scrollSeconds = fixture.slider.max_s
+        let scrollSeconds = ScrollReelTiming.scrollSeconds(reelSeconds: fixture.slider.max_s)
         let reelSeconds = ScrollReelTiming.reelSeconds(scrollSeconds: scrollSeconds)
 
         XCTAssertNil(ScrollReelTiming.musicNotice(trackSeconds: reelSeconds,
@@ -100,7 +100,7 @@ final class ScrollReelTimingTests: XCTestCase {
     func testAnUnknownTrackLengthSaysNothing() throws {
         let fixture = try loadFixture()
         XCTAssertNil(ScrollReelTiming.musicNotice(trackSeconds: nil,
-                                                  scrollSeconds: fixture.slider.min_s))
+                                                  scrollSeconds: ScrollReelTiming.scrollSeconds(reelSeconds: fixture.slider.min_s)))
     }
 }
 
@@ -198,13 +198,16 @@ extension ScrollReelTimingTests {
 
         let needed = ScrollReelTiming.comfortableScrollSeconds(stripHeight: stripHeight)
         XCTAssertEqual(needed, target, accuracy: 0.5, "the construction is wrong")
-        XCTAssertLessThanOrEqual(needed, fixture.slider.max_s)
+        // The slider sets the whole reel (#1433), so the length to name is the
+        // scroll it needs plus the holds, and that is what has to fit.
+        let reelNeeded = ScrollReelTiming.reelSeconds(scrollSeconds: needed)
+        XCTAssertLessThanOrEqual(reelNeeded, fixture.slider.max_s)
 
         let notice = try XCTUnwrap(ScrollReelTiming.speedNotice(
             stripHeight: stripHeight, photoCount: 120, scrollSeconds: 20))
 
-        XCTAssertTrue(notice.contains("\(Int(needed.rounded()))"),
-                      "the notice does not name the length that would fix it: \(notice)")
+        XCTAssertTrue(notice.contains("Try \(Int(reelNeeded.rounded())) seconds"),
+                      "the notice does not name the reel length that would fix it: \(notice)")
         XCTAssertFalse(notice.lowercased().contains("photograph"),
                        "a reel the slider can fix should not be told to lose photographs")
     }
@@ -223,7 +226,8 @@ extension ScrollReelTimingTests {
         let digangi = try XCTUnwrap(fixture.measured_reels.first { $0.photos == 149 })
         let battery = try XCTUnwrap(fixture.measured_reels.first { $0.photos == 234 })
 
-        let digangiNeeds = ScrollReelTiming.comfortableScrollSeconds(stripHeight: digangi.strip_h)
+        let digangiNeeds = ScrollReelTiming.reelSeconds(
+            scrollSeconds: ScrollReelTiming.comfortableScrollSeconds(stripHeight: digangi.strip_h))
         XCTAssertLessThanOrEqual(digangiNeeds, fixture.slider.max_s,
                                  "DiGangi no longer fits inside the slider's range")
         let notice = try XCTUnwrap(ScrollReelTiming.speedNotice(
@@ -231,7 +235,8 @@ extension ScrollReelTimingTests {
         XCTAssertTrue(notice.contains("Try \(Int(digangiNeeds.rounded())) seconds"), notice)
 
         XCTAssertGreaterThan(
-            ScrollReelTiming.comfortableScrollSeconds(stripHeight: battery.strip_h),
+            ScrollReelTiming.reelSeconds(scrollSeconds: ScrollReelTiming
+                .comfortableScrollSeconds(stripHeight: battery.strip_h)),
             fixture.slider.max_s, "Battery Dance now fits inside the slider's range")
     }
 
@@ -246,9 +251,10 @@ extension ScrollReelTimingTests {
         let notice = try XCTUnwrap(ScrollReelTiming.speedNotice(
             stripHeight: battery.strip_h, photoCount: battery.photos, scrollSeconds: 35))
 
+        // The slider's top is a whole reel, so its scroll is that less the holds.
         let fewer = ScrollReelTiming.comfortablePhotoCount(
             stripHeight: battery.strip_h, photoCount: battery.photos,
-            scrollSeconds: fixture.slider.max_s)
+            scrollSeconds: ScrollReelTiming.scrollSeconds(reelSeconds: fixture.slider.max_s))
         XCTAssertLessThan(fewer, battery.photos, "fewer photographs means fewer")
         XCTAssertGreaterThan(fewer, 0)
         XCTAssertTrue(notice.contains("\(fewer)"),
