@@ -145,6 +145,51 @@ final class AccountNumbersManagerTests: XCTestCase {
                        + "account the first had already answered for")
     }
 
+    // MARK: - Saying it is busy only while it is (#1430)
+
+    func testAQueuedSettleIsWorkInFlight() async {
+        // The positive control for the test below it: a settle waiting out
+        // its delay is work this owner started, so the quit prompt must see
+        // it, or "not in flight after it finished" is satisfied by a flag
+        // that is never true at all (L159).
+        let m = manager { _ in [] }
+        let gate = Gate()
+        m.waitForSettle = { await gate.held() }
+
+        m.handlesSettled(["a"], asOf: now)
+
+        XCTAssertTrue(m.hasWorkInFlight, "a settle waiting to fire read as idle")
+        gate.open()
+        await settle()
+    }
+
+    func testAFinishedFetchIsNotStillWorkInFlight() async {
+        // The finished settle task was kept and never cancelled, so it went on
+        // counting as queued work, and every quit after the launch pass said
+        // audience figures were still being fetched when nothing was running.
+        let m = manager { handles in handles.map { Self.figures($0) } }
+
+        m.handlesSettled(["a"], asOf: now)
+        await settle()
+
+        XCTAssertEqual(book.stats(for: "a")?.outcome, .measured,
+                       "the fetch never ran, so this says nothing about what it "
+                       + "leaves behind when it finishes")
+        XCTAssertFalse(m.hasWorkInFlight, "a fetch that had finished still read as "
+                       + "running, so the quit prompt fires on every quit")
+    }
+
+    func testAFinishedLaunchPassIsNotStillWorkInFlight() async {
+        let m = manager { handles in handles.map { Self.figures($0) } }
+
+        m.backfill(["a"], asOf: now)
+        await settle()
+
+        XCTAssertNotNil(m.backfillNote, "the launch pass never finished")
+        XCTAssertFalse(m.hasWorkInFlight, "a launch pass that had finished still "
+                       + "read as running")
+    }
+
     // MARK: - Failure is recorded, not swallowed
 
     func testAFailedFetchLeavesANoteRatherThanNothing() async {
@@ -186,13 +231,18 @@ final class AccountNumbersManagerTests: XCTestCase {
         XCTAssertNotNil(m.failureNote, "and the fetch failure still has somewhere to go")
     }
 
-    // MARK: - The archive's recurring accounts, at launch (#1268)
+    // MARK: - The accounts on events in progress, at launch (#1268)
 
-    private func event(_ name: String, tagging handles: [String]) -> Event {
+    private func event(_ name: String, tagging handles: [String],
+                       exported: Bool = false) -> Event {
         var e = Event(name: name, org: "Org", venue: "Hall", date: now, shootType: .fullShow)
         var posting = PostingDay(day: .wednesday)
         posting.tagHandles = handles
         e.days[DayName.wednesday.rawValue] = posting
+        if exported {
+            e.stage = .exported
+            e.exportPath = URL(fileURLWithPath: "/tmp/exported-\(name)")
+        }
         return e
     }
 
@@ -203,21 +253,22 @@ final class AccountNumbersManagerTests: XCTestCase {
         return made
     }
 
-    func testTheArchivesRecurringAccountsAreAskedAboutOnce() async {
-        // Nothing had ever asked about them. The fetch fires when an event's
-        // handles settle, so the events already in the store when it shipped
-        // were never reached, and the ranking they feed had nothing to rank.
+    func testTheLaunchPassAsksOnlyAboutEventsInProgress() async {
+        // The event Dan has open was tagged before any fetch could run, so the
+        // settle trigger will not fire for it again. The exported one is
+        // finished, and asking about it spends the allowance on nothing.
         let heard = Recorder()
         let owned = owners { handles in heard.saw(handles); return [] }
 
-        owned.backfillTheArchive(events: [event("a", tagging: ["carnegiehall", "oneoff"]),
-                                          event("b", tagging: ["carnegiehall"])],
-                                 stats: { _ in nil }, asOf: now)
+        owned.backfillEventsInProgress(events: [event("open", tagging: ["54below"]),
+                                                event("done", tagging: ["carnegiehall"],
+                                                      exported: true)],
+                                       stats: { _ in nil }, asOf: now)
         await settle()
 
-        XCTAssertEqual(heard.handles, ["carnegiehall"],
-                       "either the recurring account was missed or the allowance "
-                       + "was spent on a performer who never comes back")
+        XCTAssertEqual(heard.handles, ["54below"],
+                       "either the event in progress was missed or the allowance "
+                       + "was spent on an event that has already shipped")
     }
 
     func testALaunchWithNothingLeftToBackfillAsksAboutNothing() async {
@@ -230,9 +281,9 @@ final class AccountNumbersManagerTests: XCTestCase {
         let answered = AccountStats(followers: 1_000, likes: 50, comments: 5, recordedOn: now,
                                     outcome: .measured)
 
-        owned.backfillTheArchive(events: [event("a", tagging: ["carnegiehall"]),
-                                          event("b", tagging: ["carnegiehall"])],
-                                 stats: { _ in answered }, asOf: now)
+        owned.backfillEventsInProgress(events: [event("a", tagging: ["carnegiehall"]),
+                                                event("b", tagging: ["carnegiehall"])],
+                                       stats: { _ in answered }, asOf: now)
         await settle()
 
         XCTAssertTrue(heard.handles.isEmpty, "the pass asked again about an account "
@@ -248,15 +299,15 @@ final class AccountNumbersManagerTests: XCTestCase {
         let owned = owners { handles in heard.saw(handles); throw Refused() }
         let events = [event("a", tagging: ["carnegiehall"]), event("b", tagging: ["carnegiehall"])]
 
-        owned.backfillTheArchive(events: events, stats: { self.book.stats(for: $0) }, asOf: now)
+        owned.backfillEventsInProgress(events: events, stats: { self.book.stats(for: $0) }, asOf: now)
         await settle()
 
         // The attempt has to have HAPPENED, or "still due" is satisfied by a
         // fixture in which nothing could have marked it done anyway (L159).
         XCTAssertEqual(heard.handles, ["carnegiehall"], "the fetch was never attempted, "
                        + "so this says nothing about what a failure leaves behind")
-        XCTAssertEqual(AccountFetchDue.archiveBackfill(events: events,
-                                                       stats: { self.book.stats(for: $0) }),
+        XCTAssertEqual(AccountFetchDue.inProgressBackfill(events: events,
+                                                          stats: { self.book.stats(for: $0) }),
                        ["carnegiehall"],
                        "a failed launch left the account looking done, so nothing "
                        + "will ever ask about it again")
@@ -281,8 +332,8 @@ final class AccountNumbersManagerTests: XCTestCase {
         let answered = AccountStats(followers: 1_000, likes: 50, comments: 5,
                                     recordedOn: now, outcome: .measured)
 
-        owned.backfillTheArchive(events: recurring("carnegiehall"),
-                                 stats: { _ in answered }, asOf: now)
+        owned.backfillEventsInProgress(events: recurring("carnegiehall"),
+                                       stats: { _ in answered }, asOf: now)
         await settle()
 
         XCTAssertNotNil(owned.accountNumbers.backfillNote,
@@ -300,7 +351,7 @@ final class AccountNumbersManagerTests: XCTestCase {
         }
         let events = ["carnegiehall", "dciny", "cityopera"].flatMap { recurring($0) }
 
-        owned.backfillTheArchive(events: events, stats: { _ in nil }, asOf: now)
+        owned.backfillEventsInProgress(events: events, stats: { _ in nil }, asOf: now)
         await settle()
 
         let note = try! XCTUnwrap(owned.accountNumbers.backfillNote)
@@ -318,8 +369,8 @@ final class AccountNumbersManagerTests: XCTestCase {
             handles.map { Self.figures($0, outcome: "token_rejected") }
         }
 
-        owned.backfillTheArchive(events: recurring("carnegiehall"),
-                                 stats: { _ in nil }, asOf: now)
+        owned.backfillEventsInProgress(events: recurring("carnegiehall"),
+                                       stats: { _ in nil }, asOf: now)
         await settle()
 
         let refused = try! XCTUnwrap(owned.accountNumbers.backfillNote)
@@ -338,8 +389,8 @@ final class AccountNumbersManagerTests: XCTestCase {
         struct Refused: Error {}
         let owned = owners { _ in throw Refused() }
 
-        owned.backfillTheArchive(events: recurring("carnegiehall"),
-                                 stats: { _ in nil }, asOf: now)
+        owned.backfillEventsInProgress(events: recurring("carnegiehall"),
+                                       stats: { _ in nil }, asOf: now)
         await settle()
 
         XCTAssertNotNil(owned.accountNumbers.backfillNote,
@@ -376,8 +427,8 @@ final class AccountNumbersManagerTests: XCTestCase {
         let owned = owners { _ in throw Refused() }
         owned.connectTheHandleTrigger()
 
-        owned.backfillTheArchive(events: recurring("carnegiehall"),
-                                 stats: { _ in nil }, asOf: now)
+        owned.backfillEventsInProgress(events: recurring("carnegiehall"),
+                                       stats: { _ in nil }, asOf: now)
         await settle()
 
         XCTAssertEqual(owned.export.accountNumbersNotes.count, 2,

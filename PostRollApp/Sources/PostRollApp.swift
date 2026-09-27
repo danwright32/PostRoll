@@ -115,9 +115,9 @@ struct PostRollApp: App {
                     // Here rather than at either end, because this is the one
                     // place that already knows about both.
                     owners.connectTheHandleTrigger()
-                    // The events that were already in the store when that
-                    // trigger shipped, which it can never reach (#1268).
-                    owners.backfillTheArchive(events: appState.events)
+                    // The events still in progress whose handles settled
+                    // before a fetch could run, which it can never reach (#1268).
+                    owners.backfillEventsInProgress(events: appState.events)
                 }
                 .environment(appState)
                 .environment(hashtagStore)

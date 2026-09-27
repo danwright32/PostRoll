@@ -90,6 +90,9 @@ final class AccountNumbersManager {
 
     private let book: AccountBook
     private var pending: Task<Void, Never>?
+    /// Which queued settle is the current one, so a replaced task finishing
+    /// late cannot clear the task that replaced it.
+    private var pendingGeneration = 0
     private var running = false
 
     /// Whether a fetch is going, or one is waiting for the list to settle.
@@ -97,6 +100,11 @@ final class AccountNumbersManager {
     /// Both, because a settle that has been queued and not yet fired is work
     /// this owner started: reporting only the running half would say nothing is
     /// happening for the three seconds when something is about to.
+    ///
+    /// `pending` is set back to nil when its task ends (#1430). A finished
+    /// task is not a cancelled one, so while it was kept, the first settle of
+    /// a session, the launch pass 3 seconds in, left this true until quit, and
+    /// every quit said figures were still being fetched.
     var hasWorkInFlight: Bool { running || pending?.isCancelled == false }
 
     init(book: AccountBook = .shared) {
@@ -111,13 +119,28 @@ final class AccountNumbersManager {
         // Replaces any wait already in flight, so the fetch asks about the
         // handles as they finally stand rather than as they were when the
         // first of six acceptances arrived.
+        queue { manager in await manager.run(handles, asOf: now) }
+    }
+
+    /// Wait for the list to settle, then do `work`, replacing any wait already
+    /// queued. The one place both entry points queue through, so the task is
+    /// cleared on its way out in one place rather than two (#1430).
+    private func queue(_ work: @escaping @MainActor (AccountNumbersManager) async -> Void) {
         pending?.cancel()
+        pendingGeneration += 1
+        let generation = pendingGeneration
         pending = Task { @MainActor [weak self] in
+            defer { self?.finishQueued(generation) }
             guard let self else { return }
             await waitForSettle()
             guard !Task.isCancelled else { return }
-            await run(handles, asOf: now)
+            await work(self)
         }
+    }
+
+    private func finishQueued(_ generation: Int) {
+        guard generation == pendingGeneration else { return }
+        pending = nil
     }
 
     /// Every non terminal record is worth another attempt now.
@@ -130,8 +153,8 @@ final class AccountNumbersManager {
         handlesSettled(book.all.map(\.handle), asOf: now)
     }
 
-    /// The launch pass over the archive's recurring accounts (#1268), saying
-    /// what it did (#1277).
+    /// The launch pass over the accounts on events still in progress (#1268),
+    /// saying what it did (#1277).
     ///
     /// Its own entry point rather than a flag on `handlesSettled`, because the
     /// two differ in exactly one way and it is the reporting: a settle fires on
@@ -148,12 +171,8 @@ final class AccountNumbersManager {
             backfillNote = Self.launchNote(for: .nothingDue)
             return
         }
-        pending?.cancel()
-        pending = Task { @MainActor [weak self] in
-            guard let self else { return }
-            await waitForSettle()
-            guard !Task.isCancelled else { return }
-            backfillNote = Self.launchNote(for: await run(handles, asOf: now))
+        queue { manager in
+            manager.backfillNote = Self.launchNote(for: await manager.run(handles, asOf: now))
         }
     }
 
@@ -188,11 +207,11 @@ final class AccountNumbersManager {
     /// (L98, L11). Two of the six need action and each says which.
     ///
     /// Plain about what is lost, because the honest answer is usually "nothing,
-    /// it asks again next launch": `AccountFetchDue.archiveBackfill` derives
+    /// it asks again next launch": `AccountFetchDue.inProgressBackfill` derives
     /// what is still due from the outcomes themselves, so a pass that failed
     /// leaves every handle exactly as due as it found them.
     static func launchNote(for outcome: PassOutcome) -> String {
-        let opening = "The launch check of the archive's recurring accounts "
+        let opening = "The launch check of the accounts on events still in progress "
         switch outcome {
         case .nothingDue:
             return opening + "found nothing to ask about, because every one of "
@@ -201,13 +220,13 @@ final class AccountNumbersManager {
             return opening + "did not run, because a figures fetch was already "
                  + "going. They are still due, so the next launch asks again."
         case .couldNotRun:
-            return opening + "could not run, so nothing from the archive has "
-                 + "been counted and the collaborator ranking has nothing from "
-                 + "it to rank. The fetch failure note says why."
+            return opening + "could not run, so none of them has been counted "
+                 + "and the collaborator ranking has nothing from them to rank. "
+                 + "The fetch failure note says why."
         case .asked(let asked, 0):
             return opening + "asked Meta about \(asked) of them and got figures "
                  + "for none, so the collaborator ranking still has nothing "
-                 + "from the archive to rank."
+                 + "from them to rank."
         case .asked(let asked, let measured) where measured == asked:
             return opening + "asked Meta about \(asked) of them and got figures "
                  + "for all \(asked)."

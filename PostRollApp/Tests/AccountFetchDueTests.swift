@@ -28,40 +28,58 @@ final class AccountFetchDueTests: XCTestCase {
                                 asOf: now)
     }
 
-    // MARK: - The archive's recurring accounts (#1268)
+    // MARK: - The accounts on events still in progress (#1268)
     //
     // The fetch is forward only: it fires when an event's handle list settles,
-    // so nothing has ever asked about the events that were already in the store
-    // when it shipped. Measured on the live store on 2026-09-03: 9 records, 0
-    // of them rankable, and not one carrying a fetch outcome at all, so the
-    // collaborator ranking those figures feed had nothing to rank on any real
-    // day (L389).
+    // so nothing asks about an event whose handles settled before the fetch
+    // could run, which until 2026-09-27 was every event, because every real
+    // run crashed. The launch pass covers those.
     //
-    // Scoped to the accounts that come back. Venues and orgs recur, one time
-    // performers essentially never do, so a handle tagged once is a call spent
-    // on a record nothing will read again.
+    // Scoped to events Dan is still working on, which is his rule (2026-09-27):
+    // an exported event is finished, and its collaborators were chosen when it
+    // shipped. A recurring account comes back on a new event, and that event
+    // being in progress is what gets it asked about.
 
-    private func event(_ name: String, tagging handles: [String]) -> Event {
+    private func event(_ name: String, tagging handles: [String],
+                       exported: Bool = false) -> Event {
         var e = Event(name: name, org: "Org", venue: "Hall", date: now, shootType: .fullShow)
         var posting = PostingDay(day: .wednesday)
         posting.tagHandles = handles
         e.days[DayName.wednesday.rawValue] = posting
+        if exported {
+            e.stage = .exported
+            e.exportPath = URL(fileURLWithPath: "/tmp/exported-\(name)")
+        }
         return e
     }
 
     private func backfill(_ events: [Event], _ table: [String: AccountStats] = [:]) -> [String] {
-        AccountFetchDue.archiveBackfill(events: events,
-                                        stats: { table[AccountBook.key($0)] })
+        AccountFetchDue.inProgressBackfill(events: events,
+                                           stats: { table[AccountBook.key($0)] })
     }
 
-    func testAnAccountTaggedOnOneEventOnlyIsNotBackfilled() {
-        XCTAssertEqual(backfill([event("a", tagging: ["oneoff"])]), [])
+    func testAnAccountOnOneEventInProgressIsBackfilled() {
+        // Once is enough. The old rule wanted two events, because it chose
+        // among the whole archive; an event still being worked on needs its
+        // collaborators ranked whoever they are.
+        XCTAssertEqual(backfill([event("a", tagging: ["oneoff"])]), ["oneoff"])
     }
 
-    func testAnAccountTaggedOnTwoEventsIsBackfilled() {
-        XCTAssertEqual(backfill([event("a", tagging: ["carnegiehall"]),
-                                 event("b", tagging: ["carnegiehall"])]),
-                       ["carnegiehall"])
+    func testAnAccountOnlyOnExportedEventsIsNotBackfilled() {
+        // Tagged twice, so the old recurrence rule would have asked about it.
+        let events = [event("a", tagging: ["carnegiehall"], exported: true),
+                      event("b", tagging: ["carnegiehall"], exported: true)]
+        XCTAssertEqual(backfill(events), [], "the launch pass spent the allowance on "
+                       + "an account from events that have already shipped")
+    }
+
+    func testAnEventApprovedButNotYetExportedIsStillInProgress() {
+        // `stage == .exported` is a router flag set when the Export screen
+        // opens, before any files exist, so it is not the line (#455). The
+        // event's own `isExported` is.
+        var approved = event("a", tagging: ["dciny"])
+        approved.stage = .exported
+        XCTAssertEqual(backfill([approved]), ["dciny"])
     }
 
     func testAnAccountAFetchHasAlreadyAnsweredIsNotAskedAgain() {
@@ -79,8 +97,7 @@ final class AccountFetchDueTests: XCTestCase {
         // Typed is not fetched. The call adds what typing cannot: the stable
         // Instagram id, the post mix, and whether Meta will answer at all.
         let typed = AccountStats(followers: 12_700, recordedOn: now, followersSource: .typed)
-        XCTAssertEqual(backfill([event("a", tagging: ["batterydance"]),
-                                 event("b", tagging: ["batterydance"])],
+        XCTAssertEqual(backfill([event("a", tagging: ["batterydance"])],
                                 ["batterydance": typed]),
                        ["batterydance"])
     }
@@ -96,16 +113,26 @@ final class AccountFetchDueTests: XCTestCase {
         let events = [event("a", tagging: ["ahandle", "mhandle", "zhandle"]),
                       event("b", tagging: ["mhandle", "zhandle"]),
                       event("c", tagging: ["zhandle"])]
-        XCTAssertEqual(backfill(events), ["zhandle", "mhandle"],
+        XCTAssertEqual(backfill(events), ["zhandle", "mhandle", "ahandle"],
                        "the most tagged account is not asked about first, so a run "
                        + "cut short by the allowance spent it on the rarer account")
     }
 
-    func testAnEventListWithNothingRecurringAsksAboutNothing() {
+    func testAnExportedEventDoesNotMoveAnAccountUpTheOrder() {
+        // Counted over the events in progress only. Counting the archive too
+        // would let a venue from last year's shows jump the queue ahead of the
+        // accounts on the event Dan has open.
+        let events = [event("a", tagging: ["ahandle", "zhandle"]),
+                      event("b", tagging: ["ahandle"]),
+                      event("old1", tagging: ["zhandle"], exported: true),
+                      event("old2", tagging: ["zhandle"], exported: true)]
+        XCTAssertEqual(backfill(events), ["ahandle", "zhandle"])
+    }
+
+    func testAStoreWithEverythingExportedAsksAboutNothing() {
         // Not an empty pass reported as a completed one: there is genuinely
-        // nothing to ask, which is what a store of one-off performers looks
-        // like, and it must not read the same as a pass that failed.
-        XCTAssertEqual(backfill([event("a", tagging: ["x"]), event("b", tagging: ["y"])]), [])
+        // nothing to ask, and it must not read the same as a pass that failed.
+        XCTAssertEqual(backfill([event("a", tagging: ["x"], exported: true)]), [])
     }
 
     // MARK: - What is worth a call

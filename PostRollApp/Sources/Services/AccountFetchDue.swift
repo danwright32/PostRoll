@@ -57,23 +57,24 @@ enum AccountFetchDue {
         return out
     }
 
-    /// The archive's recurring accounts that no fetch has ever reached (#1268).
+    /// The accounts on events still in progress that no fetch has ever
+    /// reached (#1268).
     ///
     /// The fetch is forward only by decision (#1004): it fires when an event's
-    /// handle list settles, so nothing ever asks about the events that were
-    /// already in the store when it shipped. That population is not a small
-    /// remainder, it is all of them, and every consumer of the figures then
-    /// runs correctly over an empty set while reading as though it works
-    /// (L389). Measured on the live store on 2026-09-03: 9 records, 0 rankable,
-    /// not one carrying a fetch outcome.
+    /// handle list settles, so nothing asks about an event whose handles
+    /// settled before a fetch could run. Until 2026-09-27 that was every event,
+    /// because every real run crashed before asking Meta anything.
     ///
     /// Scoped two ways, so this stays a backfill and cannot become the launch
     /// sweep #1004 refused:
     ///
-    /// - Only accounts that RECUR, on `RecurringAccounts.minimumEvents` or more
-    ///   events, counted by that type's own reader rather than a second notion
-    ///   of recurrence written beside it (L16). Venues and orgs come back; a
-    ///   one time performer is a call spent on a record nothing reads again.
+    /// - Only events that are not exported, by the event's own `isExported`
+    ///   rather than the stage flag the Export screen sets on opening (#455).
+    ///   Dan's rule (2026-09-27): an exported event is finished and its
+    ///   collaborators were chosen when it shipped. This replaced a rule that
+    ///   asked about accounts recurring across the whole archive; a recurring
+    ///   account comes back on a new event, and that event being in progress
+    ///   is what gets it asked about.
     /// - Only accounts with NO fetch outcome at all. Refreshing a figure that
     ///   has aged is the forward path's job, so a second launch asks about
     ///   nothing.
@@ -85,17 +86,18 @@ enum AccountFetchDue {
     /// the pass is idempotent by construction and a launch that could not run
     /// leaves every handle still due.
     ///
-    /// Most tagged first. The allowance is a rolling hour and a run can be cut
-    /// short, so the order decides which accounts were actually asked about,
-    /// and a dictionary has none to inherit (L343).
+    /// Most tagged first, counted over the events in progress only, so a venue
+    /// from last year's shows cannot jump ahead of the event Dan has open. The
+    /// allowance is a rolling hour and a run can be cut short, so the order
+    /// decides which accounts were actually asked about, and a dictionary has
+    /// none to inherit (L343).
     ///
     /// Sentinels are not filtered here: `handles(from:)` asks the shared reader
     /// on the way to the call, and a second copy of that question is a second
     /// thing to keep in step.
-    static func archiveBackfill(events: [Event],
-                                stats: (String) -> AccountStats?) -> [String] {
-        RecurringAccounts.eventCounts(events: events)
-            .filter { $0.value >= RecurringAccounts.minimumEvents }
+    static func inProgressBackfill(events: [Event],
+                                   stats: (String) -> AccountStats?) -> [String] {
+        RecurringAccounts.eventCounts(events: events.filter { !$0.isExported })
             .filter { stats($0.key)?.outcome == nil }
             .sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }
             .map(\.key)

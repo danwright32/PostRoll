@@ -1,0 +1,8 @@
+{
+  "name": "the-launch-pass-skips-exported-events",
+  "file": "PostRollApp/Sources/Services/AccountFetchDue.swift",
+  "find": "        RecurringAccounts.eventCounts(events: events.filter { !$0.isExported })",
+  "replace": "        RecurringAccounts.eventCounts(events: events)",
+  "test": "PostRollTests/AccountFetchDueTests/testAnAccountOnlyOnExportedEventsIsNotBackfilled",
+  "breaks": "the launch pass asks Meta about every account on every event ever shot, spending the rolling hour allowance on events that have already shipped, when Dan's rule is that only events still in progress are worth asking about"
+}

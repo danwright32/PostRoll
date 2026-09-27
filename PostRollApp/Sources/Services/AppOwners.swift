@@ -62,14 +62,16 @@ extension AppOwners {
         }
     }
 
-    /// Ask about the archive's recurring accounts, which nothing ever has (#1268).
+    /// Ask about the accounts on events still in progress that no fetch has
+    /// reached (#1268).
     ///
     /// Here for the same reason `connectTheHandleTrigger` is: this is the one
     /// place that already knows about both the events and the fetch, and
     /// neither should have to know about the other.
     ///
-    /// Called at launch, and safe to call at every launch: `archiveBackfill`
-    /// answers with the recurring accounts no fetch has yet reached, so it goes
+    /// Called at launch, and safe to call at every launch: `inProgressBackfill`
+    /// answers with the accounts on unexported events no fetch has yet reached,
+    /// so it goes
     /// permanently quiet once they are answered and there is no marker to be
     /// written by a launch that fetched nothing (L368). A failed run leaves the
     /// handles exactly as due as they were.
@@ -82,12 +84,12 @@ extension AppOwners {
     ///
     /// The stats reader is a parameter so a test can drive this without the
     /// shared book, and defaults to the book the app actually keeps.
-    func backfillTheArchive(events: [Event],
-                            stats: (String) -> AccountStats? = {
-                                AccountBook.shared.stats(for: $0)
-                            },
-                            asOf now: Date = Date()) {
-        let handles = AccountFetchDue.archiveBackfill(events: events, stats: stats)
+    func backfillEventsInProgress(events: [Event],
+                                  stats: (String) -> AccountStats? = {
+                                      AccountBook.shared.stats(for: $0)
+                                  },
+                                  asOf now: Date = Date()) {
+        let handles = AccountFetchDue.inProgressBackfill(events: events, stats: stats)
         // Through `backfill` rather than `handlesSettled`, and unconditionally:
         // the empty case is a REPORT, not a return. A launch with nothing left
         // to ask about and a launch whose token was rejected both leave the
