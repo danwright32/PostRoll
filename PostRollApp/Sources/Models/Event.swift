@@ -994,7 +994,17 @@ struct PostingDay: Codable, Hashable {
     // for an uploaded file, which was not matched on anything.
     var reelAudioSource: URL? = nil
     var reelAudioTags: String = ""
-    var scrollDuration: Double = 40.0  // Thursday: scroll animation duration (seconds, 15–60)
+    /// Thursday: how long the strip scrolls, in seconds. What the renderer is
+    /// sent. Not what a person sees or sets, which is `reelLength` (#1433).
+    var scrollDuration: Double = 40.0
+    /// Thursday: the whole reel, start to finish, holds included (#1433). The
+    /// only length any screen shows or sets. Derived from `scrollDuration`
+    /// rather than stored, so every reel saved before it renders unchanged
+    /// and shows its true length.
+    var reelLength: Double {
+        get { ScrollReelTiming.reelSeconds(scrollSeconds: scrollDuration) }
+        set { scrollDuration = ScrollReelTiming.scrollSeconds(reelSeconds: newValue) }
+    }
     /// Thursday: the reel's masonry layout seed.
     ///
     /// nil is a DEFECT rather than a default (#1062). It used to mean "random

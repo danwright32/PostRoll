@@ -21,12 +21,12 @@ struct ReelStripLayout: Decodable {
         return try? JSONDecoder().decode(ReelStripLayout.self, from: data)
     }
 
-    /// How fast this strip reads at a given length (#1420), from the strip
-    /// itself, so every surface offering the length can say it.
-    func paceNotice(scrollSeconds: Double) -> String? {
-        ScrollReelTiming.speedNotice(stripHeight: Double(stripHeight),
-                                     photoCount: cells.count,
-                                     scrollSeconds: scrollSeconds)
+    /// How fast this strip reads at a given whole reel length (#1420, #1433),
+    /// from the strip itself, so every surface offering the length can say it.
+    func paceNotice(reelSeconds: Double) -> String? {
+        ScrollReelTiming.speedNotice(
+            stripHeight: Double(stripHeight), photoCount: cells.count,
+            scrollSeconds: ScrollReelTiming.scrollSeconds(reelSeconds: reelSeconds))
     }
 }
 /// Vertical scroll editor for the Thursday reel strip. Shows the full masonry
@@ -84,7 +84,7 @@ struct ReelStripPreviewThumbnail: View {
         return ScrollReelTiming.speedNotice(
             stripHeight: Double(stripH),
             photoCount: cells.count,
-            scrollSeconds: currentReelLength)
+            scrollSeconds: ScrollReelTiming.scrollSeconds(reelSeconds: currentReelLength))
     }
 
     var body: some View {
@@ -303,7 +303,8 @@ struct ReelStripPreviewThumbnail: View {
                         ReelPaceSampler(
                             strip: image,
                             stripCanvasHeight: Double(stripH),
-                            scrollSeconds: currentReelLength,
+                            scrollSeconds: ScrollReelTiming.scrollSeconds(
+                                reelSeconds: currentReelLength),
                             onClose: { showingPace = false })
                             .frame(width: 320)
                     }

@@ -340,7 +340,7 @@ struct CaptionReviewView: View {
                                 : nil,
                             onSwapReelAudio: { swapReelAudio(day: day) },
                             onUploadReelAudio: { uploadReelAudioDay = day; showingReelAudioPicker = true },
-                            reelLength: day == .thursday ? (live.days[day.rawValue]?.scrollDuration ?? 40.0) : nil,
+                            reelLength: day == .thursday ? (live.days[day.rawValue] ?? PostingDay(day: day)).reelLength : nil,
                             onChangeReelLength: day == .thursday ? { newLength in changeReelLength(day: .thursday, to: newLength) } : nil,
                             onChangeReelPhotos: (day == .tuesday || day == .thursday) ? { changeReelPhotos(day: day) } : nil,
                             onImportFridayClips: day == .friday ? { importFridayClips() } : nil,
@@ -993,15 +993,16 @@ struct CaptionReviewView: View {
         }
     }
 
-    /// Set the Thursday scroll reel length and re-render it. The number of
-    /// frames depends on `scrollDuration`, so a full regenerate is required
-    /// (regenerateGraphic reads the updated value from the live event).
+    /// Set the Thursday reel's whole length, holds included (#1433), and
+    /// re-render it. The number of frames depends on the scroll that length
+    /// leaves, so a full regenerate is required (regenerateGraphic reads the
+    /// updated value from the live event).
     private func changeReelLength(day: DayName, to seconds: Double) {
         let live = appState.events.first(where: { $0.id == event.id }) ?? event
-        guard live.days[day.rawValue]?.scrollDuration != seconds else { return }
+        guard (live.days[day.rawValue] ?? PostingDay(day: day)).reelLength != seconds else { return }
         regenerateGraphic(day: day) { ev in
             var pd = ev.days[day.rawValue] ?? PostingDay(day: day)
-            pd.scrollDuration = seconds
+            pd.reelLength = seconds
             ev.days[day.rawValue] = pd
         }
     }

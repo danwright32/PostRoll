@@ -24,6 +24,19 @@ enum ScrollReelTiming {
         scrollSeconds + holdEndSeconds + closingFrameSeconds
     }
 
+
+    /// The scroll a reel of this whole length leaves once the holds are taken
+    /// off (#1433).
+    ///
+    /// The length a person picks is the whole reel, start to finish: Dan chose
+    /// 56 to match a 56 second track and got a 62 second reel, because the
+    /// slider set the scroll alone. What is stored and sent to the renderer is
+    /// still the scroll, so no saved reel changes length; this and
+    /// `reelSeconds(scrollSeconds:)` are the one conversion between the two.
+    static func scrollSeconds(reelSeconds: Double) -> Double {
+        reelSeconds - holdEndSeconds - closingFrameSeconds
+    }
+
     /// One sentence when the chosen track will not cover the reel, else nil.
     ///
     /// `fit_audio_to_duration` loops a short track with crossfaded seams, which
@@ -131,27 +144,29 @@ enum ScrollReelTiming {
             format: "This reel replaces the whole screen every %.1f seconds, "
                   + "which is faster than is comfortable to watch. ", screen)
 
-        let needed = comfortableScrollSeconds(stripHeight: stripHeight)
+        // Named as a whole reel, the unit the slider sets (#1433).
+        let needed = reelSeconds(scrollSeconds: comfortableScrollSeconds(stripHeight: stripHeight))
         if needed <= sliderMaximumSeconds {
             return opening + "Try \(Int(needed.rounded())) seconds."
         }
 
-        let fewer = comfortablePhotoCount(stripHeight: stripHeight,
-                                          photoCount: photoCount,
-                                          scrollSeconds: sliderMaximumSeconds)
+        let fewer = comfortablePhotoCount(
+            stripHeight: stripHeight, photoCount: photoCount,
+            scrollSeconds: self.scrollSeconds(reelSeconds: sliderMaximumSeconds))
         return opening
             + "Even at \(Int(sliderMaximumSeconds)) seconds it would still be too "
             + "fast, so this one needs about \(fewer) photographs rather than "
             + "\(photoCount)."
     }
 
-    /// The longest scroll the editor offers. Named here because the notice's
+    /// The longest reel the editor offers. Named here because the notice's
     /// choice of remedy turns on it, and taken from the range so the two
     /// cannot disagree about what the slider can reach.
     static var sliderMaximumSeconds: Double { reelLengthRange.upperBound }
 
-    /// The scroll lengths a person can choose, and the step they move in
-    /// (#1415). The one declaration: the reel length popover and the photo
+    /// The reel lengths a person can choose, and the step they move in
+    /// (#1415). Whole reels since #1433, holds included, so the shortest still
+    /// leaves nine seconds of scroll. The one declaration: the reel length popover and the photo
     /// assignment slider both read it, `tests/fixtures/scroll_reel_timing.json`
     /// records it, and `ReelLengthControlTests` refuses a second copy.
     ///
@@ -179,6 +194,10 @@ enum ScrollReelTiming {
     /// already has, or a second commit when the popover closes after one,
     /// must not start another.
     static func reelLengthToCommit(draft: Double, current: Double) -> Double? {
+        // Untouched is not a request. A reel saved longer than the range now
+        // reaches would otherwise be clamped and rebuilt by a release that
+        // moved nothing.
+        guard draft != current else { return nil }
         let held = snappedReelLength(draft)
         return held == current ? nil : held
     }

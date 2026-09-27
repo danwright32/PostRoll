@@ -29,7 +29,7 @@ from postroll.media.easing import cruise_factor  # noqa: E402
 
 FIXTURE = REPO_ROOT / "tests" / "fixtures" / "scroll_reel_timing.json"
 
-#: What the editor's slider offers, from `ScrollReelTiming.reelLengthRange` and
+#: What the editor's slider offers, as WHOLE reel lengths since #1433, from `ScrollReelTiming.reelLengthRange` and
 #: `reelLengthStep`, which the reel length popover and the photo assignment
 #: slider both read (#1415). Recorded here so the reel lengths below span the
 #: range a person can actually ask for.

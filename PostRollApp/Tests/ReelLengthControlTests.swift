@@ -50,6 +50,65 @@ final class ReelLengthControlTests: XCTestCase {
                        ScrollReelTiming.reelLengthRange.upperBound)
     }
 
+    // MARK: - The length is the whole reel (#1433)
+    //
+    // Dan, 2026-09-27: the slider sets the TOTAL length of the reel, start to
+    // finish. He picked 56 to match a 56 second track and got a 62 second reel,
+    // because the value was the scroll alone and the end hold and closing
+    // graphic came after it. The scroll is derived from the length he picks.
+
+    func testALengthIsTheScrollPlusTheHoldsAndBack() {
+        XCTAssertEqual(ScrollReelTiming.scrollSeconds(reelSeconds: 56), 50)
+        for scroll in stride(from: 9.0, through: 84.0, by: 1.0) {
+            XCTAssertEqual(ScrollReelTiming.scrollSeconds(
+                reelSeconds: ScrollReelTiming.reelSeconds(scrollSeconds: scroll)), scroll)
+        }
+    }
+
+    func testASavedReelShowsItsWholeLengthAndKeepsIt() {
+        // Dan's decision on existing reels: nothing changes length unless he
+        // moves the slider. What is stored stays the scroll, so a saved reel
+        // renders exactly as before, and it is SHOWN as the whole reel.
+        var day = PostingDay(day: .thursday)
+        day.scrollDuration = 56
+        XCTAssertEqual(day.reelLength, 62, "a stored 56 second scroll is a 62 second reel")
+
+        day.reelLength = 56
+        XCTAssertEqual(day.scrollDuration, 50,
+                       "choosing a 56 second reel leaves 50 seconds for the scroll")
+    }
+
+    func testEveryLengthTheSliderOffersLeavesTheReelAScroll() {
+        let shortest = ScrollReelTiming.scrollSeconds(
+            reelSeconds: ScrollReelTiming.reelLengthRange.lowerBound)
+        XCTAssertGreaterThan(shortest, 0, "the shortest reel on offer is all holds")
+    }
+
+    func testTheScreensNeverReadTheScrollAsTheLength() throws {
+        // One word for one unit (L118): anything a person sees or sets is the
+        // whole reel, through `reelLength`. The scroll is for the renderer.
+        let views = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Sources/Views")
+        let files = try XCTUnwrap(FileManager.default.enumerator(at: views,
+                                                                 includingPropertiesForKeys: nil))
+        var offenders: [String] = []
+        for case let url as URL in files where url.pathExtension == "swift" {
+            let code = try String(contentsOf: url, encoding: .utf8)
+            if code.contains("scrollDuration") || code.contains("SCROLL DURATION") {
+                offenders.append(url.lastPathComponent)
+            }
+        }
+        XCTAssertEqual(offenders, [], "these screens show or set the scroll as the reel's "
+                       + "length: \(offenders)")
+    }
+
+    func testOpeningTheSliderOnALengthOutsideTheRangeAndLettingGoRebuildsNothing() {
+        // A reel saved before the range moved can be longer than the slider
+        // reaches. Letting go without moving must not clamp it and rebuild.
+        XCTAssertNil(ScrollReelTiming.reelLengthToCommit(draft: 96, current: 96))
+    }
+
     // MARK: - When a change is committed
 
     func testADraggedValueIsCommittedAsAWholeSecond() {
@@ -142,11 +201,14 @@ final class ReelLengthControlTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url) }
 
         let layout = try XCTUnwrap(ReelStripLayout.load(from: url), "the layout did not decode")
-        let notice = try XCTUnwrap(layout.paceNotice(scrollSeconds: 40), "a 40 second DiGangi reel is too fast")
+        // Whole reel lengths since #1433: a 46 second reel scrolls for 40, and
+        // the 63 seconds of scroll DiGangi needs is a 69 second reel.
+        let notice = try XCTUnwrap(layout.paceNotice(reelSeconds: 46),
+                                   "a 46 second DiGangi reel is too fast")
         XCTAssertEqual(notice, ScrollReelTiming.speedNotice(
             stripHeight: 18695, photoCount: 149, scrollSeconds: 40))
-        XCTAssertTrue(notice.contains("Try 63 seconds"), notice)
-        XCTAssertNil(layout.paceNotice(scrollSeconds: 70), "70 seconds is comfortable for DiGangi")
+        XCTAssertTrue(notice.contains("Try 69 seconds"), notice)
+        XCTAssertNil(layout.paceNotice(reelSeconds: 76), "a 76 second reel is comfortable for DiGangi")
     }
 
     func testAMissingLayoutGivesNoPaceRatherThanAWrongOne() {
