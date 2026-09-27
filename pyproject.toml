@@ -86,8 +86,12 @@ target-version = "py311"
 #   E9  syntax errors and the like
 #   F   pyflakes: undefined names, unused imports, f-strings with no placeholder
 #   B   bugbear: mutable default arguments, except-without-raise, and friends
+#   PLW0127  a variable assigned to itself. #1325's sweep turned a default
+#            argument into `fetch = fetch` inside a function whose parameter
+#            shared the module function's name, which rebinds the parameter to
+#            None, and every real figures fetch crashed for 17 days (#1430).
 # Style rules can be added later, one at a time, each with its own cleanup.
-select = ["E9", "F", "B"]
+select = ["E9", "F", "B", "PLW0127"]
 
 # B905 is zip() without an explicit strict=. It is a real safety property, and
 # turning it on would raise where two sequences silently differ in length, but
