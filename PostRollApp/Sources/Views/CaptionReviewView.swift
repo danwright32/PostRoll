@@ -1456,9 +1456,7 @@ struct CaptionReviewView: View {
                                  // without this line being edited (L41).
                                  notes: [accounts.recoveryNote].compactMap { $0 }
                                       + accountNumbers.notes,
-                                 // The fetch owner's answer arrives with #1431's
-                                 // second half; until then nothing reports a failure.
-                                 fetchFailed: false)
+                                 fetchFailed: accountNumbers.fetchFailed)
     }
 
     private func applyCollageLayout(day: DayName, seed: Int) {

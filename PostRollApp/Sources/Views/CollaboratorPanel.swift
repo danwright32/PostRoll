@@ -61,6 +61,16 @@ struct CollaboratorPanel: View {
                 .foregroundStyle(PaintedSurfaces.secondaryText)
                 .fixedSize(horizontal: false, vertical: true)
 
+            // Under the headline, not under the last row (#1431). These say why
+            // the rows look as they do, a failed fetch or an unreadable book,
+            // and below seven "not counted" rows nobody reads them (L609).
+            ForEach(result.notes, id: \.self) { note in
+                Label(note, systemImage: "exclamationmark.triangle")
+                    .font(.system(size: 11))
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             ForEach(Array(result.suggested.enumerated()), id: \.element.handle) { index, candidate in
                 // Numbered only where the order was decided. A numbered list is
                 // a ranking however the sentence above it is worded, and under
@@ -154,12 +164,6 @@ struct CollaboratorPanel: View {
                 }
             }
 
-            ForEach(result.notes, id: \.self) { note in
-                Label(note, systemImage: "exclamationmark.triangle")
-                    .font(.system(size: 11))
-                    .foregroundStyle(PaintedSurfaces.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
         .padding(Spacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)

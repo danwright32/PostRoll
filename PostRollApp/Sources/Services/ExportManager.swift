@@ -29,6 +29,10 @@ final class ExportManager {
     /// ever been counted at all. Carried as the manager's own list rather than
     /// as a field per note, so a note added there cannot be dropped here (L41).
     var accountNumbersNotes: [String] = []
+    /// Whether the figures fetch failed, copied with the notes above for the
+    /// same reason (#1431): CAPTIONS.txt names the fetch rather than typing as
+    /// the way out, the same as the review screen.
+    var accountNumbersFetchFailed = false
 
 
     enum Phase: Equatable {
@@ -369,6 +373,7 @@ final class ExportManager {
         // suite, which is the same as no failure to report.
         let accountNotes = [AccountBook.shared.recoveryNote].compactMap { $0 }
                          + accountNumbersNotes
+        let fetchFailed = accountNumbersFetchFailed
 
         // Held outside the do so the failure paths can throw the staged work
         // away: a staging folder nobody commits is debris in Dan's own folder.
@@ -383,7 +388,8 @@ final class ExportManager {
                                                 preset: capturedEvent.effectivePostingPreset,
                                                 collaboratorStats: { accountStats[AccountBook.key($0)] },
                                                 asOf: exportedAt,
-                                                collaboratorNotes: accountNotes)
+                                                collaboratorNotes: accountNotes,
+                                                collaboratorFetchFailed: fetchFailed)
             }.value
             // Every step below writes into the STAGING folder; `destination`
             // is where it all lands when the run finishes (#442). Anything
