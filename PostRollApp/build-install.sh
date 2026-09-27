@@ -225,11 +225,12 @@ fi
 
 echo "==> Installing to ${DEST}"
 if [[ -d "${DEST}" ]]; then
-  # If the app is running, quit it first so the replace doesn't fail.
-  if [[ "${FOR_REAL}" == "1" ]] && pgrep -xq "PostRoll"; then
-    echo "    Quitting running PostRoll..."
-    osascript -e 'tell application "PostRoll" to quit' || true
-    sleep 1
+  # Quit the copy being replaced, found by its path, and wait until it has
+  # gone (#1434). Twenty seconds, long enough to press Quit Anyway on the
+  # "still working" sheet; past that nothing is touched.
+  if [[ "${FOR_REAL}" == "1" ]]; then
+    . "$(pwd)/quit-running-app.sh"
+    quit_running_app "${DEST}/Contents/MacOS/PostRoll" "${DEST}" 20 || exit 1
   fi
   rm -rf "${DEST}"
 fi
