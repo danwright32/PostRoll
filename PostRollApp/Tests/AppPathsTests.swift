@@ -18,7 +18,8 @@ final class AppPathsTests: XCTestCase {
     }
 
     func testRootIsLegacyDocumentsUntilMigrated() {
-        let root = AppPaths.resolveRoot(environment: [:], fileManager: MarkerFM(migrated: false))
+        let root = AppPaths.resolveRoot(environment: [:], fileManager: MarkerFM(migrated: false),
+                                        bundleURL: AppPaths.installedBundle)
         XCTAssertEqual(
             root,
             FileManager.default.homeDirectoryForCurrentUser
@@ -27,19 +28,22 @@ final class AppPathsTests: XCTestCase {
     }
 
     func testRootIsAppSupportOnceMigrated() {
-        let root = AppPaths.resolveRoot(environment: [:], fileManager: MarkerFM(migrated: true))
+        let root = AppPaths.resolveRoot(environment: [:], fileManager: MarkerFM(migrated: true),
+                                        bundleURL: AppPaths.installedBundle)
         XCTAssertEqual(root, AppPaths.appSupportRoot)
     }
 
     func testOverrideRedirectsRoot() {
         let root = AppPaths.resolveRoot(environment: ["POSTROLL_DATA_DIR": "/tmp/postroll-sandbox"],
-                                        fileManager: MarkerFM(migrated: true))
+                                        fileManager: MarkerFM(migrated: true),
+                                        bundleURL: AppPaths.installedBundle)
         XCTAssertEqual(root.path, "/tmp/postroll-sandbox")
     }
 
     func testBlankOverrideFallsBackToDefault() {
         let root = AppPaths.resolveRoot(environment: ["POSTROLL_DATA_DIR": "   "],
-                                        fileManager: MarkerFM(migrated: false))
+                                        fileManager: MarkerFM(migrated: false),
+                                        bundleURL: AppPaths.installedBundle)
         XCTAssertEqual(
             root,
             FileManager.default.homeDirectoryForCurrentUser
