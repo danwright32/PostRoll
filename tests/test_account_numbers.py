@@ -150,7 +150,7 @@ def run_command(manifest, output, answers, monkeypatch=None):
     import os
     os.environ["META_SYSTEM_USER_TOKEN"] = TOKEN
     account_numbers_main(["--manifest", str(manifest), "--output", str(output)],
-                         fetch=lambda handle, **_: answers[handle])
+                         fetch_one=lambda handle, **_: answers[handle])
     return json.loads(Path(output).read_text())
 
 
@@ -616,6 +616,35 @@ def test_the_command_answers_about_every_handle_it_was_given(tmp_path):
     assert [row["handle"] for row in written["accounts"]] == ["natgeo", "aperson", "flaky"]
     assert [row["outcome"] for row in written["accounts"]] == [
         "measured", "not_professional", "network_failed"]
+
+
+def test_the_command_run_as_the_app_runs_it_uses_the_real_fetch(tmp_path, monkeypatch):
+    # The app never passes `fetch`, so the default is the only path that
+    # ships, and every other command test here injects one. That left
+    # `fetch = fetch` inside `main`, which rebinds the parameter to itself,
+    # green for weeks while all 10 real runs from 2026-09-10 to 2026-09-27
+    # died with "'NoneType' object is not callable" before asking Meta
+    # anything. Only the socket is replaced here, at the one place the
+    # package opens one, so everything above it runs for real (L394, L196).
+    monkeypatch.setenv("META_SYSTEM_USER_TOKEN", TOKEN)
+    asked: list[str] = []
+
+    def transport(url, headers):
+        asked.append(url)
+        return graph_ok(followers=4265)
+
+    monkeypatch.setattr("postroll.ai.account_numbers._real_transport", transport)
+    manifest = tmp_path / "in.json"
+    output = tmp_path / "out.json"
+    manifest.write_text(json.dumps({"handles": ["batterydance"]}))
+
+    code = account_numbers_main(["--manifest", str(manifest), "--output", str(output)])
+
+    assert code == 0
+    assert len(asked) == 1, "the real fetch never reached the transport"
+    row = json.loads(output.read_text())["accounts"][0]
+    assert (row["handle"], row["outcome"], row["followers"]) == (
+        "batterydance", "measured", 4265)
 
 
 def test_the_command_refuses_without_a_token(tmp_path, monkeypatch):
