@@ -189,6 +189,30 @@ final class PythonBridgeErrorTests: XCTestCase {
         }
     }
 
+    /// A run that produced nothing names a next step that fits the run (#1439).
+    ///
+    /// The remedy was the program read's for every kind of work, so a figures
+    /// fetch or an export that wrote nothing told Dan to check that the program
+    /// PDF had readable text, which has nothing to do with either (L111). The
+    /// program read keeps it, as the positive control, so this cannot pass by
+    /// the advice having gone everywhere (L159).
+    func testANoOutputFailureNamesARemedyThatFitsTheWork() {
+        for work in PythonBridgeWork.allCases {
+            let text = PythonBridgeError.outputMissing.message(whileDoing: work)
+            if work == .programRead {
+                XCTAssertTrue(text.contains("program PDF"),
+                              "the program read lost the one remedy that fits it: \(text)")
+            } else {
+                XCTAssertFalse(text.contains("program PDF"), """
+                    While doing \(work), a run that wrote nothing says "\(text)", which \
+                    sends Dan to a PDF that has nothing to do with it.
+                    """)
+                XCTAssertTrue(text.contains(AppPaths.logsDirDisplayPath),
+                              "no next step at all is left: \(text)")
+            }
+        }
+    }
+
     /// The default names no particular work, rather than guessing one (#626).
     ///
     /// `localizedDescription` is reached from dozens of places and cannot know
