@@ -671,16 +671,20 @@ def as_row(figures: Figures) -> dict[str, Any]:
 
 
 def main(argv: Sequence[str],
-         fetch: Callable[..., Figures] | None = None) -> int:
+         fetch_one: Callable[..., Figures] | None = None) -> int:
     """Answer about every handle in a manifest, and write the results.
 
-    `fetch` is a parameter so the suite can drive this without a token and
+    `fetch_one` is a parameter so the suite can drive this without a token and
     without the network. It defaults to the real one, so no call site can
     accidentally get a fake: a seam whose default became the test double would
     leave the app fetching nothing (L196).
+
+    Named apart from the module's `fetch` on purpose. While it was called
+    `fetch` too, the fallback below read `fetch = fetch`, which rebinds the
+    parameter to itself, so every real run passed None along and crashed.
     """
-    if fetch is None:
-        fetch = fetch
+    if fetch_one is None:
+        fetch_one = fetch
     import argparse
 
     parser = argparse.ArgumentParser(description=__doc__)
@@ -700,7 +704,7 @@ def main(argv: Sequence[str],
 
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
     handles = manifest["handles"]
-    rows = [as_row(fetch(handle, token=token)) for handle in handles]
+    rows = [as_row(fetch_one(handle, token=token)) for handle in handles]
 
     # One row per handle asked about, including the failures. Dropping those
     # would leave the app unable to tell an account it never asked about from

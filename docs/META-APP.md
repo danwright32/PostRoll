@@ -128,16 +128,24 @@ An empty `data` array there is fork 2 above, not an account with no Pages.
 
 ## Where the token lives
 
-**Today:** nowhere. Nothing in the app or the pipeline reads it yet.
+Two places can supply it, and the app reads both on every figures fetch:
 
-**During the measurement phase:** `META_SYSTEM_USER_TOKEN` in `~/.zshrc`,
-alongside the other values the README's Configuration section lists, because
-the app runs Python through `zsh -l`.
+1. **Settings, Meta token.** Saved to the login Keychain, like the Anthropic
+   API key, and handed to the Python subprocess through its environment
+   (`PythonBridge.secretDelivery`). Saving one there also retries every account
+   that failed for want of a credential.
+2. **`META_SYSTEM_USER_TOKEN` in `~/.zshrc`,** left over from the measurement
+   phase. Every run sources `~/.zshrc` before starting Python, so a token
+   there works even when Settings is empty.
 
-**When the feature ships:** the login Keychain, entered in Settings the way the
-Anthropic API key is, and handed to the Python subprocess through its
-environment. That is #1002, and it is not built yet. This paragraph describes
-an intention, not a mechanism: check the Settings screen before believing it.
+When both are set, Settings wins: its value is exported after `~/.zshrc` is
+sourced. When neither is, the fetch refuses by name (`META_SYSTEM_USER_TOKEN is
+not set`) and writes nothing, and the collaborator panel carries the note.
+
+As of 2026-09-27 the Keychain entry is empty on Dan's Mac and the token comes
+from `~/.zshrc`. Check with `security find-generic-password -s
+com.dwphotony.PostRoll -a META_SYSTEM_USER_TOKEN` (no `-w`, so the value is not
+printed) before believing this line.
 
 ## How it is refreshed
 
