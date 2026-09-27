@@ -44,9 +44,9 @@ but it does not cry wolf about a correct state on every run (L36).
 ## It warns, it does not gate
 
 A figure having moved does not make the change being merged wrong, and failing a
-run for it is how a check teaches everybody to bypass it (L36). Same shape as
-`tools/check_guard_sweep_freshness.py`: an Actions warning annotation and a job
-summary line, both visible on the run page without blocking.
+run for it is how a check teaches everybody to bypass it (L36). So it writes an
+Actions warning annotation and a job summary line, both visible on the run page
+without blocking.
 """
 
 from __future__ import annotations

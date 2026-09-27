@@ -173,25 +173,6 @@ def test_the_shards_condition_is_still_one_the_merge_bar_can_read(jobs):
         f"put the whole sweep on the critical path of every change")
 
 
-def test_what_must_be_said_whatever_the_answer_is_said_off_the_mac(jobs):
-    """The sweep's own watchdogs.
-
-    `check_guard_sweep_freshness.py` exists because a schedule's failure mode
-    is silence: GitHub disables a repository's schedules after 60 days with no
-    push and reports that nowhere (#554). Left inside the macOS shards it would
-    only speak on the days the sweep ran, which is precisely not the question
-    it asks (L98, L144).
-    """
-    due_name, due = _job_running(jobs, "check_guard_sweep_freshness.py")
-    asked_name, _ = _job_running(jobs, DUE_TOOL)
-
-    assert due_name == asked_name, (
-        f"whether the sweep is still running at all is asked from "
-        f"{due_name!r}, which does not run on a quiet day, so the watchdog "
-        f"goes quiet at exactly the same time as the thing it watches")
-    assert "ubuntu" in _runner(due)
-
-
 def test_a_quiet_day_takes_no_mac_at_all(jobs):
     """The measurement this file is named for, stated as a rule.
 
@@ -218,3 +199,46 @@ def test_a_quiet_day_takes_no_mac_at_all(jobs):
         f"{ungated} ask for a macOS runner on a schedule without waiting to "
         f"hear whether there is anything to prove. Each one costs a whole "
         f"billed minute at a multiplier of ten, every day, whatever it finds")
+
+
+#: The two conditions that let a Mac be taken: a change being made, or a person
+#: asking. Anything else is the clock, and the clock is what cannot be paid for.
+ASKED_FOR = ("github.event_name == 'pull_request'",
+             "github.event_name == 'workflow_dispatch'")
+
+
+def _conjuncts(condition: str) -> list[str]:
+    text = re.sub(r"^\$\{\{\s*|\s*\}\}$", "", " ".join(condition.split()))
+    # AND only. `A || B` can be true on a schedule through B, so a disjunction
+    # never counts as requiring anything.
+    return [] if "||" in text else [half.strip() for half in text.split("&&")]
+
+
+def test_no_mac_starts_unless_somebody_asked(jobs):
+    """PostRoll is going private at zero spend, which leaves 200 macOS minutes
+    a month (#1428).
+
+    One full sweep measured 123 to 179 macOS minutes over the ten scheduled
+    runs to 2026-09-27, and the schedule swept the morning after every merge
+    and whenever a proof went stale. So the schedule may still wake the Linux
+    gate and the monitors that ride on it, and may never take a Mac: every
+    macOS job has to REQUIRE a pull request or a manual run.
+    """
+    unasked = []
+    for name, body in jobs.items():
+        if "macos" not in _runner(body):
+            continue
+        condition = re.search(r"^    if:[ \t]*(.+?)[ \t]*$", body, re.M)
+        halves = _conjuncts(condition.group(1)) if condition else []
+        if not any(asked in halves for asked in ASKED_FOR):
+            unasked.append(name)
+
+    macs = [name for name, body in jobs.items() if "macos" in _runner(body)]
+    assert macs, (
+        "no job in guards.yml asks for a Mac, so this passes by finding "
+        "nothing (L98, L100)")
+    assert not unasked, (
+        f"{unasked} can take a Mac on a scheduled run. A private repository "
+        f"on the free plan has 200 macOS minutes a month and one sweep costs "
+        f"about 150 of them, so the clock alone would spend the allowance "
+        f"(#1428)")

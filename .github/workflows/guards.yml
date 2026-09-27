@@ -22,38 +22,25 @@ name: Guard proofs
 on:
   pull_request:
     branches: [main]
-  # Daily, rather than on every push to main (#989).
+  # The schedule wakes only the Linux `due` job and the monitors riding on it.
+  # The full macOS sweep runs when somebody starts it by hand (#1428).
   #
-  # The full sweep used to run on every merge. Measured over the two weeks to
-  # 2026-08-30 that was 3,079 of this repository's 6,207 macOS runner-minutes,
-  # 50% of them, spent on a job nobody waits for: it runs AFTER the merge, and
-  # the entries a merge touched were already proved on the pull request by the
-  # `changed` job below. GitHub allows five concurrent macOS runners and a pull
-  # request here asks for six, so those minutes came out of the queue every pull
-  # request sits in. Median pull request wall clock over the same window was
-  # 22.4 minutes against a longest single job of 11.1, so more than eight of
-  # those minutes were spent waiting for a runner this job was holding.
+  # It used to run on every merge, then daily (#989): the morning after any
+  # merge, and whenever a proof went stale. One full sweep measured 123 to 179
+  # macOS minutes over the ten scheduled runs to 2026-09-27, and PostRoll is
+  # going private at zero spend, which leaves 200 macOS minutes a month. A daily
+  # sweep cannot fit that at any cadence, and one a month would leave nothing for
+  # a pull request.
   #
-  # What the merge cadence bought was the same tree re-proved within minutes
-  # instead of within a day, on a warning nobody reads at either cadence. What
-  # it cost was every pull request in flight.
+  # The cost accepted in exchange is written down rather than pretended away:
+  # the proofs depend on things no commit here touches, the macos-26 runner
+  # image, the Xcode PostRollApp/.ci-xcode-version pins, and Homebrew packages
+  # (#551). One of those moving now goes unnoticed until a pull request or a
+  # requested sweep meets it. Start one from the Actions tab, or with
   #
-  # ONE cron rather than the daily-plus-weekly pair the issue proposed. The
-  # weekly run existed because the proofs depend on things no commit here
-  # touches: the macos-26 runner image, the Xcode PostRollApp/.ci-xcode-version
-  # pins, and Homebrew packages (#551). That is now the gate's own staleness
-  # window, so it is one rule in one place instead of two cadences that have to
-  # agree about which of them covers what (L41).
+  #     gh workflow run guards.yml
   #
-  # The two known weaknesses of a schedule are recorded rather than pretended
-  # away. Its failures are only as visible as GitHub's own email, and GitHub
-  # disables a repository's schedules after 60 days with no push, reporting
-  # nothing at all rather than reporting that it stopped (L13). Both are why the
-  # step below asks out loud whether the sweep is still happening, and why since
-  # #989 that question counts runs that PROVED something rather than runs that
-  # finished: the sweep's own steps are conditional now, so a run that skipped
-  # still concludes success and would otherwise read as a healthy schedule for
-  # as long as it lasted (L106).
+  # after anything that might have moved underneath the guards.
   schedule:
     - cron: "0 7 * * *"
   workflow_dispatch:
@@ -194,7 +181,7 @@ jobs:
       - name: Re-prove the guards this diff touches
         run: python tools/check_guards.py --changed --deadline-seconds 850
 
-  # The whole registry, on every merge to main.
+  # The whole registry, when somebody asks for it (#1428).
   #
   # The pull request leg above re-proves an entry when the code it guards, its
   # own record, or its own test file changes. What it cannot know about is what
@@ -204,19 +191,15 @@ jobs:
   # so no pull request would re-prove it (L88, a filtered job skipping the very
   # change that breaks it).
   #
-  # Once a day, on any day main moved (#989). It used to run on every merge, on
-  # the argument that a schedule costs nothing on a quiet day and reports its
-  # own failures only by email. Both halves of that still hold and neither was
-  # worth what the merge cadence cost: half of every macOS runner-minute this
-  # repository spends, taken out of the queue that every pull request waits in.
-  # The email weakness is answered by the freshness step at the foot of this
-  # job, which is the same answer it always was.
+  # Only on a manual run (#1428), for the reasons written above the trigger
+  # block. It used to run on every merge (#989 moved it to daily) and before
+  # that the question was only ever how often; at 200 macOS minutes a month the
+  # answer is that the clock does not get to start it at all.
   #
-  # A quiet day still costs nothing, because the first step of each shard asks
-  # whether this exact tree has already been proved by this exact shard and the
-  # rest of the shard runs only if it has not. Every answer that is not a
-  # positive proof runs the sweep: an unproved tree, a proof older than the
-  # window, and a run history that could not be read at all. The direction that
+  # Even a requested sweep asks first whether this exact tree has already been
+  # proved by each shard, and runs only the shards that have not. Every answer
+  # that is not a positive proof runs the sweep: an unproved tree, a proof older
+  # than the window, and a run history that could not be read at all. The direction that
   # costs money is a sweep that runs when it could have skipped; the direction
   # that costs coverage is a sweep that skips when it should have run, and that
   # one is silent (L98).
@@ -336,47 +319,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python tools/check_guard_sweep_due.py --shards
 
-      # The three steps below moved here from the foot of `full` (#1259).
+      # The two monitors below moved here from the foot of `full` (#1259).
       #
       # They have to run whatever the sweep decides, and inside `full` they only
-      # ran on the days it did. The freshness watchdog is the clearest case: it
-      # exists because a schedule's failure mode is SILENCE, and left in the
-      # shards it fell silent at exactly the same moment as the thing it watches
-      # (L98, L144). None of the three needs a Mac, and none of them is about
-      # any one shard, which is why each carried `matrix.shard == 1` before.
-      #
-      # Asking BEFORE the sweep rather than after it is safe for the freshness
-      # check: its window is DERIVED from the staleness window and is always
-      # longer, so it cannot accuse a healthy schedule of having stopped by
-      # being asked one sweep early. The two numbers and every bound between
-      # them live in tests/test_the_two_sweep_windows_are_one_rule.py, which is
-      # where to read them rather than here: a number copied into a comment is
-      # one nothing updates (L210, L316).
-      # Whether the SCHEDULED sweep is still happening at all (#554). The weekly
-      # trigger's failure mode is silence: GitHub disables a repository's
-      # schedules after 60 days with no push and reports that nowhere, so
-      # without this the guards could stop being re-proved with nothing saying
-      # so.
-      #
-      # `always()` on purpose. This is an independent check that happens to
-      # share a job, and letting a red sweep above it skip the question of
-      # whether the schedule is alive would make the two failures hide each
-      # other (L73).
-      #
-      # On ONE shard, because the sweep became a matrix and the question is
-      # about the workflow rather than about any shard: asked on all four it
-      # would be answered four times. It was briefly its own job instead, which
-      # is tidier and wrong: a new job is a new CHECK NAME, and
-      # tests/test_wait_for_checks.py calibrates the checks it waits for against
-      # a RECORDED reply from a real pull request. Adding a name to the
-      # workflows without a new recording would have meant hand-editing that
-      # fixture, and a fixture edited to match the thing it is meant to verify
-      # is no longer evidence of anything (L48, L58).
-      - name: Say whether the scheduled sweep is still running
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python tools/check_guard_sweep_freshness.py
+      # ran on the days it did. Since #1428 that is only when somebody asks, so
+      # this job's daily schedule is the reason they run at all. None of them
+      # needs a Mac, and none of them is about any one shard.
 
       # How long each CI job has been taking, compared against itself (#1019).
       #
@@ -450,7 +398,7 @@ jobs:
     # false, so this skips whatever the second half says, and the bar is
     # unchanged.
     needs: due
-    if: github.event_name != 'pull_request' && needs.due.outputs.due == 'true'
+    if: github.event_name == 'workflow_dispatch' && needs.due.outputs.due == 'true'
     runs-on: macos-26
     timeout-minutes: 45
     strategy:
@@ -476,9 +424,9 @@ jobs:
         # Seven asks for two more macOS runners than GitHub runs at once, so two
         # shards wait for a slot. That was the objection to sharding recorded
         # above, and it is much weaker here than it was on the merge path: this
-        # is a daily 07:00 job nobody waits on, the deadline is measured inside
-        # the step rather than from when the job was queued, and the price is
-        # wall clock on a run whose result is read the next day.
+        # is a requested run nobody's merge waits on, the deadline is measured
+        # inside the step rather than from when the job was queued, and the price
+        # is wall clock on a run whose result is read when it finishes.
         #
         # Was six until 2026-09-02, when the registry reached 603 entries and
         # `test_the_largest_shard_is_projected_well_inside_its_deadline` went
@@ -569,7 +517,7 @@ jobs:
             --deadline-seconds 1800 \
             --timings guard-timings-${{ matrix.shard }}.json
 
-      # Uploaded rather than committed, because a scheduled job pushing to main
+      # Uploaded rather than committed, because a sweep's job pushing to main
       # is a write nobody reviewed, and because the readings are only worth
       # folding in when a sweep completed: a shard that hit its deadline
       # measured the entries it reached and nothing about the ones it did not,
@@ -589,7 +537,7 @@ jobs:
 
       # A red run here reaches nobody otherwise (#1011).
       #
-      # This job carries a condition excluding pull requests, so it runs on push to main AFTER the merge has landed, and on the weekly schedule with no push behind it at all. Neither gates anything, so a failure is a guard already dead on main. That is how the whole registry stopped being re-proved for hours on 2026-08-19 (L13).
+      # This job carries a condition excluding pull requests, so it runs only when somebody starts a sweep by hand (#1428). That gates nothing, so a failure is a guard already dead on main. That is how the whole registry stopped being re-proved for hours on 2026-08-19 (L13).
       #
       # On EVERY shard, unlike the two steps above it, which ask a question about the workflow and have one answer. This REPORTS a failure, and shard 3 going red while shard 1 is green is exactly the case that must not be silent.
       #

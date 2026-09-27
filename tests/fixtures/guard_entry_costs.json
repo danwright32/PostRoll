@@ -204,7 +204,6 @@
     "a-silenced-guard-is-refused-at-load": false,
     "a-silent-run-erases-nothing": true,
     "a-skipped-gated-job-leaves-the-duration-series": false,
-    "a-skipped-sweep-is-not-a-proof": false,
     "a-slot-that-failed-says-so": true,
     "a-spent-allowance-is-said-out-loud": true,
     "a-spent-meta-allowance-is-not-retried": false,
@@ -410,7 +409,6 @@
     "guard-sweep-expensive-steps-are-gated": false,
     "guard-sweep-not-on-every-push": false,
     "guard-sweep-reports-even-when-it-skips": false,
-    "guards-reproved-on-a-schedule": false,
     "guessed-handle-is-marked": true,
     "handle-matches-its-profile": false,
     "hashtag-gate-prompt": false,
@@ -518,7 +516,6 @@
     "safe-swap-keeps-the-old-file": true,
     "save-failure-banner-offers-retry": true,
     "save-failure-surfaced": true,
-    "schedule-liveness-is-reported": false,
     "scoped-re-export-clears-its-own-days": true,
     "screen-reel-dark-mark": false,
     "secondary-text-clears-the-deeper-page": true,
@@ -1368,10 +1365,6 @@
       "run": "36319996693",
       "scale": 1.0
     },
-    "a-skipped-sweep-is-not-a-proof": {
-      "run": "36319996693",
-      "scale": 1.0
-    },
     "a-slot-that-failed-says-so": {
       "run": "36319996693",
       "scale": 1.0
@@ -2192,10 +2185,6 @@
       "run": "36319996693",
       "scale": 1.0
     },
-    "guards-reproved-on-a-schedule": {
-      "run": "36319996693",
-      "scale": 1.0
-    },
     "guessed-handle-is-marked": {
       "run": "36319996693",
       "scale": 1.0
@@ -2621,10 +2610,6 @@
       "scale": 1.0
     },
     "save-failure-surfaced": {
-      "run": "36319996693",
-      "scale": 1.0
-    },
-    "schedule-liveness-is-reported": {
       "run": "36319996693",
       "scale": 1.0
     },
@@ -3532,7 +3517,6 @@
     "a-silenced-guard-is-refused-at-load": 0.67,
     "a-silent-run-erases-nothing": 24.59,
     "a-skipped-gated-job-leaves-the-duration-series": 0.39,
-    "a-skipped-sweep-is-not-a-proof": 0.32,
     "a-slot-that-failed-says-so": 22.46,
     "a-spent-allowance-is-said-out-loud": 22.89,
     "a-spent-meta-allowance-is-not-retried": 0.78,
@@ -3738,7 +3722,6 @@
     "guard-sweep-expensive-steps-are-gated": 0.56,
     "guard-sweep-not-on-every-push": 0.68,
     "guard-sweep-reports-even-when-it-skips": 0.51,
-    "guards-reproved-on-a-schedule": 0.37,
     "guessed-handle-is-marked": 19.85,
     "handle-matches-its-profile": 1.12,
     "hashtag-gate-prompt": 0.31,
@@ -3846,7 +3829,6 @@
     "safe-swap-keeps-the-old-file": 20.81,
     "save-failure-banner-offers-retry": 16.17,
     "save-failure-surfaced": 23.61,
-    "schedule-liveness-is-reported": 0.58,
     "scoped-re-export-clears-its-own-days": 17.58,
     "screen-reel-dark-mark": 1.14,
     "secondary-text-clears-the-deeper-page": 41.0,

@@ -125,9 +125,8 @@ def test_too_short_a_window_is_refused_rather_than_called_steady():
 def test_every_state_reports_without_gating(state):
     """This warns; it never fails a build.
 
-    Stated over every state rather than per state, because the freshness check
-    it is modelled on records that having one failure mode gate and another not
-    leaves a reader working out which is which.
+    Stated over every state rather than per state, because having one failure
+    mode gate and another not leaves a reader working out which is which.
     """
     assert Drift(state).exit_code == 0
 
@@ -189,11 +188,10 @@ GUARDS = REPO_ROOT / ".github" / "workflows" / "guards.yml"
 def test_something_actually_runs_the_duration_check():
     """Built is not wired (L3), and an instrument nothing invokes reads nothing.
 
-    Beside the sweep freshness notice, on one shard of the existing job, for the
-    reason that file already records at length: a new JOB is a new CHECK NAME,
-    and `tests/test_wait_for_checks.py` calibrates its bar against a recorded
-    reply from a real pull request, so adding a name costs a knowingly red
-    merge. A step on a job that already reports buys the same reading for none
+    A step on the sweep's existing gate job rather than a job of its own,
+    because a new JOB is a new CHECK NAME, and `tests/test_wait_for_checks.py`
+    calibrates its bar against a recorded reply from a real pull request, so
+    adding a name costs a knowingly red merge. A step on a job that already reports buys the same reading for none
     of that.
     """
     # As code, not as prose (#1074): this workflow explains the series in

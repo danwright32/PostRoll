@@ -1,0 +1,8 @@
+{
+  "name": "the-sweep-waits-to-be-asked",
+  "file": ".github/workflows/guards.yml",
+  "find": "    if: github.event_name == 'workflow_dispatch' && needs.due.outputs.due == 'true'",
+  "replace": "    if: github.event_name != 'pull_request' && needs.due.outputs.due == 'true'",
+  "test": "tests/test_a_quiet_day_costs_no_mac.py::test_no_mac_starts_unless_somebody_asked",
+  "breaks": "the daily schedule starts the full macOS sweep again, at about 150 macOS minutes a run against the 200 a month a private repository on the free plan has, so the clock alone spends the allowance (#1428)"
+}

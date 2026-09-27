@@ -56,27 +56,15 @@ sys.path.insert(0, str(REPO_ROOT))
 from tools.guard_sweep_history import (  # noqa: E402
     HistoryUnreadable, Sweep, sweeps_at, recent_sweeps)
 
-#: How long a proof stands before the sweep runs whatever the tree says. This is
-#: the weekly cron #551 added, expressed as an age instead of a second schedule.
+#: How long a proof stands before a requested sweep runs whatever the tree says.
 #:
-#: Thirty days since #1259, up from seven, and the reason is the allowance
-#: rather than the coverage. One full sweep costs about 144 macOS minutes,
-#: measured 2026-09-04 across the seven shards. A private repository on the free
-#: plan gets 2,000 allowance minutes a month and macOS draws TEN per minute, so
-#: 200. At seven days that is 617 a month, three times the whole allowance
-#: before a single pull request runs; at thirty it is 144, and the rest of the
-#: month is left for the work.
-#:
-#: Stretching it costs nothing while this repository is active, and that is not
-#: a judgement call, it is what the code below does: the staleness branch is
-#: reached ONLY when this tree has already been proved, so any day main moved
-#: is TREE_NOT_PROVED and sweeps whatever this says. The window is dead code on
-#: a busy repository and is the entire cost on a quiet one, which is the state
-#: PostRoll is heading for.
-#:
-#: tests/test_the_two_sweep_windows_are_one_rule.py holds both halves: a
-#: control proving the window cannot delay a sweep after a merge, and the
-#: arithmetic above as an assertion rather than a comment.
+#: The proofs depend on things no commit here touches, the runner image, the
+#: pinned Xcode and Homebrew packages (#551), so an unchanged tree is not an
+#: unchanged proof. Since #1428 the sweep runs only when somebody asks, so this
+#: decides only whether a request re-proves a tree a recent sweep already
+#: proved: inside the window it skips, past it it runs. Thirty days since #1259,
+#: when this was also the schedule's cost and a private repository's 200 macOS
+#: minutes a month could pay for one sweep in thirty days and no more.
 UNCONDITIONAL_AFTER = timedelta(days=30)
 
 #: How many ways the sweep is split.
