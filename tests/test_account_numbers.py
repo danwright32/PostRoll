@@ -140,15 +140,17 @@ class Sleeps:
         self.seconds.append(seconds)
 
 
-def run_command(manifest, output, answers, monkeypatch=None):
+def run_command(manifest, output, answers, monkeypatch):
     """Drive the module's own entry point with the fetch stubbed out.
 
     Through `main` rather than around it, because the app runs `main` and a
     test that assembled the same JSON itself would be checking its own copy of
     the format (L52).
+
+    The token goes through `monkeypatch`, required rather than optional, so it
+    is undone when the test ends instead of reaching every later test (#1435).
     """
-    import os
-    os.environ["META_SYSTEM_USER_TOKEN"] = TOKEN
+    monkeypatch.setenv("META_SYSTEM_USER_TOKEN", TOKEN)
     account_numbers_main(["--manifest", str(manifest), "--output", str(output)],
                          fetch_one=lambda handle, **_: answers[handle])
     return json.loads(Path(output).read_text())
@@ -597,7 +599,7 @@ def test_an_error_page_that_also_names_the_handle_is_still_a_profile():
 
 # ── The command the app runs (#1004) ─────────────────────────────────────────
 
-def test_the_command_answers_about_every_handle_it_was_given(tmp_path):
+def test_the_command_answers_about_every_handle_it_was_given(tmp_path, monkeypatch):
     # One record per handle, including the ones that failed. A command that
     # dropped the failures would leave the app unable to tell an account it
     # never asked about from one it asked about and could not reach, which is
@@ -611,11 +613,37 @@ def test_the_command_answers_about_every_handle_it_was_given(tmp_path):
         "aperson": Figures(handle="aperson", outcome=Outcome.NOT_PROFESSIONAL),
         "flaky": Figures(handle="flaky", outcome=Outcome.NETWORK_FAILED),
     }
-    written = run_command(manifest, output, answers)
+    written = run_command(manifest, output, answers, monkeypatch)
 
     assert [row["handle"] for row in written["accounts"]] == ["natgeo", "aperson", "flaky"]
     assert [row["outcome"] for row in written["accounts"]] == [
         "measured", "not_professional", "network_failed"]
+
+
+def test_the_command_helper_leaves_no_token_behind(tmp_path):
+    # The helper sets a fake token so `main` gets past its refusal. Set on
+    # os.environ directly it outlived the test and reached every later test in
+    # the worker, so a missing-token test that forgot its own delenv would pass
+    # on test order alone (#1435, L439). Undone here by hand, which is what
+    # pytest does at teardown, so the leak is visible inside one test.
+    import os
+    before = os.environ.get("META_SYSTEM_USER_TOKEN")
+    manifest = tmp_path / "in.json"
+    manifest.write_text(json.dumps({"handles": ["natgeo"]}))
+    patch = pytest.MonkeyPatch()
+    try:
+        run_command(manifest, tmp_path / "out.json",
+                    {"natgeo": Figures(handle="natgeo", outcome=Outcome.MEASURED)}, patch)
+    finally:
+        patch.undo()
+    leaked = os.environ.get("META_SYSTEM_USER_TOKEN")
+    if leaked != before:
+        # Put it back before failing, so this test does not become the leak.
+        if before is None:
+            os.environ.pop("META_SYSTEM_USER_TOKEN", None)
+        else:
+            os.environ["META_SYSTEM_USER_TOKEN"] = before
+    assert leaked == before, "the helper's fake token outlived the test"
 
 
 def test_the_command_run_as_the_app_runs_it_uses_the_real_fetch(tmp_path, monkeypatch):
@@ -664,7 +692,7 @@ def test_the_command_refuses_without_a_token(tmp_path, monkeypatch):
         "read as a fetch that answered about nothing")
 
 
-def test_the_command_carries_the_provenance_the_app_stores(tmp_path):
+def test_the_command_carries_the_provenance_the_app_stores(tmp_path, monkeypatch):
     # Everything #1003 added has to survive the trip, or the app merges a
     # record with the fields it was given and nothing else.
     manifest = tmp_path / "in.json"
@@ -673,7 +701,7 @@ def test_the_command_carries_the_provenance_the_app_stores(tmp_path):
                       likes=50, comments=5, likes_hidden=False,
                       instagram_id="17841400000000000", reels=4, feed=8)
 
-    written = run_command(manifest, tmp_path / "out.json", {"natgeo": figures})
+    written = run_command(manifest, tmp_path / "out.json", {"natgeo": figures}, monkeypatch)
 
     row = written["accounts"][0]
     assert row["instagram_id"] == "17841400000000000"
@@ -682,7 +710,7 @@ def test_the_command_carries_the_provenance_the_app_stores(tmp_path):
     assert row["followers_from_page"] is False
 
 
-def test_a_withheld_like_count_survives_the_trip(tmp_path):
+def test_a_withheld_like_count_survives_the_trip(tmp_path, monkeypatch):
     # The one field where absent and refused are different things, so the
     # boolean has to travel beside the null rather than instead of it (#1032).
     manifest = tmp_path / "in.json"
@@ -690,13 +718,13 @@ def test_a_withheld_like_count_survives_the_trip(tmp_path):
     figures = Figures(handle="hidden", outcome=Outcome.MEASURED, followers=1000,
                       likes=None, comments=8, likes_hidden=True)
 
-    written = run_command(manifest, tmp_path / "out.json", {"hidden": figures})
+    written = run_command(manifest, tmp_path / "out.json", {"hidden": figures}, monkeypatch)
 
     assert written["accounts"][0]["likes"] is None
     assert written["accounts"][0]["likes_hidden"] is True
 
 
-def test_the_row_carries_what_the_allowance_reading_said(tmp_path):
+def test_the_row_carries_what_the_allowance_reading_said(tmp_path, monkeypatch):
     # So the app can tell one account hitting a limit from the allowance being
     # gone. Without it every rate limited account looks like an independent
     # failure, and fifty of them look like fifty, not like a stopped fetch
@@ -706,12 +734,12 @@ def test_the_row_carries_what_the_allowance_reading_said(tmp_path):
     figures = Figures(handle="natgeo", outcome=Outcome.RATE_LIMITED,
                       quota={"call_count": 275, "total_time": 157})
 
-    written = run_command(manifest, tmp_path / "out.json", {"natgeo": figures})
+    written = run_command(manifest, tmp_path / "out.json", {"natgeo": figures}, monkeypatch)
 
     assert written["accounts"][0]["allowance_spent"] == 275
 
 
-def test_a_row_with_no_reading_says_so_rather_than_zero(tmp_path):
+def test_a_row_with_no_reading_says_so_rather_than_zero(tmp_path, monkeypatch):
     # None, not 0. A call Meta sent no usage header for and one at the very
     # start of a fresh hour are different facts, and zero is what the second
     # looks like (L11).
@@ -719,7 +747,7 @@ def test_a_row_with_no_reading_says_so_rather_than_zero(tmp_path):
     manifest.write_text(json.dumps({"handles": ["natgeo"]}))
     figures = Figures(handle="natgeo", outcome=Outcome.NETWORK_FAILED, quota=None)
 
-    written = run_command(manifest, tmp_path / "out.json", {"natgeo": figures})
+    written = run_command(manifest, tmp_path / "out.json", {"natgeo": figures}, monkeypatch)
 
     assert written["accounts"][0]["allowance_spent"] is None
 
