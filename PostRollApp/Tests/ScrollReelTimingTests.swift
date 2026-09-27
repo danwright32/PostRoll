@@ -53,7 +53,7 @@ final class ScrollReelTimingTests: XCTestCase {
 
     func testATrackShorterThanTheReelSaysSoWithBothLengths() throws {
         let fixture = try loadFixture()
-        let scrollSeconds = fixture.slider.min_s
+        let scrollSeconds = ScrollReelTiming.scrollSeconds(reelSeconds: fixture.slider.min_s)
         let reelSeconds = ScrollReelTiming.reelSeconds(scrollSeconds: scrollSeconds)
 
         let notice = ScrollReelTiming.musicNotice(trackSeconds: reelSeconds - 8,
@@ -73,7 +73,7 @@ final class ScrollReelTimingTests: XCTestCase {
     /// REEL is the one a person is most likely to think is fine.
     func testATrackThatCoversTheScrollButNotTheReelStillSaysSo() throws {
         let fixture = try loadFixture()
-        let scrollSeconds = fixture.slider.min_s
+        let scrollSeconds = ScrollReelTiming.scrollSeconds(reelSeconds: fixture.slider.min_s)
 
         let notice = ScrollReelTiming.musicNotice(trackSeconds: scrollSeconds + 1,
                                                   scrollSeconds: scrollSeconds)
@@ -84,7 +84,7 @@ final class ScrollReelTimingTests: XCTestCase {
 
     func testATrackThatCoversTheReelSaysNothing() throws {
         let fixture = try loadFixture()
-        let scrollSeconds = fixture.slider.max_s
+        let scrollSeconds = ScrollReelTiming.scrollSeconds(reelSeconds: fixture.slider.max_s)
         let reelSeconds = ScrollReelTiming.reelSeconds(scrollSeconds: scrollSeconds)
 
         XCTAssertNil(ScrollReelTiming.musicNotice(trackSeconds: reelSeconds,
@@ -100,7 +100,7 @@ final class ScrollReelTimingTests: XCTestCase {
     func testAnUnknownTrackLengthSaysNothing() throws {
         let fixture = try loadFixture()
         XCTAssertNil(ScrollReelTiming.musicNotice(trackSeconds: nil,
-                                                  scrollSeconds: fixture.slider.min_s))
+                                                  scrollSeconds: ScrollReelTiming.scrollSeconds(reelSeconds: fixture.slider.min_s)))
     }
 }
 

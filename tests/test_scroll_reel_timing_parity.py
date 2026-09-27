@@ -169,14 +169,19 @@ def test_the_reported_reel_reaches_the_comfortable_speed_at_the_recorded_duratio
 def test_the_reported_reel_is_still_too_fast_at_the_sliders_maximum():
     """Why the warning cannot name only the duration (L111).
 
-    At 234 photographs the slider's maximum (90 seconds since #1415) still
+    At 234 photographs the slider's maximum (a 90 second reel since #1415 and
+    #1433, so 84 seconds of scroll) still
     leaves the reel faster than the DiGangi one Dan had already called too fast, so a message
     pointing only at that control would name a remedy the person cannot take.
     """
     doc = _fixture()
     reel = next(r for r in doc["measured_reels"] if r["photos"] == 234)
     travel = scroll.max_scroll_for(reel["strip_h"])
-    at_max = travel / (doc["slider"]["max_s"] * scroll.FPS) * doc["cruise_factor"]
+    # The slider's top is a whole reel since #1433, so the scroll it leaves is
+    # that less the end hold and the closing graphic.
+    scroll_at_max = (doc["slider"]["max_s"] - scroll.HOLD_END
+                     - scroll.CLOSING_FRAME_DURATION)
+    at_max = travel / (scroll_at_max * scroll.FPS) * doc["cruise_factor"]
 
     assert at_max > doc["comfortable_travel_px"], (
         "the slider can now reach a comfortable speed on the reel this was "
