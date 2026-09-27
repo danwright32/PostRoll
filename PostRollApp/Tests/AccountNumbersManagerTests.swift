@@ -203,6 +203,37 @@ final class AccountNumbersManagerTests: XCTestCase {
                         + "reads exactly like one that was never triggered")
     }
 
+    func testAFailedFetchSaysSoAsAFactNotOnlyAsASentence() async {
+        // The collaborator panel needs to know the fetch failed to choose its
+        // headline, and a note's wording is not something to branch on (L35).
+        struct Boom: Error {}
+        let failing = manager { _ in throw Boom() }
+        failing.handlesSettled(["a"], asOf: now)
+        await settle()
+        XCTAssertTrue(failing.fetchFailed)
+
+        let working = manager { handles in handles.map { Self.figures($0) } }
+        working.handlesSettled(["b"], asOf: now)
+        await settle()
+        XCTAssertEqual(book.stats(for: "b")?.outcome, .measured,
+                       "the healthy fetch never ran, so its false says nothing")
+        XCTAssertFalse(working.fetchFailed)
+    }
+
+    func testTheExportIsToldTheFetchFailed() async {
+        // The export copies what it needs before detaching, so the fact has to
+        // be handed over with the notes rather than read later (#1431).
+        struct Boom: Error {}
+        var owned = AppOwners()
+        owned.accountNumbers = manager { _ in throw Boom() }
+        owned.connectTheHandleTrigger()
+
+        owned.accountNumbers.handlesSettled(["a"], asOf: now)
+        await settle()
+
+        XCTAssertTrue(owned.export.accountNumbersFetchFailed)
+    }
+
     func testASuccessfulFetchClearsTheNote() async {
         struct Boom: Error {}
         let m = manager { _ in throw Boom() }
