@@ -50,6 +50,14 @@ struct ReelStripPreviewThumbnail: View {
     var currentReelLength: Double? = nil
     var onChangeReelLength: ((Double) -> Void)? = nil
     var maxHeight: CGFloat = 600
+    /// A strip already in hand, drawn at once instead of read from `url`.
+    ///
+    /// The app never passes one: it reads the strip and its layout off disk in
+    /// a task, which is right for a file a render has just written. What that
+    /// cost was any picture of this editor taken without a run loop, which
+    /// showed only the loading placeholder, so the review sheet could not hold
+    /// it and every change here was reviewed by launching the app (#1457).
+    var preloaded: (image: NSImage, layout: ReelStripLayout)? = nil
 
     /// Whether the reel length slider is open (#1415).
     @State private var showingReelLength = false
@@ -59,10 +67,21 @@ struct ReelStripPreviewThumbnail: View {
     @Environment(\.inkSurface) private var inkSurface
     private var ink: SurfaceInk { PaintedSurfaces.ink(on: inkSurface) }
 
-    @State private var image: NSImage?
-    @State private var cells: [CollageCell] = []
-    @State private var stripW: CGFloat = 1080
-    @State private var stripH: CGFloat = 1920
+    // What was read off disk. Until something has been, the strip is the one
+    // handed in, if any (`preloaded`).
+    @State private var diskImage: NSImage?
+    @State private var diskCells: [CollageCell]?
+    @State private var diskStripW: CGFloat?
+    @State private var diskStripH: CGFloat?
+
+    private var image: NSImage? { diskImage ?? preloaded?.image }
+    private var cells: [CollageCell] { diskCells ?? preloaded?.layout.cells ?? [] }
+    private var stripW: CGFloat {
+        diskStripW ?? preloaded.map { CGFloat($0.layout.stripWidth) } ?? 1080
+    }
+    private var stripH: CGFloat {
+        diskStripH ?? preloaded.map { CGFloat($0.layout.stripHeight) } ?? 1920
+    }
     @State private var selectedCellIndex: Int? = nil
     // Swap mode — entered from the menu. swapSourceIdx tracks the first
     // cell tapped; the next cell tap completes the swap and exits the mode.
@@ -481,6 +500,7 @@ struct ReelStripPreviewThumbnail: View {
             }
         }
         .task(id: url) {
+            guard preloaded == nil else { return }
             // Through `ImageLoad.read` rather than bytes plus `NSImage(data:)`
             // (#1117): that pair reads off the main actor and then DECODES on
             // it, which is the lazy main thread decode #966 removed everywhere
@@ -493,16 +513,16 @@ struct ReelStripPreviewThumbnail: View {
             let (load, layout) = await (loaded, decoded)
             let loadedImage = load.image
             await MainActor.run {
-                image = loadedImage
+                diskImage = loadedImage
                 if let layout {
-                    stripW = CGFloat(layout.stripWidth)
-                    stripH = CGFloat(layout.stripHeight)
-                    cells = layout.cells
+                    diskStripW = CGFloat(layout.stripWidth)
+                    diskStripH = CGFloat(layout.stripHeight)
+                    diskCells = layout.cells
                 }
             }
         }
         .onChange(of: isRegenerating) { _, nowRegenerating in
-            if !nowRegenerating {
+            if !nowRegenerating && preloaded == nil {
                 Task {
                     async let loaded = ImageLoad.read(url, fitting: maxHeight)
                     async let decoded = Task.detached {
@@ -511,11 +531,11 @@ struct ReelStripPreviewThumbnail: View {
                     let (load, layout) = await (loaded, decoded)
                     let loadedImage = load.image
                     await MainActor.run {
-                        image = loadedImage
+                        diskImage = loadedImage
                         if let layout {
-                            stripW = CGFloat(layout.stripWidth)
-                            stripH = CGFloat(layout.stripHeight)
-                            cells = layout.cells
+                            diskStripW = CGFloat(layout.stripWidth)
+                            diskStripH = CGFloat(layout.stripHeight)
+                            diskCells = layout.cells
                         }
                     }
                 }
@@ -541,8 +561,10 @@ struct ReelStripPreviewThumbnail: View {
                     // Swap the local cells so the overlay layer immediately
                     // shows photos in their new positions on top of the stale
                     // base PNG. Regen happens later via "Apply changes".
-                    cells[src].photoPath = b.path
-                    cells[idx].photoPath = a.path
+                    var swapped = cells
+                    swapped[src].photoPath = b.path
+                    swapped[idx].photoPath = a.path
+                    diskCells = swapped
                     onSwap(a, b)
                     swapMode = false
                     swapSourceIdx = nil

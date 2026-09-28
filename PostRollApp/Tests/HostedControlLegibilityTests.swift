@@ -1105,6 +1105,10 @@ extension HostedControlLegibilityTests {
 
         surfaces.append(("insights report", { try self.renderInsightsReport() }))
         surfaces.append(("caption card", { try self.renderCaptionCard() }))
+        // A panel inside caption review rather than a screen of its own, so it
+        // sits here and not among `wholeScreens` (#1457).
+        surfaces.append(("Thursday reel editor, 200 photos, two marked, three left out",
+                         { try self.renderReelEditor() }))
         surfaces.append(("photo day grid, thumbnails still loading",
                          { try self.renderPhotoDay() }))
         surfaces.append(("tag fields, clean", { try self.renderTagFields(handles: "@guestartist") }))
@@ -1198,6 +1202,7 @@ extension HostedControlLegibilityTests {
             expect("failure screen \(state.name)", "the failure screen for \(state.name)")
         }
         expect("event row at rest", "an event row at rest")
+        expect("Thursday reel editor", "the Thursday reel editor (#1457)")
         expect("event row selected", "a selected event row")
 
         // The three screens that could only ever be reviewed by launching the
@@ -1665,6 +1670,99 @@ extension HostedControlLegibilityTests {
                 .environment(HashtagStore(loadingSaved: false))
                 .withAppOwners(AppOwners()),
                                 wordless: wordless)
+    }
+
+    /// The Thursday reel editor at production scale (#1457).
+    ///
+    /// Two hundred photographs in the row pattern Python lays them in, each
+    /// print a block of its own colour so the rows read in a review. Two are
+    /// marked to leave out and still in the strip, two were left out by the
+    /// last render, and one has been put back since, so every state the
+    /// removal mode draws is on the sheet. `fill` paints the whole strip one
+    /// colour, for the check that the strip is what gets drawn.
+    static func reelEditorStrip(fill: NSColor? = nil) -> (image: NSImage, layout: ReelStripLayout) {
+        let pattern = [2, 3, 2, 3, 2, 3, 3, 1]
+        var cells: [CollageCell] = []
+        var y = 16
+        var row = 0
+        while cells.count < 200 {
+            let count = min(pattern[row % pattern.count], 200 - cells.count)
+            let h = count == 1 ? 656 : (count == 2 ? 380 : 270)
+            let w = (984 - (count - 1) * 16) / count
+            for i in 0..<count {
+                cells.append(CollageCell(photoPath: "/review/reel/\(cells.count).jpg",
+                                         x: 48 + i * (w + 16), y: y, w: w, h: h))
+            }
+            y += h + 16
+            row += 1
+        }
+        let stripH = y + 200
+        let scale: CGFloat = 0.25
+        let image = NSImage(size: NSSize(width: 1080 * scale, height: CGFloat(stripH) * scale),
+                            flipped: true) { rect in
+            (fill ?? NSColor(red: 0.98, green: 0.97, blue: 0.95, alpha: 1)).setFill()
+            rect.fill()
+            guard fill == nil else { return true }
+            for (i, c) in cells.enumerated() {
+                NSColor(hue: CGFloat(i % 12) / 12, saturation: 0.35, brightness: 0.75,
+                        alpha: 1).setFill()
+                NSRect(x: CGFloat(c.x) * scale, y: CGFloat(c.y) * scale,
+                       width: CGFloat(c.w) * scale, height: CGFloat(c.h) * scale).fill()
+            }
+            return true
+        }
+        return (image, ReelStripLayout(stripWidth: 1080, stripHeight: stripH, cells: cells))
+    }
+
+    private func renderReelEditor(wordless: Bool = false,
+                                  fill: NSColor? = nil) throws -> NSBitmapImageRep {
+        let strip = Self.reelEditorStrip(fill: fill)
+        let shown = strip.layout.cells.map { URL(fileURLWithPath: $0.photoPath) }
+        let gone = (0..<3).map { URL(fileURLWithPath: "/review/reel/left-\($0).jpg") }
+        // Nothing marked when the strip is one flat colour: a Left out mark
+        // over the sampled points would be read as the strip not drawing.
+        let removed = fill != nil ? [] : Set([shown[4], shown[9], gone[0], gone[1]].map(\.absoluteString))
+        let editor = ReelStripPreviewThumbnail(
+            url: URL(fileURLWithPath: "/review/reel/none.png"),
+            layoutURL: URL(fileURLWithPath: "/review/reel/none.json"),
+            cropOffsets: .constant([:]),
+            onRegenerate: {},
+            onChangePhotos: {},
+            photoEdits: ReelPhotoEdits(allPhotos: shown + gone, removed: removed,
+                                       swap: { _, _ in }, setRemoved: { _ in }),
+            currentReelLength: 56,
+            onChangeReelLength: { _ in },
+            maxHeight: 560,
+            preloaded: strip)
+        return try WordFootprint.hosted(
+            editor.padding(Spacing.md).storyPanelSurface()
+                .frame(width: 560, height: 780),
+            size: CGSize(width: 560, height: 780), wordless: wordless)
+    }
+
+    /// The editor draws the strip it is handed, not the loading placeholder,
+    /// which is what a render of it showed before it could be handed one: its
+    /// strip only ever arrived from disk, after any render had been taken.
+    func testTheReelEditorDrawsAStripItIsHanded() throws {
+        let rep = try renderReelEditor(fill: NSColor(red: 0, green: 0.8, blue: 0, alpha: 1))
+        // Several points across the strip window, gaps between prints
+        // included: the flat fill covers the whole strip, so every one of them
+        // is the strip whatever the row pattern puts under it (L178).
+        for fx in [0.25, 0.5, 0.75] {
+            for fy in [0.15, 0.3, 0.5] {
+                let colour = try XCTUnwrap(rep.colorAt(x: Int(Double(rep.pixelsWide) * fx),
+                                                       y: Int(Double(rep.pixelsHigh) * fy))?
+                    .usingColorSpace(.sRGB))
+                // Green DOMINATES rather than reads bright: each print's own
+                // overlay dims it while that photo loads, which a render never
+                // waits for. The loading placeholder is a grey, which fails.
+                let g = colour.greenComponent
+                XCTAssertGreaterThan(g, 0.08, "at (\(fx), \(fy)) the strip area is black: \(colour)")
+                XCTAssertGreaterThan(g, colour.redComponent * 3,
+                                     "at (\(fx), \(fy)) the strip area shows \(colour), not the strip it was handed")
+                XCTAssertGreaterThan(g, colour.blueComponent * 3)
+            }
+        }
     }
 
     /// The Settings screen, which nothing rendered until now (#918).
