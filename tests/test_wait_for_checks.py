@@ -1996,3 +1996,58 @@ def test_the_recording_is_written_as_four_fixtures_and_a_note(tmp_path) -> None:
     ]
     for path in written:
         assert json.loads(path.read_text(encoding="utf-8"))
+
+
+# ── a wait that follows progress (#1461) ─────────────────────────────────────
+#
+# The deadline was a fixed total from the start of the wait, so a run queued
+# behind the macOS runner pool was given up on while healthy: twice on
+# 2026-09-28, for #1459 and #1460, each green minutes later. The timeout now
+# counts from the last CHANGE in what the checks report, under a hard ceiling.
+
+
+def _drive(replies, *, timeout: float = 600):
+    """main() over a scripted series of polls, returning the code, the clock
+    and every line said, so a test can ask when and why it stopped."""
+    clock = FakeClock()
+    remaining = list(replies)
+    lines: list[str] = []
+
+    def poll(_number: str) -> Poll:
+        rows = remaining.pop(0) if len(remaining) > 1 else remaining[0]
+        return Poll(head_sha=HEAD_SHA, rows=rows)
+
+    code = main(["7", "--timeout", str(timeout), "--interval", "30"],
+                poll=poll, now=clock.now, sleep=clock.sleep,
+                bar=local_bar, out=lines.append)
+    return code, clock, lines
+
+
+def _pending(state: str) -> list[dict[str, str]]:
+    return [dict(row, bucket="pending", state=state) for row in real_reply()]
+
+
+def test_a_run_that_is_still_moving_is_waited_past_the_timeout() -> None:
+    queued = _pending("QUEUED")
+    started = [dict(queued[0], state="IN_PROGRESS")] + queued[1:]
+    # Queued until 570s, a job starts, and the lot is green at about 1000s.
+    replies = [queued] * 20 + [started] * 15 + [real_reply()]
+    code, clock, _ = _drive(replies)
+    assert code == EXIT_GREEN
+    assert clock.t > 600, "it finished inside the timeout, so this proves nothing"
+
+
+def test_a_run_where_nothing_changes_still_stops_at_the_timeout() -> None:
+    code, clock, lines = _drive([_pending("IN_PROGRESS")])
+    assert code == EXIT_STILL_RUNNING
+    assert clock.t <= 630
+    assert "nothing changed" in lines[-1], lines[-1]
+
+
+def test_a_run_that_changes_for_ever_stops_at_the_ceiling() -> None:
+    """Progress may extend the wait, never make it unbounded (L110)."""
+    a, b = _pending("QUEUED"), _pending("IN_PROGRESS")
+    code, clock, lines = _drive([a, b] * 1000)
+    assert code == EXIT_STILL_RUNNING
+    assert 1200 < clock.t <= 3 * 600 + 30
+    assert "ceiling" in lines[-1], lines[-1]
