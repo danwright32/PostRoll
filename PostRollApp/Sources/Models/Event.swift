@@ -384,6 +384,7 @@ extension PostingDay {
         cropOffsets         = try  c.decodeIfPresent([String: CropOffset].self,       forKey: .cropOffsets)         ?? [:]
         collageCropOffsets  = try  c.decodeIfPresent([String: CropOffset].self,        forKey: .collageCropOffsets)  ?? [:]
         reelCropOffsets     = try  c.decodeIfPresent([String: CropOffset].self,        forKey: .reelCropOffsets)     ?? [:]
+        reelRemovedPhotos   = try  c.decodeIfPresent(Set<String>.self,                forKey: .reelRemovedPhotos)   ?? []
         collageCellOverride  = try  c.decodeIfPresent([CollageCell].self,               forKey: .collageCellOverride)
         photoTags            = try  c.decodeIfPresent([String: [String]].self,         forKey: .photoTags)           ?? [:]
         selectedPerformerIDs = try  c.decodeIfPresent([UUID].self,                    forKey: .selectedPerformerIDs) ?? []
@@ -466,6 +467,7 @@ extension PostingDay {
         pd.cropOffsets = cropOffsets.filter { !removeKeys.contains($0.key) }
         pd.collageCropOffsets = collageCropOffsets.filter { !removeKeys.contains($0.key) }
         pd.reelCropOffsets = reelCropOffsets.filter { !removeKeys.contains($0.key) }
+        pd.reelRemovedPhotos = reelRemovedPhotos.subtracting(removeKeys)
         pd.photoTags = photoTags.filter { !removeKeys.contains($0.key) }
         if let cells = collageCellOverride {
             pd.collageCellOverride = cells.filter { !removePaths.contains($0.photoPath) }
@@ -490,6 +492,7 @@ extension PostingDay {
         pd.cropOffsets = Self.remapKeys(cropOffsets, keyRemap)
         pd.collageCropOffsets = Self.remapKeys(collageCropOffsets, keyRemap)
         pd.reelCropOffsets = Self.remapKeys(reelCropOffsets, keyRemap)
+        pd.reelRemovedPhotos = Set(reelRemovedPhotos.map { keyRemap[$0] ?? $0 })
         pd.photoTags = Self.remapKeys(photoTags, keyRemap)
         if let cells = collageCellOverride {
             pd.collageCellOverride = cells.map {
@@ -1047,6 +1050,46 @@ struct PostingDay: Codable, Hashable {
     var cropOffsets: [String: CropOffset] = [:]        // carousel crop — keyed by photo URL absoluteString
     var collageCropOffsets: [String: CropOffset] = [:] // collage-specific crop — separate from carousel
     var reelCropOffsets: [String: CropOffset] = [:]    // Thursday reel per-photo crop — independent from carousel/collage
+    /// Photographs the Thursday reel leaves out, keyed like `reelCropOffsets`.
+    ///
+    /// The photo stays on the day, crop and all, so leaving it out is
+    /// reversible: the list is what the reel skips, not what the day lost.
+    /// Added so a long strip can be slowed to a comfortable pace at the length
+    /// Dan chose, by taking photographs out in the editor (2026-09-28).
+    var reelRemovedPhotos: Set<String> = []
+
+    /// The photographs the Thursday reel actually shows, in reel order.
+    ///
+    /// Every render reads this rather than `photoPaths`: the editor preview,
+    /// the background pre-render, the export render and the caption run. A
+    /// path that read `photoPaths` would render the removed photos back in.
+    var reelPhotoPaths: [URL] {
+        photoPaths.filter { !reelRemovedPhotos.contains($0.absoluteString) }
+    }
+
+    /// Each reel photo's crop as `[x, y, scale]`, lined up with
+    /// `reelPhotoPaths`. Python applies them by index, so they are built from
+    /// the same list the photos are, in one place.
+    var reelCropOffsetList: [[Double]] {
+        reelPhotoPaths.map { url in
+            let o = reelCropOffsets[url.absoluteString] ?? CropOffset()
+            return [o.x, o.y, o.scale]
+        }
+    }
+
+    /// Whether any reel photo is framed other than the default. Compared with
+    /// `CropOffset()` rather than zeros: the default is top anchored (y = -1),
+    /// so a check against zero called every untouched day adjusted.
+    var reelCropsAreMoved: Bool {
+        reelPhotoPaths.contains { (reelCropOffsets[$0.absoluteString] ?? CropOffset()) != CropOffset() }
+    }
+
+    /// Whether the reel differs from a plain render of every photo: a crop was
+    /// moved or a photograph is left out. Judged by what the reel SHOWS, so a
+    /// removal left over for a photo no longer on the day counts for nothing.
+    var hasReelEdits: Bool {
+        !reelCropOffsets.isEmpty || reelPhotoPaths.count != photoPaths.count
+    }
     var collageCellOverride: [CollageCell]? = nil      // user-adjusted frame layout (nil = use Python layout)
     var photoTags: [String: [String]] = [:]            // collage-carousel days: per-photo people tags, keyed by photo URL absoluteString
     // Performers selected as appearing in this day's photos — drives auto handle/name merging

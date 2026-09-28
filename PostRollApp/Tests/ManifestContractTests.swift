@@ -198,9 +198,10 @@ final class ManifestContractTests: XCTestCase {
     // MARK: - The eight smaller manifests (#270)
 
     func testTheReelPreviewManifestSendsEveryRequiredKey() throws {
-        let pd = try XCTUnwrap(fullEvent().days[DayName.thursday.rawValue])
-        let manifest = PythonBridge.buildReelPreviewManifest(
-            day: pd, cropOffsets: [[0, -1, 1.0]])
+        var pd = try XCTUnwrap(fullEvent().days[DayName.thursday.rawValue])
+        let first = try XCTUnwrap(pd.photoPaths.first)
+        pd.reelCropOffsets = [first.absoluteString: CropOffset(x: 0, y: -1, scale: 1.0)]
+        let manifest = PythonBridge.buildReelPreviewManifest(day: pd)
         try assertSends(manifest, "reel_preview")
     }
 
@@ -208,9 +209,9 @@ final class ManifestContractTests: XCTestCase {
         // All-default offsets are not crops. Sending them would ask Python to
         // apply a pan of zero to every photo, which is not the same request as
         // "this day was never adjusted".
-        let pd = try XCTUnwrap(fullEvent().days[DayName.thursday.rawValue])
-        let manifest = PythonBridge.buildReelPreviewManifest(
-            day: pd, cropOffsets: [[0, 0, 1.0], [0, 0, 1.0]])
+        var pd = try XCTUnwrap(fullEvent().days[DayName.thursday.rawValue])
+        pd.reelCropOffsets = [:]
+        let manifest = PythonBridge.buildReelPreviewManifest(day: pd)
         XCTAssertNil(manifest["crop_offsets"])
     }
 

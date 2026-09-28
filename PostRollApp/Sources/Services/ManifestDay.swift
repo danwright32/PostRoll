@@ -38,7 +38,10 @@ enum ManifestDay {
     /// user-driven reorder lives there, so sorting here would silently revert a
     /// manual swap on every regeneration.
     static func sharedEntry(_ pd: PostingDay, day: DayName) -> [String: Any] {
-        var entry: [String: Any] = ["photos": pd.photoPaths.map { $0.path }]
+        // Thursday sends the photographs its reel shows, to the caption run as
+        // well as the renderer, so neither describes one Dan left out.
+        let photos = day == .thursday ? pd.reelPhotoPaths : pd.photoPaths
+        var entry: [String: Any] = ["photos": photos.map { $0.path }]
 
         // A manual cover override always wins over the AI pick, the same
         // nil-means-AI semantics as collageCellOverride. Captions need it as

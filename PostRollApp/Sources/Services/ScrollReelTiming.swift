@@ -147,7 +147,14 @@ enum ScrollReelTiming {
         // Named as a whole reel, the unit the slider sets (#1433).
         let needed = reelSeconds(scrollSeconds: comfortableScrollSeconds(stripHeight: stripHeight))
         if needed <= sliderMaximumSeconds {
-            return opening + "Try \(Int(needed.rounded())) seconds."
+            // Both remedies, because the longer reel is not the only one: Dan
+            // prefers keeping the length and leaving photographs out
+            // (2026-09-28), and the editor can do that now.
+            let fewer = comfortablePhotoCount(
+                stripHeight: stripHeight, photoCount: photoCount,
+                scrollSeconds: scrollSeconds)
+            return opening + "Try \(Int(needed.rounded())) seconds, or about "
+                + "\(fewer) photographs rather than \(photoCount)."
         }
 
         let fewer = comfortablePhotoCount(

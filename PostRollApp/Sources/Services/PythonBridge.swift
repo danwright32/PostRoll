@@ -649,11 +649,7 @@ actor PythonBridge {
             try? FileManager.default.removeItem(at: manifestFile)
         }
 
-        let offsets: [[Double]] = pd.photoPaths.map { url in
-            let o = pd.reelCropOffsets[url.absoluteString] ?? CropOffset()
-            return [o.x, o.y, o.scale]
-        }
-        let manifest = Self.buildReelPreviewManifest(day: pd, cropOffsets: offsets)
+        let manifest = Self.buildReelPreviewManifest(day: pd)
         let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys])
         try manifestData.write(to: manifestFile)
 
@@ -866,16 +862,15 @@ actor PythonBridge {
     // covered by `manifests` in tests/fixtures/bridge_payload_contract.json.
 
     /// The Thursday strip preview the per-photo crop editor opens.
-    nonisolated static func buildReelPreviewManifest(day pd: PostingDay,
-                                                     cropOffsets: [[Double]]) -> [String: Any] {
+    nonisolated static func buildReelPreviewManifest(day pd: PostingDay) -> [String: Any] {
         var manifest: [String: Any] = [
-            "photos": pd.photoPaths.map { $0.path },
+            "photos": pd.reelPhotoPaths.map { $0.path },
         ]
         if let seed = pd.reelSeed { manifest["seed"] = seed }
         // Only when something was actually moved: an all-default set would ask
         // Python to apply crops that are not crops.
-        if cropOffsets.contains(where: { $0[0] != 0 || $0[1] != 0 || $0[2] != 1.0 }) {
-            manifest["crop_offsets"] = cropOffsets
+        if pd.reelCropsAreMoved {
+            manifest["crop_offsets"] = pd.reelCropOffsetList
         }
         return manifest
     }
@@ -1106,12 +1101,8 @@ actor PythonBridge {
                 if let aud  = pd.audioPath           { entry["audio"]             = aud.path }
                 entry["scroll_duration"] = pd.scrollDuration
                 if let seed = pd.reelSeed            { entry["reel_seed"]         = seed }
-                let offsets = pd.photoPaths.map { url -> [Double] in
-                    let o = pd.reelCropOffsets[url.absoluteString] ?? CropOffset()
-                    return [o.x, o.y, o.scale]
-                }
-                if offsets.contains(where: { $0[0] != 0 || $0[1] != 0 || $0[2] != 1.0 }) {
-                    entry["crop_offsets"] = offsets
+                if pd.reelCropsAreMoved {
+                    entry["crop_offsets"] = pd.reelCropOffsetList
                 }
             case .friday:
                 if let raw  = pd.rawPhotoPath        { entry["raw_photo"]         = raw.path }

@@ -208,8 +208,12 @@ extension ScrollReelTimingTests {
 
         XCTAssertTrue(notice.contains("Try \(Int(reelNeeded.rounded())) seconds"),
                       "the notice does not name the reel length that would fix it: \(notice)")
-        XCTAssertFalse(notice.lowercased().contains("photograph"),
-                       "a reel the slider can fix should not be told to lose photographs")
+        // It used to be kept off fewer photographs here. Reversed 2026-09-28:
+        // Dan prefers keeping the length and leaving photos out, and the editor
+        // can now do that, so a fixable reel names both remedies, length first.
+        let fewer = ScrollReelTiming.comfortablePhotoCount(
+            stripHeight: stripHeight, photoCount: 120, scrollSeconds: 20)
+        XCTAssertTrue(notice.hasSuffix("or about \(fewer) photographs rather than 120."), notice)
     }
 
     /// Of the two reels on disk, the slider now fixes one and not the other.

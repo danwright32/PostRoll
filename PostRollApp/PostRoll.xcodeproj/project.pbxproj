@@ -520,6 +520,7 @@
 		9BE5CF2C5FE2485D1E182D3D /* LearnFromEditsOutcome.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0BEE39EAAFD5D7AC02C8A9A5 /* LearnFromEditsOutcome.swift */; };
 		9C16BF8EAB2E922C78085682 /* AssetGenerationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F42942204175B8E8CBD71F9 /* AssetGenerationView.swift */; };
 		9C2C82A04E4682EA874A0002 /* RebuildingDayControlsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5468FDA875DE71393BFA2133 /* RebuildingDayControlsTests.swift */; };
+		9C39976AE0F59049FCF01251 /* ReelRemoval.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9FC6E45875DCA9172271843 /* ReelRemoval.swift */; };
 		9D8FECA0282B4AB3928A2697 /* CaptionBlocks.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7EE19FCD4748D409411EBFC /* CaptionBlocks.swift */; };
 		9D93E6FB4FE1CD0091CA0F8B /* LaunchProjectCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24BACE8D9E204BE86B4C2CA3 /* LaunchProjectCheck.swift */; };
 		9DA12A7111A610AD26FB77D9 /* CollageCellOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = D064520D6540B3221ADE50F3 /* CollageCellOverlay.swift */; };
@@ -704,6 +705,7 @@
 		D6A5533BA28B75E7E3630903 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD0514CA7990CF2688E9E5ED /* AppState.swift */; };
 		D76C65804D7D2B8A61EF9247 /* DayRebuildRefusal.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9E3656D255D4F52E6B42D34 /* DayRebuildRefusal.swift */; };
 		D7F029B3E1A954B5E286BB3F /* LayoutSwitchNoticeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92438BF867787F364CAA16C9 /* LayoutSwitchNoticeTests.swift */; };
+		D836D51D06F0DE04108F68AF /* ReelPhotoRemovalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7BE09FFEFE6298CBACCC39A9 /* ReelPhotoRemovalTests.swift */; };
 		D885853A207B7BB7CD2007FF /* PostingDayRemovePhotosTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF9F3E1F3D03A06B57231103 /* PostingDayRemovePhotosTests.swift */; };
 		D892486FD3D595457099ED1F /* StagePillStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F33CF4948C312ECC3CA2464F /* StagePillStateTests.swift */; };
 		D8CB6AEE3BB716C86B809498 /* EventStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8089518478AA10F4DC5A9A83 /* EventStore.swift */; };
@@ -767,6 +769,7 @@
 		EB0D6169EC03E2A24531E079 /* DataDirExportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8848A60E361D54711A772EBB /* DataDirExportTests.swift */; };
 		EB67C1745DE464F8594CE4AF /* NotificationPermission.swift in Sources */ = {isa = PBXBuildFile; fileRef = 905B7845E55B1CCF4BA99D03 /* NotificationPermission.swift */; };
 		EB67C19FB4B378328D8F42D7 /* ReelLayoutSeedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A84E1CD4C0B752721E6AFD3 /* ReelLayoutSeedTests.swift */; };
+		EC1D16B871AF2B82B925B358 /* ReelRemoval.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9FC6E45875DCA9172271843 /* ReelRemoval.swift */; };
 		EC9CDF247EB7F02FEF88FD05 /* AnalyticsDatesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C87C92505985A015591B53B /* AnalyticsDatesTests.swift */; };
 		ECC824282E265473570312C9 /* NoScreenForcesTheWindowBiggerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40B89BFE62B56617504EC1A3 /* NoScreenForcesTheWindowBiggerTests.swift */; };
 		ECF547E11F3729797A2A65D7 /* MediaPresence.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4DE081A534A262028467FCA /* MediaPresence.swift */; };
@@ -1139,6 +1142,7 @@
 		79F5AAE4F75F74FF4D61C628 /* SafeFileSwapTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeFileSwapTests.swift; sourceTree = "<group>"; };
 		79FC243A49F97D724DC33391 /* CollageGeometryFixtureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollageGeometryFixtureTests.swift; sourceTree = "<group>"; };
 		7A82C26AA7FF4D75F3C58A5F /* AppPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPreferences.swift; sourceTree = "<group>"; };
+		7BE09FFEFE6298CBACCC39A9 /* ReelPhotoRemovalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReelPhotoRemovalTests.swift; sourceTree = "<group>"; };
 		7C652D3825FF3D7ACC297F2B /* PerformerLookupManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformerLookupManagerTests.swift; sourceTree = "<group>"; };
 		7C7B74928734934CAE5BF9FD /* ScratchPreferencesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScratchPreferencesTests.swift; sourceTree = "<group>"; };
 		7CAC38D3E70DE42CFE8F111A /* PerformerLookupManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformerLookupManager.swift; sourceTree = "<group>"; };
@@ -1368,6 +1372,7 @@
 		D92CD520B46A8592B9C5493C /* OCRResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OCRResult.swift; sourceTree = "<group>"; };
 		D9380BCAF422451A32B8ED22 /* SettingsCopy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsCopy.swift; sourceTree = "<group>"; };
 		D96EE19269D7265A05B2647B /* ExportReelSeedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportReelSeedTests.swift; sourceTree = "<group>"; };
+		D9FC6E45875DCA9172271843 /* ReelRemoval.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReelRemoval.swift; sourceTree = "<group>"; };
 		DA222335065F7D753E6D51F5 /* ReelLengthControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReelLengthControlTests.swift; sourceTree = "<group>"; };
 		DB734F7F1ECD1309CF9999B0 /* OutdatedDesignsDisplay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OutdatedDesignsDisplay.swift; sourceTree = "<group>"; };
 		DB9E4B9B7EC3C8B0195232E0 /* ArchiveCleanup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveCleanup.swift; sourceTree = "<group>"; };
@@ -1719,6 +1724,7 @@
 				D88A4510D24DC819083357DA /* RecurringAccounts.swift */,
 				A50594DC4887AD2FF2749FE8 /* ReelAudioSwap.swift */,
 				E586CEB8CBA67285263EB6D0 /* ReelRelayoutNotice.swift */,
+				D9FC6E45875DCA9172271843 /* ReelRemoval.swift */,
 				F5F44FAA0EEBEE5CE34BD7A8 /* RepairJournal.swift */,
 				01076C2105DCFFE1D1CD3CFA /* RepairRecordPanelText.swift */,
 				46A6357A03DCAA86BF0F5812 /* RepairRetryEstimate.swift */,
@@ -2042,6 +2048,7 @@
 				B497A104F92B93E0BBECE23B /* ReelAudioSwapTests.swift */,
 				3A84E1CD4C0B752721E6AFD3 /* ReelLayoutSeedTests.swift */,
 				DA222335065F7D753E6D51F5 /* ReelLengthControlTests.swift */,
+				7BE09FFEFE6298CBACCC39A9 /* ReelPhotoRemovalTests.swift */,
 				32B984F7A2E3282D675A9E22 /* ReelRelayoutNoticeTests.swift */,
 				D06EF14A47B334A2F5F436BD /* RefusalRowTests.swift */,
 				ACC753FA6DC3FB84ED67F492 /* RenderAppearanceTests.swift */,
@@ -2471,6 +2478,7 @@
 				BD76E8281A3B49DE71B37C32 /* ReelPreviewPlayer.swift in Sources */,
 				DE53FC3DDEE442369D4B2A9B /* ReelRelayoutChoice.swift in Sources */,
 				55B2674C6C613F8241C86881 /* ReelRelayoutNotice.swift in Sources */,
+				9C39976AE0F59049FCF01251 /* ReelRemoval.swift in Sources */,
 				BA221784E0CE64CB956F9132 /* ReelStripPreviewThumbnail.swift in Sources */,
 				4780B6B129B746C32A40323A /* RepairJournal.swift in Sources */,
 				470CA0A6E63269A7002EF614 /* RepairRecordPanelText.swift in Sources */,
@@ -2998,10 +3006,12 @@
 				AA763E1E3FF11A9CEA5C7D7E /* ReelLengthControlTests.swift in Sources */,
 				FBAD2D9153EBEA98475B616F /* ReelLengthPopover.swift in Sources */,
 				3F7AFBF3C2C34C094E6C0216 /* ReelPaceSampler.swift in Sources */,
+				D836D51D06F0DE04108F68AF /* ReelPhotoRemovalTests.swift in Sources */,
 				2EBEBCD0B5A1053AF9ED8BDF /* ReelPreviewPlayer.swift in Sources */,
 				E609F6C633646D2BC8D4A546 /* ReelRelayoutChoice.swift in Sources */,
 				A58AD55CFEBF8BDC4DB3D426 /* ReelRelayoutNotice.swift in Sources */,
 				2FF8B53F73E9705C9E9DAB57 /* ReelRelayoutNoticeTests.swift in Sources */,
+				EC1D16B871AF2B82B925B358 /* ReelRemoval.swift in Sources */,
 				55CAEBCE2B08B5FD5DC34A7A /* ReelStripPreviewThumbnail.swift in Sources */,
 				C08EB06FD19F891536015BC0 /* RefusalRowTests.swift in Sources */,
 				A520DDCF54379E1ADEE03B6F /* RenderAppearanceTests.swift in Sources */,

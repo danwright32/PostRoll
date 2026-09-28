@@ -47,7 +47,8 @@ final class SpeculativeReelRenderer {
               let seed = pd.reelSeed
         else { return nil }
         var parts: [String] = []
-        parts.append("photos:" + pd.photoPaths.map { $0.path }.joined(separator: "|"))
+        // The photos the reel shows, so leaving one out is a different reel.
+        parts.append("photos:" + pd.reelPhotoPaths.map { $0.path }.joined(separator: "|"))
         parts.append("audio:" + (pd.audioPath?.path ?? "nil"))
         parts.append("dur:" + String(format: "%.3f", pd.scrollDuration))
         parts.append("seed:\(seed)")
