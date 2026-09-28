@@ -165,7 +165,9 @@ final class ExportManager {
             return
         }
 
-        guard var ev = appState.events.first(where: { $0.id == eventID }) else { return }
+        // Claimed before the export folder is named, so a duplicate exports
+        // into its own folder rather than its original's (#1450).
+        guard var ev = appState.claimFolder(eventID) else { return }
 
         // Before anything is decided or written (#1407). A reel laid out before
         // layouts were recorded cannot be reproduced, so re-rendering it is a

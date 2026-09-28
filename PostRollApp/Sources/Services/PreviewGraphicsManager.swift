@@ -109,7 +109,7 @@ final class PreviewGraphicsManager {
                 self?.fullRunTasks.removeValue(forKey: eventID)
                 onFinish?()
             }
-            guard let live = appState.events.first(where: { $0.id == eventID }) else { return }
+            guard let live = appState.claimFolder(eventID) else { return }
             do {
                 let result = try await self?.renderPreview(live, nil)
                 guard let result else { return }
@@ -480,7 +480,7 @@ final class PreviewGraphicsManager {
             // Safe because the caller writes synchronously: this body is
             // enqueued on the main actor, and there is no await between the
             // caller's claim and its write for it to run in.
-            guard let live = appState.events.first(where: { $0.id == eventID }) else {
+            guard let live = appState.claimFolder(eventID) else {
                 // The event went away between the claim and the run. Release
                 // every slot rather than leaving spinners on days nothing will
                 // ever finish (L110).
@@ -550,7 +550,7 @@ final class PreviewGraphicsManager {
             // reads one: whatever the caller wrote while claiming this day is
             // the state that has to be rendered, and a copy read before the
             // claim describes the day as it was before the change.
-            guard let live = appState.events.first(where: { $0.id == eventID }) else {
+            guard let live = appState.claimFolder(eventID) else {
                 self.endDayRegen(day, for: eventID)
                 return
             }
