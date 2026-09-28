@@ -305,5 +305,44 @@ final class EventDetailsEditTests: XCTestCase {
         XCTAssertEqual(state.events.first?.previewMediaPaths, ev.previewMediaPaths,
                        "a stopped refresh keeps the graphics it never replaced")
     }
+
+    @MainActor
+    func testTwoRedrawsOfOneEventEachStayStoppable() async throws {
+        // A refresh and a layout switch can redraw different days of the same
+        // event at once. When one finishes, the other must still be stoppable,
+        // or its Stop button does nothing for the rest of a long render.
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edit-details-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ev = edit(broadwayUndressed(rendered: true), org: "")
+        let state = AppState(events: [ev],
+                             storeURL: root.appendingPathComponent("events.json"),
+                             dataRoot: root)
+        let manager = PreviewGraphicsManager()
+        let started = Reached()
+        manager.renderPreview = { rendering, days in
+            await started.record(rendering)
+            if days == ["sunday"] {
+                return PythonBridge.PreviewGenerationResult(paths: [:], errors: [:])
+            }
+            try await Task.sleep(for: .seconds(600))
+            return PythonBridge.PreviewGenerationResult(paths: [:], errors: [:])
+        }
+
+        XCTAssertTrue(manager.startRedraw([.wednesday], for: ev.id, appState: state,
+                                          work: .detailsEdited))
+        XCTAssertTrue(manager.startRedraw([.sunday], for: ev.id, appState: state,
+                                          work: .layoutSwitch))
+        await Self.waitUntil("the quick redraw never finished") {
+            await MainActor.run { !manager.regeneratingDays(ev.id).contains(.sunday) }
+        }
+
+        XCTAssertTrue(manager.stopRedraw(ev.id),
+                      "the long redraw is still running and must still be stoppable")
+        await Self.waitUntil("the stopped redraw never let go of its day") {
+            await MainActor.run { manager.regeneratingDays(ev.id).isEmpty }
+        }
+        XCTAssertNil(manager.dayFailure(.wednesday, for: ev.id))
+    }
 }
 

@@ -407,8 +407,11 @@ final class PreviewGraphicsManager {
 
     // MARK: - Redraw a day's images without touching its caption (#1010)
 
-    /// The redraw in flight per event, so it can be stopped (#1448).
-    private var redrawTasks: [UUID: Task<Void, Never>] = [:]
+    /// The redraws in flight, per event and then per run, so each can be
+    /// stopped (#1448). Per run because two can redraw different days of one
+    /// event at once, and keyed by event alone the first to finish removed the
+    /// other's handle and left its Stop doing nothing.
+    private var redrawTasks: [UUID: [UUID: Task<Void, Never>]] = [:]
     /// Which redraws have been asked to stop and have not stopped yet.
     private var stoppingRedraws: Set<UUID> = []
 
@@ -416,17 +419,18 @@ final class PreviewGraphicsManager {
     /// to stop, so a press after it finished is not mistaken for a stop (L197).
     @discardableResult
     func stopRedraw(_ eventID: UUID) -> Bool {
-        guard let task = redrawTasks[eventID], !stoppingRedraws.contains(eventID) else {
+        guard let runs = redrawTasks[eventID], !runs.isEmpty,
+              !stoppingRedraws.contains(eventID) else {
             return false
         }
         stoppingRedraws.insert(eventID)
-        task.cancel()
+        for task in runs.values { task.cancel() }
         return true
     }
 
     /// A stop was asked for and the redraw has not stopped yet.
     func isStoppingRedraw(_ eventID: UUID) -> Bool {
-        stoppingRedraws.contains(eventID) && redrawTasks[eventID] != nil
+        stoppingRedraws.contains(eventID) && !(redrawTasks[eventID] ?? [:]).isEmpty
     }
 
     /// Redraw these days' images, with no caption run anywhere near it (#1010).
@@ -445,17 +449,22 @@ final class PreviewGraphicsManager {
         // rendered from the copy read here.
         guard appState.events.contains(where: { $0.id == eventID }) else { return false }
         guard beginDayRegen(days, for: eventID) else { return false }
-        // A fresh redraw was not stopped, whatever happened to the last one.
-        stoppingRedraws.remove(eventID)
+        // A fresh redraw was not stopped, whatever happened to the last one,
+        // unless another is still winding down and has yet to say so.
+        if (redrawTasks[eventID] ?? [:]).isEmpty { stoppingRedraws.remove(eventID) }
 
         // Held so it can be stopped (#1448). It was a bare `Task { }`, the
         // shape #1050 removed from every other long action, and nothing found
         // it because this owner composes no `JobTracker`.
-        redrawTasks[eventID] = Task { [weak self] in
+        let runID = UUID()
+        redrawTasks[eventID, default: [:]][runID] = Task { [weak self] in
             guard let self else { return }
             defer {
-                self.redrawTasks.removeValue(forKey: eventID)
-                self.stoppingRedraws.remove(eventID)
+                self.redrawTasks[eventID]?.removeValue(forKey: runID)
+                if self.redrawTasks[eventID]?.isEmpty ?? true {
+                    self.redrawTasks.removeValue(forKey: eventID)
+                    self.stoppingRedraws.remove(eventID)
+                }
             }
             // Read at RUN time, never at claim time (#1010).
             //
