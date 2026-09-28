@@ -29,7 +29,9 @@ final class CropOffsetsArgumentTests: XCTestCase {
     }
 
     func testAllDefaultOffsetsPassNothingAndWriteNothing() throws {
-        let offsets = [[0.0, 0.0, 1.0], [0.0, 0.0, 1.0]]
+        // The untouched framing is top anchored, not zero (#167): a day of
+        // [0, 0, 1] is a day whose photos were each dragged to their centre.
+        let offsets = [[0.0, -1.0, 1.0], [0.0, -1.0, 1.0]]
 
         let args = try PythonBridge.cropOffsetsArgument(offsets: offsets, writingTo: cropFile)
 
@@ -64,7 +66,7 @@ final class CropOffsetsArgumentTests: XCTestCase {
                        "precondition: the directory has to be genuinely unwritable")
 
         XCTAssertThrowsError(
-            try PythonBridge.cropOffsetsArgument(offsets: [[0.0, -1.0, 1.0]], writingTo: cropFile)
+            try PythonBridge.cropOffsetsArgument(offsets: [[0.0, 0.0, 1.0]], writingTo: cropFile)
         ) { error in
             let message = error.localizedDescription
             XCTAssertTrue(message.lowercased().contains("crop"),
