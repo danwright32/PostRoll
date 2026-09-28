@@ -367,6 +367,7 @@
 		6ACC01FABA07442727895FA2 /* PhotoTagSheetNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62620037F78394758921A456 /* PhotoTagSheetNavigation.swift */; };
 		6AFE134A61C3F9790D3A0349 /* CollageGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDAEF16332BD6FA5E410B65 /* CollageGeometry.swift */; };
 		6B1AE726F19C587CEE5F3996 /* EventStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30734A52AAEC8C7D2F66AA83 /* EventStoreTests.swift */; };
+		6BC0318827CB88513DB33255 /* CropOffsetMovedTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 710C27163C262B92F06AF4EA /* CropOffsetMovedTests.swift */; };
 		6C71EC9FE6B95569EFB60D36 /* AppPaths.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF84F91C6AB5E2AF9EBA988E /* AppPaths.swift */; };
 		6C892FFB357FD70E6FCFF4B4 /* AssetGenerationDisplayTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4BEB62FA9022665E1A22746 /* AssetGenerationDisplayTests.swift */; };
 		6CB67E538BF9FC7D11296B25 /* AudienceControlNotice.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8CCE90F6638FB854A0E03E4 /* AudienceControlNotice.swift */; };
@@ -1122,6 +1123,7 @@
 		6F8748252378354FB3AF1CD0 /* CollaboratorPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollaboratorPanel.swift; sourceTree = "<group>"; };
 		6FB5B41B3319A1D46771453C /* OrgBandEditingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrgBandEditingTests.swift; sourceTree = "<group>"; };
 		70DC1BDB709C6D179C2A02C4 /* CaptionReviewOwnershipTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptionReviewOwnershipTests.swift; sourceTree = "<group>"; };
+		710C27163C262B92F06AF4EA /* CropOffsetMovedTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CropOffsetMovedTests.swift; sourceTree = "<group>"; };
 		7146EADC3424B0FFEE416221 /* BridgePayloadContractTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgePayloadContractTests.swift; sourceTree = "<group>"; };
 		716DB949EC522F26C5BC2412 /* CollageRendererTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CollageRendererTests.swift; sourceTree = "<group>"; };
 		7220AB265C33E3EB1587A176 /* EventRowBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventRowBackground.swift; sourceTree = "<group>"; };
@@ -1874,6 +1876,7 @@
 				0734077F9E41D6D4653FA829 /* CoverManifestTests.swift */,
 				FA9E36A1293C2F0C1D658AB1 /* CoverRegenerationManifestTests.swift */,
 				296F4BECD83FCE57CD51D69B /* CoverReviewDisplayTests.swift */,
+				710C27163C262B92F06AF4EA /* CropOffsetMovedTests.swift */,
 				604C6386411AE5C3298BC03C /* CropOffsetsArgumentTests.swift */,
 				D07C164799E09F72C6E680A5 /* DarkPanelInkTests.swift */,
 				8848A60E361D54711A772EBB /* DataDirExportTests.swift */,
@@ -2691,6 +2694,7 @@
 				01C46B9BAFAA78A034F385F5 /* CoverReviewDisplay.swift in Sources */,
 				6667EECE61AD240E93F94AD9 /* CoverReviewDisplayTests.swift in Sources */,
 				C854122CEC0962020DF18C36 /* CoverSlotView.swift in Sources */,
+				6BC0318827CB88513DB33255 /* CropOffsetMovedTests.swift in Sources */,
 				F3C2435030AA294A8B1D9515 /* CropOffsetsArgumentTests.swift in Sources */,
 				C2C29008AAA3C34C3D882190 /* DarkPanelInkTests.swift in Sources */,
 				EB0D6169EC03E2A24531E079 /* DataDirExportTests.swift in Sources */,

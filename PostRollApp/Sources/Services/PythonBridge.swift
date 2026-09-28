@@ -416,7 +416,7 @@ actor PythonBridge {
     nonisolated static func cropOffsetsArgument(
         offsets: [[Double]], writingTo cropFile: URL
     ) throws -> [String] {
-        guard offsets.contains(where: { $0[0] != 0 || $0[1] != 0 || $0[2] != 1.0 })
+        guard offsets.contains(where: CropOffset.isMoved)
         else { return [] }
 
         do {
@@ -1123,7 +1123,7 @@ actor PythonBridge {
                     let o = pd.collageCropOffsets[url.absoluteString] ?? CropOffset()
                     return [o.x, o.y, o.scale]
                 }
-                if offsets.contains(where: { $0[0] != 0 || $0[1] != 0 || $0[2] != 1.0 }) {
+                if offsets.contains(where: CropOffset.isMoved) {
                     entry["crop_offsets"] = offsets
                 }
                 // Reconciled against the day's current photos: a layout left over

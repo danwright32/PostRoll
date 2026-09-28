@@ -976,6 +976,17 @@ struct CropOffset: Codable, Hashable {
 }
 
 extension CropOffset {
+    /// Whether this is anything other than the framing every photo starts
+    /// from. Asked of the real default, never of zero: the default is top
+    /// anchored (y = -1), so `y != 0` called every untouched photo moved.
+    var isMoved: Bool { self != CropOffset() }
+
+    /// The same question of the `[x, y, scale]` lists sent to Python.
+    static func isMoved(_ list: [Double]) -> Bool {
+        let d = CropOffset()
+        return list != [d.x, d.y, d.scale]
+    }
+
     init(from decoder: Decoder) throws {
         let c   = try decoder.container(keyedBy: CodingKeys.self)
         x       = try c.decodeIfPresent(Double.self, forKey: .x)     ?? 0
@@ -1077,11 +1088,9 @@ struct PostingDay: Codable, Hashable {
         }
     }
 
-    /// Whether any reel photo is framed other than the default. Compared with
-    /// `CropOffset()` rather than zeros: the default is top anchored (y = -1),
-    /// so a check against zero called every untouched day adjusted.
+    /// Whether any photo the reel shows is framed other than the default.
     var reelCropsAreMoved: Bool {
-        reelPhotoPaths.contains { (reelCropOffsets[$0.absoluteString] ?? CropOffset()) != CropOffset() }
+        reelPhotoPaths.contains { reelCropOffsets[$0.absoluteString]?.isMoved ?? false }
     }
 
     /// Whether the reel differs from a plain render of every photo: a crop was
