@@ -140,6 +140,40 @@ final class ReelPhotoRemovalTests: XCTestCase {
         XCTAssertFalse(pd.hasReelEdits)
     }
 
+    func testACropThatWasNeverMovedIsNotAnEdit() {
+        // An entry at the default framing, or a moved crop on a photo the reel
+        // leaves out, changes nothing the reel shows, so the export must not
+        // re-render for it.
+        var pd = thursday()
+        pd.reelCropOffsets = [a.absoluteString: CropOffset()]
+        XCTAssertFalse(pd.hasReelEdits)
+        pd.reelCropOffsets = [b.absoluteString: CropOffset(x: 1, y: 0, scale: 1)]
+        pd.reelRemovedPhotos = [b.absoluteString]
+        pd.photoPaths = [a, b, c]
+        XCTAssertTrue(pd.hasReelEdits, "a removal is still an edit")
+        pd.reelRemovedPhotos = []
+        XCTAssertTrue(pd.hasReelEdits, "and so is b's crop once b is back")
+    }
+
+    func testACropOnALeftOutPhotoDoesNotChangeThePreRender() {
+        let renderer = SpeculativeReelRenderer()
+        let before = thursday(removing: [b])
+        var after = before
+        after.reelCropOffsets[b.absoluteString] = CropOffset(x: 1, y: 1, scale: 2)
+        XCTAssertEqual(renderer.fingerprint(for: event(before)),
+                       renderer.fingerprint(for: event(after)))
+    }
+
+    func testACropOnAShownPhotoDoesChangeThePreRender() {
+        // The other half, so the case above cannot pass by ignoring crops.
+        let renderer = SpeculativeReelRenderer()
+        let before = thursday(removing: [b])
+        var after = before
+        after.reelCropOffsets[a.absoluteString] = CropOffset(x: 1, y: 1, scale: 2)
+        XCTAssertNotEqual(renderer.fingerprint(for: event(before)),
+                          renderer.fingerprint(for: event(after)))
+    }
+
     // MARK: - Marking in the editor
 
     private var keys: [String] { [a, b, c].map(\.absoluteString) }

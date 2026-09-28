@@ -1097,7 +1097,7 @@ struct PostingDay: Codable, Hashable {
     /// moved or a photograph is left out. Judged by what the reel SHOWS, so a
     /// removal left over for a photo no longer on the day counts for nothing.
     var hasReelEdits: Bool {
-        !reelCropOffsets.isEmpty || reelPhotoPaths.count != photoPaths.count
+        reelCropsAreMoved || reelPhotoPaths.count != photoPaths.count
     }
     var collageCellOverride: [CollageCell]? = nil      // user-adjusted frame layout (nil = use Python layout)
     var photoTags: [String: [String]] = [:]            // collage-carousel days: per-photo people tags, keyed by photo URL absoluteString
