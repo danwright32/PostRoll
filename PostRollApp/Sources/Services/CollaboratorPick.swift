@@ -855,6 +855,12 @@ enum CollaboratorPick {
         hasEngagementData ? "Edit figures" : addFiguresLabel
     }
 
+    /// What a screen reader hears for that control: the same action, named
+    /// for the account, so the spoken and shown labels cannot disagree.
+    static func figuresControlSpoken(hasEngagementData: Bool, handle: String) -> String {
+        "\(figuresControlLabel(hasEngagementData: hasEngagementData)) for \(handle)"
+    }
+
     /// The sentence the review screen puts under its heading, for any answer.
     ///
     /// Here rather than in the view so the screen and CAPTIONS.txt cannot come

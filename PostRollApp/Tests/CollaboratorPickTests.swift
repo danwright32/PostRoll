@@ -1374,6 +1374,17 @@ final class CollaboratorPickTests: XCTestCase {
         XCTAssertNotNil(CollaboratorPick.panelSubtitle(for: nothingCountable))
     }
 
+    func testTheFiguresControlIsSpokenAsItReads() {
+        // The screen reader hears the same action the button shows, named for
+        // the account, so "Add figures" is never announced as "Edit figures".
+        XCTAssertEqual(CollaboratorPick.figuresControlSpoken(hasEngagementData: false,
+                                                             handle: "tom_guthrie1"),
+                       "Add figures for tom_guthrie1")
+        XCTAssertEqual(CollaboratorPick.figuresControlSpoken(hasEngagementData: true,
+                                                             handle: "leyla.eames"),
+                       "Edit figures for leyla.eames")
+    }
+
     func testTheFiguresControlSaysWhetherThereAreFiguresToEdit() {
         XCTAssertEqual(CollaboratorPick.figuresControlLabel(hasEngagementData: true),
                        "Edit figures")

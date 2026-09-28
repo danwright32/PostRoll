@@ -232,7 +232,9 @@ struct CollaboratorPanel: View {
             .buttonStyle(BrandOutlineButtonStyle())
             .opacity(RecurringAccounts.emphasis(handle: candidate.handle, in: eventCounts)
                          == .prominent ? 1 : 0.8)
-            .accessibilityLabel("Edit figures for \(candidate.handle)")
+            .accessibilityLabel(CollaboratorPick.figuresControlSpoken(
+                hasEngagementData: candidate.stats?.hasEngagementData == true,
+                handle: candidate.handle))
         }
     }
 }
