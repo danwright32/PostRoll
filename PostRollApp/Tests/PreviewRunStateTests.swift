@@ -226,7 +226,7 @@ final class PreviewRunStateTests: XCTestCase {
         manager.applyRedraw(
             PythonBridge.PreviewGenerationResult(
                 paths: ["sunday": ["collage": "/new/collage.png"]], errors: [:]),
-            days: [.sunday], for: event.id, appState: state)
+            days: [.sunday], for: event.id, appState: state, work: .layoutSwitch)
 
         let landed = try XCTUnwrap(state.events.first(where: { $0.id == event.id }))
         XCTAssertEqual(landed.previewMediaPaths["sunday"]?["collage"], "/new/collage.png",
@@ -262,7 +262,7 @@ final class PreviewRunStateTests: XCTestCase {
         manager.applyRedraw(
             PythonBridge.PreviewGenerationResult(
                 paths: [:], errors: ["sunday": "collage failed: too few photos"]),
-            days: [.sunday], for: event.id, appState: state)
+            days: [.sunday], for: event.id, appState: state, work: .layoutSwitch)
 
         XCTAssertNotNil(manager.dayFailure(.sunday, for: event.id),
                         "a day that failed has to say so, or the screen shows the old "
@@ -493,7 +493,8 @@ final class PreviewRunStateTests: XCTestCase {
                 paths: ["sunday": ["collage": "/new/collage.png"]], errors: [:])
         }
 
-        XCTAssertTrue(manager.startRedraw([.sunday], for: event.id, appState: state))
+        XCTAssertTrue(manager.startRedraw([.sunday], for: event.id, appState: state,
+                                              work: .layoutSwitch))
         // What the layout control does next, in this same main actor turn: the
         // claim was granted, so the switch is written.
         var switched = try XCTUnwrap(state.events.first(where: { $0.id == event.id }))
@@ -532,7 +533,8 @@ final class PreviewRunStateTests: XCTestCase {
             throw Refused()
         }
 
-        XCTAssertTrue(manager.startRedraw([.sunday, .monday], for: event.id, appState: state))
+        XCTAssertTrue(manager.startRedraw([.sunday, .monday], for: event.id, appState: state,
+                                              work: .layoutSwitch))
         await Self.waitUntil("the run was never reached") { await reached.value != nil }
         await Self.waitUntil("the days were never released") {
             await MainActor.run { manager.regeneratingDays(event.id).isEmpty }

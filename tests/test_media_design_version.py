@@ -623,7 +623,7 @@ def _manifest(day: str, photo, **day_fields) -> dict:
     return {
         "event": "Test Event",
         "org": "Test Org",
-        "venue": "Test Venue",
+        "venue": "Test Venue", "folder_name": "test_event",
         "days": {day: {"photos": [str(photo)] * 4, **day_fields}},
     }
 

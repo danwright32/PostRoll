@@ -908,13 +908,18 @@
           "module": "postroll/ai/generate_media.py",
           "function": "generate_media",
           "variable": "manifest"
+        },
+        {
+          "module": "postroll/ai/generate_media.py",
+          "function": "manifest_folder_name",
+          "variable": "manifest"
         }
       ],
       "keys": {
         "event": "always",
         "org": "always",
         "venue": "always",
-        "date": "always",
+        "folder_name": "always",
         "days": "always",
         "shoot_type": "always",
         "preset": "always",

@@ -820,6 +820,11 @@ final class AppState {
         }
     }
 
+    /// Put an event's Edit Details sheet on screen (#1448).
+    func presentEditDetails(eventID: UUID) {
+        sheets.request(.editDetails(eventID), from: .person)
+    }
+
     // MARK: - postroll:// links (#840)
 
     /// Put the New Event sheet on screen.
@@ -985,6 +990,13 @@ final class AppState {
         copy.blogPhotoPaths = []
         copy.weekResult = nil
         copy.exportPath = nil
+        // The original's graphics are not the copy's: its photos are gone, and
+        // left pointing at them its first edit would pin the original's folder
+        // as its own (#1448). With nothing rendered, it has no folder yet.
+        copy.previewMediaPaths = [:]
+        copy.mediaErrors = [:]
+        copy.mediaWarnings = [:]
+        copy.folderName = nil
         // Resume from the earliest stage that requires new input
         if original.ocrReviewDone {
             copy.stage = .photosAssigned

@@ -85,7 +85,7 @@ def _manifest(day: str, tmp_path, sample_photo, bw: str) -> dict:
     return {
         "event": "Greatest Hits",
         "org": "Org",
-        "venue": "Hall",
+        "venue": "Hall", "folder_name": "test_event",
         "days": {
             day: {
                 "photos": [str(sample_photo)],

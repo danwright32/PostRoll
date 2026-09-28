@@ -95,7 +95,7 @@ def _base_manifest(clips, tmp_path, **friday_extra):
     friday = {"clips": clips}
     friday.update(friday_extra)
     return {
-        "event": "Test Show", "org": "Org", "venue": "Hall", "date": "2026-01-01",
+        "event": "Test Show", "org": "Org", "venue": "Hall", "folder_name": "test_event", "date": "2026-01-01",
         "days": {"friday": friday},
     }
 
@@ -258,7 +258,7 @@ def test_friday_with_no_clips_behaves_exactly_as_before(tmp_path):
     Image.new("RGB", (400, 600), "blue").save(edit_png)
 
     manifest = {
-        "event": "Test Show", "org": "Org", "venue": "Hall", "date": "2026-01-01",
+        "event": "Test Show", "org": "Org", "venue": "Hall", "folder_name": "test_event", "date": "2026-01-01",
         "days": {"friday": {"raw_photo": str(raw_png), "edited_photo": str(edit_png)}},
     }
     out_dir = tmp_path / "out"

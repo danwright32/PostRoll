@@ -228,6 +228,9 @@ struct MainWindowView: View {
             case .outdatedDesigns:
                 OutdatedDesignsSheet()
                     .environment(appState)
+            case .editDetails(let eventID):
+                EditEventDetailsSheet(eventID: eventID)
+                    .environment(appState)
             case .buildBehind(let behind):
                 BuildBehindSheet(behind: behind)
                     .environment(appState)

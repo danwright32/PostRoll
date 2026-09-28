@@ -123,7 +123,8 @@ struct SettingsView: View {
         for affected in impact.affected {
             if !affected.work.redrawDays.isEmpty {
                 _ = previews.startRedraw(affected.work.redrawDays,
-                                         for: affected.id, appState: appState)
+                                         for: affected.id, appState: appState,
+                                         work: .layoutSwitch)
             }
             if !affected.work.rebuildDays.isEmpty {
                 // The images of a rebuilt day are cleared first, so a failed

@@ -63,7 +63,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import shutil
 import sys
 import tempfile
@@ -136,45 +135,29 @@ DAY_FOLDER_NAMES = {
     "friday":    "6. Friday",
 }
 
-def _slug(text: str) -> str:
-    result = text.lower()
-    result = re.sub(r"[^a-z0-9]+", "_", result)
-    return result.strip("_")
+def manifest_folder_name(manifest: dict[str, Any]) -> str:
+    """The folder to render into, exactly as the app named it (#1448).
 
+    Never rebuilt here with `event_folder_name`. The fields it reads can be
+    edited after an event has been rendered, and the app pins the name it was
+    rendered under; a folder rebuilt from the edited fields would be a new one,
+    which the app's orphan sweep then deletes along with the week in it. A
+    manifest without the name is refused rather than defaulted, because the
+    default is right for every event until the first edited one.
 
-def event_folder_name(*, org: str, venue: str, event: str, date: str) -> str:
-    """The per-event folder name, shared with the Swift side.
-
-    Python creates this folder; Swift re-derives the same name months later in
-    order to delete it, and again to name an export. Nothing but
-    tests/fixtures/event_slug.json forces the three to agree (#108).
-
-    The organisation leads when there is one. An event can have none (#689): a
-    director hiring Dan to shoot a play is not an organisation, and there is
-    nothing to name. The venue takes its place there, because the folder still
-    has to say something about where the work came from, and a name starting
-    with a bare underscore says nothing while looking like a mistake. When
-    neither survives slugging, the name and the date stand alone rather than
-    carrying an empty segment.
-
-    The fallback is keyed on the organisation being BLANK, never on it slugging
-    away to nothing, and that distinction is load bearing. An organisation
-    written in a non latin script slugs to an empty string today and produces a
-    name with a leading underscore, and folders with those names already exist
-    on disk. Falling back for them would have Swift derive a different name for
-    a folder Python created months ago: it would miss it, leak it forever, and
-    the event would quietly keep two. So an organisation that is there keeps
-    exactly the name it has always had, underscore and all.
-
-    Only the genuinely absent case falls through, and there the empty segment is
-    not owed to anyone: when the venue slugs to nothing either, the name and the
-    date stand alone rather than carrying a leading underscore.
+    It is joined onto the output directory, so anything other than one plain
+    folder name is refused too.
     """
-    tail = f"{_slug(event)}_{date}"
-    if org.strip():
-        return f"{_slug(org)}_{tail}"
-    venue_lead = _slug(venue)
-    return f"{venue_lead}_{tail}" if venue_lead else tail
+    name = manifest.get("folder_name")
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError(
+            "the media manifest carries no folder_name, so there is no telling "
+            "which folder this event's graphics belong in")
+    if "/" in name or "\\" in name or name in (".", ".."):
+        raise ValueError(
+            f"folder_name {name!r} is not a single folder name, so rendering "
+            f"into it would write outside the output directory")
+    return name
 
 
 from ..media.ffmpeg_check import ffmpeg_status, ffmpeg_version_line  # noqa: E402
@@ -401,9 +384,7 @@ def generate_media(
     days_data  = manifest.get("days", {})
     preset     = manifest.get("preset", DEFAULT_PRESET)
 
-    folder_name = event_folder_name(org=org, venue=venue, event=event,
-                                    date=manifest.get("date", "undated"))
-    base_dir = output_dir / folder_name
+    base_dir = output_dir / manifest_folder_name(manifest)
     base_dir.mkdir(parents=True, exist_ok=True)
 
     results: dict[str, Any] = {}

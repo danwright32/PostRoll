@@ -154,7 +154,7 @@ def test_generate_week_names_the_day_it_is_working_on(tmp_path):
     Image.new("RGB", (120, 90), (40, 60, 80)).save(photo)
 
     manifest = {
-        "event": "E", "org": "O", "venue": "V", "date": "2026-04-05",
+        "event": "E", "org": "O", "venue": "V", "folder_name": "test_event", "date": "2026-04-05",
         "days": {"sunday": {"photos": [str(photo)]}},
         "program": {"performers": [], "pieces": []},
     }
@@ -182,7 +182,7 @@ def test_generate_week_marks_itself_finished(tmp_path):
 
     from postroll.ai import generate_week as gw
 
-    manifest = {"event": "E", "org": "O", "venue": "V", "date": "2026-04-05",
+    manifest = {"event": "E", "org": "O", "venue": "V", "folder_name": "test_event", "date": "2026-04-05",
                 "days": {}, "program": {}}
     progress = tmp_path / "progress.json"
 
@@ -195,7 +195,7 @@ def test_a_run_without_a_progress_path_still_works(tmp_path):
     # The CLI and every existing caller omit it.
     from postroll.ai import generate_week as gw
 
-    manifest = {"event": "E", "org": "O", "venue": "V", "date": "2026-04-05",
+    manifest = {"event": "E", "org": "O", "venue": "V", "folder_name": "test_event", "date": "2026-04-05",
                 "days": {}, "program": {}}
 
     gw.generate_week(manifest, tmp_path / "out.json")  # must not raise
@@ -213,7 +213,7 @@ def test_a_run_without_a_progress_path_still_works(tmp_path):
 
 def _media_manifest(tmp_path, days: dict) -> dict:
     return {
-        "event": "E", "org": "O", "venue": "V", "date": "2026-04-05",
+        "event": "E", "org": "O", "venue": "V", "folder_name": "test_event", "date": "2026-04-05",
         "days": days,
     }
 
