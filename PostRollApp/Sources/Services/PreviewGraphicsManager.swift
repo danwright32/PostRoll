@@ -412,25 +412,27 @@ final class PreviewGraphicsManager {
     /// event at once, and keyed by event alone the first to finish removed the
     /// other's handle and left its Stop doing nothing.
     private var redrawTasks: [UUID: [UUID: Task<Void, Never>]] = [:]
-    /// Which redraws have been asked to stop and have not stopped yet.
-    private var stoppingRedraws: Set<UUID> = []
+    /// Which runs have been asked to stop and have not stopped yet. Per run,
+    /// so a redraw started while another is winding down still reports its
+    /// own failure rather than reading as a stop Dan asked for.
+    private var stoppingRuns: Set<UUID> = []
 
     /// Stop the redraw running for this event. Returns whether there was one
     /// to stop, so a press after it finished is not mistaken for a stop (L197).
     @discardableResult
     func stopRedraw(_ eventID: UUID) -> Bool {
-        guard let runs = redrawTasks[eventID], !runs.isEmpty,
-              !stoppingRedraws.contains(eventID) else {
-            return false
+        let live = (redrawTasks[eventID] ?? [:]).filter { !stoppingRuns.contains($0.key) }
+        guard !live.isEmpty else { return false }
+        for (runID, task) in live {
+            stoppingRuns.insert(runID)
+            task.cancel()
         }
-        stoppingRedraws.insert(eventID)
-        for task in runs.values { task.cancel() }
         return true
     }
 
     /// A stop was asked for and the redraw has not stopped yet.
     func isStoppingRedraw(_ eventID: UUID) -> Bool {
-        stoppingRedraws.contains(eventID) && !(redrawTasks[eventID] ?? [:]).isEmpty
+        (redrawTasks[eventID] ?? [:]).keys.contains(where: stoppingRuns.contains)
     }
 
     /// Redraw these days' images, with no caption run anywhere near it (#1010).
@@ -449,9 +451,6 @@ final class PreviewGraphicsManager {
         // rendered from the copy read here.
         guard appState.events.contains(where: { $0.id == eventID }) else { return false }
         guard beginDayRegen(days, for: eventID) else { return false }
-        // A fresh redraw was not stopped, whatever happened to the last one,
-        // unless another is still winding down and has yet to say so.
-        if (redrawTasks[eventID] ?? [:]).isEmpty { stoppingRedraws.remove(eventID) }
 
         // Held so it can be stopped (#1448). It was a bare `Task { }`, the
         // shape #1050 removed from every other long action, and nothing found
@@ -461,9 +460,9 @@ final class PreviewGraphicsManager {
             guard let self else { return }
             defer {
                 self.redrawTasks[eventID]?.removeValue(forKey: runID)
-                if self.redrawTasks[eventID]?.isEmpty ?? true {
+                self.stoppingRuns.remove(runID)
+                if self.redrawTasks[eventID]?.isEmpty ?? false {
                     self.redrawTasks.removeValue(forKey: eventID)
-                    self.stoppingRedraws.remove(eventID)
                 }
             }
             // Read at RUN time, never at claim time (#1010).
@@ -500,7 +499,7 @@ final class PreviewGraphicsManager {
                 case .success(let result):
                     self.applyRedraw(result, days: days, for: eventID, appState: appState,
                                      work: work)
-                case .failure where Task.isCancelled || self.stoppingRedraws.contains(eventID):
+                case .failure where Task.isCancelled || self.stoppingRuns.contains(runID):
                     // Dan pressed stop. Every day goes back to what it showed
                     // before, and nothing is reported as failed, because
                     // nothing did (L11).

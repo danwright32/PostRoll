@@ -166,6 +166,28 @@ final class EventDetailsEditTests: XCTestCase {
         XCTAssertNil(copy?.folderName)
     }
 
+    @MainActor
+    func testAnEditedDuplicateGetsItsOwnFolder() throws {
+        // The copy keeps none of the original's graphics, so its first edit
+        // has nothing on disk to keep and must follow its own new details,
+        // never lock onto the original's folder.
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edit-details-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let original = broadwayUndressed(rendered: true)
+        let state = AppState(events: [original],
+                             storeURL: root.appendingPathComponent("events.json"),
+                             dataRoot: root)
+
+        let copyID = try XCTUnwrap(state.duplicateEvent(id: original.id))
+        let copy = try XCTUnwrap(state.events.first { $0.id == copyID })
+        let edited = edit(copy, name: "Broadway Undressed Night Two")
+
+        XCTAssertEqual(copy.previewMediaPaths, [:],
+                       "the copy still points at the original's rendered graphics")
+        XCTAssertNotEqual(EventFolder.name(for: edited), EventFolder.name(for: original))
+    }
+
     // MARK: - What a save offers to refresh
 
     func testASaveThatChangedNothingOffersNothing() {
@@ -339,6 +361,55 @@ final class EventDetailsEditTests: XCTestCase {
 
         XCTAssertTrue(manager.stopRedraw(ev.id),
                       "the long redraw is still running and must still be stoppable")
+        await Self.waitUntil("the stopped redraw never let go of its day") {
+            await MainActor.run { manager.regeneratingDays(ev.id).isEmpty }
+        }
+        XCTAssertNil(manager.dayFailure(.wednesday, for: ev.id))
+    }
+
+    /// Holds a render open until the test lets it go, ignoring cancellation,
+    /// so a stopped run can be kept winding down.
+    private actor Gate {
+        private var open = false
+        func release() { open = true }
+        func wait() async { while !open { await Task.yield() } }
+    }
+
+    @MainActor
+    func testAFailureDuringAnotherRedrawsStopIsStillAFailure() async throws {
+        struct Broke: LocalizedError { var errorDescription: String? { "ffmpeg died" } }
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("edit-details-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ev = edit(broadwayUndressed(rendered: true), org: "")
+        let state = AppState(events: [ev],
+                             storeURL: root.appendingPathComponent("events.json"),
+                             dataRoot: root)
+        let manager = PreviewGraphicsManager()
+        let gate = Gate()
+        let reached = Reached()
+        manager.renderPreview = { rendering, days in
+            if days == ["wednesday"] {
+                await reached.record(rendering)
+                await gate.wait()   // winds down slowly, whatever the stop says
+                throw CancellationError()
+            }
+            throw Broke()
+        }
+
+        XCTAssertTrue(manager.startRedraw([.wednesday], for: ev.id, appState: state,
+                                          work: .detailsEdited))
+        await Self.waitUntil("the first redraw never started") { await reached.event != nil }
+        XCTAssertTrue(manager.stopRedraw(ev.id))
+        XCTAssertTrue(manager.startRedraw([.sunday], for: ev.id, appState: state,
+                                          work: .layoutSwitch))
+        await Self.waitUntil("the second redraw never finished") {
+            await MainActor.run { !manager.regeneratingDays(ev.id).contains(.sunday) }
+        }
+
+        XCTAssertNotNil(manager.dayFailure(.sunday, for: ev.id),
+                        "Sunday really failed, and was reported as a stop Dan asked for")
+        await gate.release()
         await Self.waitUntil("the stopped redraw never let go of its day") {
             await MainActor.run { manager.regeneratingDays(ev.id).isEmpty }
         }

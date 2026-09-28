@@ -990,8 +990,12 @@ final class AppState {
         copy.blogPhotoPaths = []
         copy.weekResult = nil
         copy.exportPath = nil
-        // Its media is cleared, so it has no folder of its own yet, and it
-        // must not keep writing into the original's (#1448).
+        // The original's graphics are not the copy's: its photos are gone, and
+        // left pointing at them its first edit would pin the original's folder
+        // as its own (#1448). With nothing rendered, it has no folder yet.
+        copy.previewMediaPaths = [:]
+        copy.mediaErrors = [:]
+        copy.mediaWarnings = [:]
         copy.folderName = nil
         // Resume from the earliest stage that requires new input
         if original.ocrReviewDone {
