@@ -1202,6 +1202,7 @@ extension HostedControlLegibilityTests {
             expect("failure screen \(state.name)", "the failure screen for \(state.name)")
         }
         expect("event row at rest", "an event row at rest")
+        expect("Thursday reel editor", "the Thursday reel editor (#1457)")
         expect("event row selected", "a selected event row")
 
         // The three screens that could only ever be reviewed by launching the
