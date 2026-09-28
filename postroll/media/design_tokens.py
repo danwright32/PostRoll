@@ -145,11 +145,16 @@ MEDIA_DESIGN_VERSIONS: dict[str, int] = {
     # pair opened every reel sliced in half and was never seen whole at any point
     # in the file. The strip scrolls in a viewport between the two pieces of
     # chrome now, so no print can be painted over by either.
-    "reel_scroll": 4,
+    #
+    # 5: a landscape photograph with a row to itself keeps its own shape. It
+    # was capped at 480px, cutting a third off the top and bottom of a 3:2
+    # print (2026-09-28). Portrait heroes keep their cap.
+    "reel_scroll": 5,
     # The still the Thursday crop editor draws over. Same layout maths as the
     # reel it previews, so a redesign of one dates the other: 3 is #898's
-    # viewport, which moved this strip's own padding at both ends.
-    "reel_preview": 3,
+    # viewport, which moved this strip's own padding at both ends. 4 is the
+    # uncapped landscape hero, reel_scroll's 5.
+    "reel_preview": 4,
     # Friday's auto-cut clip reel. The feature is retired (2026-07-09) but the
     # renderer is still reachable, and an asset that can still be produced
     # still needs to say which design produced it.
@@ -235,8 +240,8 @@ MEDIA_DESIGN_CHANGED: dict[str, "DesignChange"] = {
     "reel_screen": DesignChange(version=2, day="2026-08-21"),
     "reel_morph": DesignChange(version=3, day="2026-08-21"),
     "reel_slider": DesignChange(version=4, day="2026-09-02"),
-    "reel_scroll": DesignChange(version=4, day="2026-08-31"),
-    "reel_preview": DesignChange(version=3, day="2026-08-27"),
+    "reel_scroll": DesignChange(version=5, day="2026-09-28"),
+    "reel_preview": DesignChange(version=4, day="2026-09-28"),
     "reel_clip": DesignChange(version=2, day="2026-08-22"),
 }
 

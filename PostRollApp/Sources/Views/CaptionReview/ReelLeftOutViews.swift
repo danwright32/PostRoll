@@ -76,7 +76,7 @@ struct LeftOutRow: View {
     }
 }
 
-private struct LeftOutThumb: View {
+struct LeftOutThumb: View {
     let item: ReelRemoval.LeftOut
     let onTap: () -> Void
 
