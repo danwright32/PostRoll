@@ -281,7 +281,7 @@ final class CollaboratorBlockTests: XCTestCase {
         let captions = try String(
             contentsOf: exported.folder.appendingPathComponent("CAPTIONS.txt"), encoding: .utf8)
 
-        XCTAssertFalse(captions.contains("Add numbers"), captions)
+        XCTAssertFalse(captions.contains(CollaboratorPick.addFiguresLabel), captions)
         XCTAssertTrue(captions.contains("fetch"), captions)
     }
 }

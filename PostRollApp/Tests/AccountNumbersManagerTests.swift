@@ -432,6 +432,38 @@ final class AccountNumbersManagerTests: XCTestCase {
                         + "the note names an explanation nobody can read (L111)")
     }
 
+    func testOnlyALaunchThatLeftTheRankingShortIsSaidOnScreen() {
+        // Every outcome, so none is left to a default (L151). The two that
+        // speak are the two that explain an empty ranking; the rest need
+        // nothing from Dan and were a warning line over a healthy list (#1452).
+        let said: [(AccountNumbersManager.PassOutcome, Bool)] = [
+            (.nothingDue, false),
+            (.alreadyRunning, false),
+            (.asked(asked: 4, measured: 4), false),
+            (.asked(asked: 4, measured: 1), false),
+            (.couldNotRun, true),
+            (.asked(asked: 4, measured: 0), true),
+        ]
+        for (outcome, shown) in said {
+            XCTAssertEqual(AccountNumbersManager.launchNoteIsShown(for: outcome), shown,
+                           "\(outcome)")
+        }
+    }
+
+    func testALaunchWithNothingToAskAboutPutsNothingOnScreen() async {
+        let owned = owners { _ in [] }
+        let answered = AccountStats(followers: 1_000, likes: 50, comments: 5,
+                                    recordedOn: now, outcome: .measured)
+
+        owned.backfillEventsInProgress(events: recurring("carnegiehall"),
+                                       stats: { _ in answered }, asOf: now)
+        await settle()
+
+        XCTAssertNotNil(owned.accountNumbers.backfillNote, "the pass never reported")
+        XCTAssertEqual(owned.accountNumbers.notes, [],
+                       "a launch that needed nothing still puts a warning over the list")
+    }
+
     func testTheFourLaunchStatesDoNotShareWording() {
         // Distinct causes get distinct messages (L11). Only two of these ask
         // anything of Dan, and a shared sentence is what makes the other two

@@ -1360,11 +1360,33 @@ final class CollaboratorPickTests: XCTestCase {
                         .contains("Invite these"))
     }
 
-    func testTheScreenSaysThereIsNothingToRankRatherThanPromisingAList() {
-        let line = CollaboratorPick.panelSubtitle(for: nothingCountable)
+    func testARankedDayHasNoSentenceAboveItsList() {
+        // The numbered list is the answer, and "Instagram allows 5 per post"
+        // over it on every day said nothing Dan did not know (#1452).
+        XCTAssertEqual(oneOfSevenCounted.coverage, .ranked)
+
+        XCTAssertNil(CollaboratorPick.panelSubtitle(for: oneOfSevenCounted))
+    }
+
+    func testEveryOtherAnswerStillSaysWhatItIs() {
+        // The days with no ranked list are the ones where a sentence carries
+        // the answer, so each of them keeps one.
+        XCTAssertNotNil(CollaboratorPick.panelSubtitle(for: nothingCountable))
+    }
+
+    func testTheFiguresControlSaysWhetherThereAreFiguresToEdit() {
+        XCTAssertEqual(CollaboratorPick.figuresControlLabel(hasEngagementData: true),
+                       "Edit figures")
+        XCTAssertEqual(CollaboratorPick.figuresControlLabel(hasEngagementData: false),
+                       CollaboratorPick.addFiguresLabel)
+        XCTAssertEqual(CollaboratorPick.addFiguresLabel, "Add figures")
+    }
+
+    func testTheScreenSaysThereIsNothingToRankRatherThanPromisingAList() throws {
+        let line = try XCTUnwrap(CollaboratorPick.panelSubtitle(for: nothingCountable))
         XCTAssertTrue(line.contains("nothing to rank"), line)
         XCTAssertTrue(line.contains("7 accounts are tagged"), line)
-        XCTAssertTrue(line.contains("Add numbers"),
+        XCTAssertTrue(line.contains(CollaboratorPick.addFiguresLabel),
                       "the way out is named on the screen that reports the state: \(line)")
 
         XCTAssertNotEqual(CollaboratorPick.panelSubtitle(for: oneOfSevenCounted), line,
@@ -1372,7 +1394,7 @@ final class CollaboratorPickTests: XCTestCase {
                           + "alike")
     }
 
-    func testANothingToRankDayWhoseFetchFailedDoesNotSendDanToTypeNumbers() {
+    func testANothingToRankDayWhoseFetchFailedDoesNotSendDanToTypeNumbers() throws {
         // Every real figures fetch crashed for 17 days in September 2026 and
         // the panel told Dan to add numbers by hand, with the cause in a grey
         // line under the last row (#1431). Typing is not the remedy for a
@@ -1380,15 +1402,15 @@ final class CollaboratorPickTests: XCTestCase {
         var failed = nothingCountable
         failed.fetchFailed = true
 
-        let line = CollaboratorPick.panelSubtitle(for: failed)
-        XCTAssertFalse(line.contains("Add numbers"),
+        let line = try XCTUnwrap(CollaboratorPick.panelSubtitle(for: failed))
+        XCTAssertFalse(line.contains(CollaboratorPick.addFiguresLabel),
                        "the screen offers typing as the fix for a failed fetch: \(line)")
         XCTAssertTrue(line.contains("fetch"), "the sentence does not say the fetch "
                       + "is why nothing has numbers: \(line)")
         XCTAssertTrue(line.contains("7 accounts are tagged"), line)
 
         let block = CollaboratorPick.captionBlock(failed)
-        XCTAssertFalse(block.contains("Add numbers"),
+        XCTAssertFalse(block.contains(CollaboratorPick.addFiguresLabel),
                        "CAPTIONS.txt and the screen describe the day differently: \(block)")
         XCTAssertTrue(block.contains("fetch"), block)
     }
