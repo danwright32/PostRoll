@@ -1078,10 +1078,29 @@ enum CollaboratorPick {
 
     // MARK: - Saying why
 
-    /// Said when the API refused to report on an account and the score is
-    /// therefore an assumption (#1005).
-    static let assumedRateLabel =
-        "no engagement figures, so scored on an assumed \(percentText(assumedRate)) rate"
+    /// Said when an account has followers and no likes or comments, so the
+    /// score is an assumption (#1005), worded by how its last check ended
+    /// (#1453). "No engagement figures" alone could not say whether PostRoll
+    /// asked and was refused, asked and got no answer, or never asked, and
+    /// those three want different things from Dan.
+    static func assumedRateLabel(for outcome: AccountStats.FetchOutcome?) -> String {
+        let estimate = "likes and comments are estimated at \(percentText(assumedRate))"
+        guard let outcome else {
+            return "not checked yet, so \(estimate)"
+        }
+        switch outcome {
+        case .notProfessional:
+            return "personal account, and Instagram shares followers only, so \(estimate)"
+        case .noSuchAccount:
+            return "Instagram has no account by that name, so \(estimate)"
+        case .measured:
+            return "Instagram gave no likes or comments for it, so \(estimate)"
+        case .couldNotClassify, .rateLimited, .networkFailed, .tokenRejected,
+             .handleChangedHands:
+            return "Instagram did not answer the last check, so \(estimate) "
+                 + "until the next check"
+        }
+    }
 
     /// Said when the ACCOUNT withheld its like count (#1032).
     ///
@@ -1089,8 +1108,8 @@ enum CollaboratorPick {
     /// remedies: an account that hides a figure may start showing it, and one
     /// Meta cannot report on never will.
     static let hiddenLikesLabel =
-        "like count hidden by the account, so scored on an assumed "
-        + "\(percentText(assumedRate)) rate"
+        "like count hidden by the account, so likes are estimated at "
+        + "\(percentText(assumedRate))"
 
     /// Said when an account is demoted for having an audience that is not there.
     static let belowFloorLabel = "audience barely engages, so it is ranked last"
@@ -1108,7 +1127,7 @@ enum CollaboratorPick {
                 // account is that it is unmeasurable, and a reason line that
                 // reported the assumed figures as measurements would claim
                 // something nobody took.
-                parts.append(scored.likesHidden ? hiddenLikesLabel : assumedRateLabel)
+                parts.append(scored.likesHidden ? hiddenLikesLabel : assumedRateLabel(for: stats.outcome))
                 // The comments ARE measured even when the likes are not, so
                 // they are still named: dropping them would understate what is
                 // actually known about the account.

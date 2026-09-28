@@ -506,13 +506,13 @@ final class CollaboratorPickTests: XCTestCase {
             firstPhoto: nil, stats: lookup(table), asOf: now)
 
         let reason = result.suggested.first(where: { $0.handle == "refused" })?.reason ?? ""
-        XCTAssertTrue(reason.lowercased().contains("assum"), reason)
+        XCTAssertTrue(reason.lowercased().contains("estimated"), reason)
         XCTAssertFalse(reason.lowercased().contains("not counted yet"),
                        "an account that IS being scored must not also say nobody has "
                        + "counted it: \(reason)")
 
         let block = CollaboratorPick.captionBlock(result)
-        XCTAssertTrue(block.lowercased().contains("assum"),
+        XCTAssertTrue(block.lowercased().contains("estimated"),
                       "the file says nothing about the assumption the ranking made:\n"
                       + block)
     }
@@ -744,7 +744,7 @@ final class CollaboratorPickTests: XCTestCase {
         let reason = result.suggested.first(where: { $0.handle == "hidden" })?.reason ?? ""
         XCTAssertTrue(reason.lowercased().contains("hidden")
                       || reason.lowercased().contains("withheld"), reason)
-        XCTAssertTrue(reason.lowercased().contains("assum"), reason)
+        XCTAssertTrue(reason.lowercased().contains("estimated"), reason)
         XCTAssertFalse(reason.contains("0 likes"),
                        "the reason line reports a zero nobody measured: \(reason)")
 
@@ -777,11 +777,56 @@ final class CollaboratorPickTests: XCTestCase {
         // causes carrying the same label and the mutation sweep said SURVIVED
         // (L178).
         XCTAssertTrue(a.contains(CollaboratorPick.hiddenLikesLabel), a)
-        XCTAssertFalse(a.contains(CollaboratorPick.assumedRateLabel),
+        XCTAssertFalse(a.contains(CollaboratorPick.assumedRateLabel(for: .notProfessional)),
                        "the hidden case also claims Meta gave no figures at all: \(a)")
-        XCTAssertTrue(b.contains(CollaboratorPick.assumedRateLabel), b)
+        XCTAssertTrue(b.contains(CollaboratorPick.assumedRateLabel(for: .notProfessional)), b)
         XCTAssertFalse(b.contains(CollaboratorPick.hiddenLikesLabel),
                        "an account Meta refused is described as hiding a figure: \(b)")
+    }
+
+    // MARK: - Why an account has no likes or comments (#1453)
+
+    func testEveryWayOfEndingUpEstimatedSaysWhichOneItWas() {
+        // Every recorded ending plus "never asked", so none falls back to a
+        // shared sentence (L151). Three groups a person acts on differently:
+        // an account that will never share them, a check worth running again,
+        // and one never run.
+        typealias O = AccountStats.FetchOutcome
+        let personal = CollaboratorPick.assumedRateLabel(for: .notProfessional)
+        let retry = [O.couldNotClassify, .rateLimited, .networkFailed, .tokenRejected,
+                     .handleChangedHands].map { CollaboratorPick.assumedRateLabel(for: $0) }
+        let never = CollaboratorPick.assumedRateLabel(for: nil)
+        let gone = CollaboratorPick.assumedRateLabel(for: .noSuchAccount)
+        let empty = CollaboratorPick.assumedRateLabel(for: .measured)
+
+        XCTAssertTrue(personal.contains("personal account"), personal)
+        XCTAssertTrue(personal.contains("followers only"), personal)
+        for label in retry {
+            XCTAssertTrue(label.contains("did not answer"), label)
+            XCTAssertTrue(label.contains("next check"), label)
+        }
+        XCTAssertTrue(never.contains("not checked yet"), never)
+        XCTAssertTrue(gone.contains("no account by that name"), gone)
+        let all = [personal, never, gone, empty] + retry
+        XCTAssertEqual(Set([personal, retry[0], never, gone, empty]).count, 5,
+                       "two different endings read the same: \(all)")
+        for label in all {
+            XCTAssertTrue(label.contains(CollaboratorPick.percentText(CollaboratorPick.assumedRate)),
+                          "the estimate is not named: \(label)")
+        }
+    }
+
+    func testAPersonalAccountRowSaysItIsPersonal() {
+        let table = ["tom": refusedByTheAPI(203)]
+            .merging(Dictionary(uniqueKeysWithValues:
+                ["b", "c", "d", "e", "f"].map { ($0, stats(1_000, 1, 0)) })) { a, _ in a }
+        let result = CollaboratorPick.suggest(handles: ["tom", "b", "c", "d", "e", "f"],
+                                              firstPhoto: nil, stats: lookup(table), asOf: now)
+
+        let reason = result.suggested.first(where: { $0.handle == "tom" })?.reason
+            ?? result.unranked.first(where: { $0.handle == "tom" })?.reason ?? ""
+
+        XCTAssertTrue(reason.contains("personal account"), reason)
     }
 
     func testAWithheldLikeCountWithNoFollowersIsStillNotScored() {
