@@ -29,6 +29,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
+from postroll.temp_files import temp_sibling
 from typing import Any
 
 from .data_root import data_root, running_under_test
@@ -758,7 +760,7 @@ def _download(url: str, dest: Path) -> None:
     # connection must never leave a truncated file at the cache path, where
     # every later run would treat it as a valid cached track and mux it into
     # reels. The pid suffix keeps parallel generations from colliding.
-    tmp = dest.with_suffix(f".{os.getpid()}.part")
+    tmp = temp_sibling(dest, "part")  # sweeps dead runs' partial downloads (#1458)
     try:
         with urllib.request.urlopen(url, timeout=60) as src, open(tmp, "wb") as dst:
             while chunk := src.read(65536):

@@ -33,6 +33,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from postroll.temp_files import temp_sibling
+
 from PIL import Image, ImageDraw
 
 from .design_tokens import DIVIDER_WHITE as DIVIDER_COLOR
@@ -310,7 +312,7 @@ def generate_reel_slider(
         # render's orphaned ffmpeg can never corrupt the final file.
         output = Path(output_path)
         output.parent.mkdir(parents=True, exist_ok=True)
-        encode_tmp = output.with_suffix(f".{os.getpid()}.tmp.mp4")
+        encode_tmp = temp_sibling(output, "tmp.mp4")  # sweeps dead runs' temps (#1458)
 
         if audio_path:
             # Fit the audio to the reel length: short tracks loop with
