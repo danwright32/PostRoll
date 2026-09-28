@@ -73,7 +73,7 @@ enum MediaDesign {
         "reel_screen": 2,
         "reel_morph": 3,
         "reel_slider": 4,
-        "reel_scroll": 5,
+        "reel_scroll": 6,
         "reel_preview": 4,
         "reel_clip": 2,
     ]
