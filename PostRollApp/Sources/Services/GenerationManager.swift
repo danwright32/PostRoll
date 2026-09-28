@@ -62,7 +62,9 @@ final class GenerationManager {
                regenerateGraphics: Bool? = nil, forcePaidPath: Bool = false) {
         // Snapshot the event for its input paths. The write-back later re-reads
         // the live event so edits made during the run aren't clobbered.
-        guard let ev = appState.events.first(where: { $0.id == eventID }) else { return }
+        // Claimed before the snapshot, so the week's graphics go into this
+        // event's own folder: a duplicate's first run lands here (#1450).
+        guard let ev = appState.claimFolder(eventID) else { return }
 
         // A new run replaces whatever was there. Said through the tracker's
         // own name for it, because this is not somebody pressing stop and no

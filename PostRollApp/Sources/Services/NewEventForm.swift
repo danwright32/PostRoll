@@ -53,7 +53,7 @@ enum NewEventForm {
                        venue: String,
                        venueContext: String) -> Event {
         var edited = event
-        if edited.folderName == nil && hasWrittenToDisk(event) {
+        if edited.folderName == nil && event.hasFilesOnDisk {
             edited.folderName = EventFolder.name(for: event)
         }
         edited.name = FieldText.singleLine(name)
@@ -62,11 +62,12 @@ enum NewEventForm {
         edited.venueContext = FieldText.singleLine(venueContext)
         return edited
     }
+}
 
+extension Event {
     /// Whether a folder named after this event may exist: previews rendered,
     /// a week generated (the step that renders them), or an export run.
-    private static func hasWrittenToDisk(_ event: Event) -> Bool {
-        !event.previewMediaPaths.isEmpty || event.weekResult != nil
-            || event.exportPath != nil
+    var hasFilesOnDisk: Bool {
+        !previewMediaPaths.isEmpty || weekResult != nil || exportPath != nil
     }
 }

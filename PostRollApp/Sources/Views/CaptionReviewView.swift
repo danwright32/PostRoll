@@ -750,7 +750,7 @@ struct CaptionReviewView: View {
                 save()
                 // Assume the user will Apply: start encoding the new crop in the
                 // background now so the button press is near-instant.
-                if day == .thursday { graphics.speculativeReel(for: event.id).schedule(for: liveEvent) }
+                if day == .thursday { graphics.speculativeReel(for: event.id).schedule(eventID: event.id, in: appState) }
             }
         )
     }
@@ -1486,7 +1486,7 @@ struct CaptionReviewView: View {
         ev.days[day.rawValue] = pd
         appState.updateEvent(ev)
         // Pre-render the swapped order in the background ahead of "Apply changes".
-        if day == .thursday { graphics.speculativeReel(for: event.id).schedule(for: liveEvent) }
+        if day == .thursday { graphics.speculativeReel(for: event.id).schedule(eventID: event.id, in: appState) }
     }
 
     /// Claim the day, persist what the rebuild is for, and render it.

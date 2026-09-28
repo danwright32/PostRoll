@@ -61,9 +61,13 @@ final class SpeculativeReelRenderer {
 
     /// Schedule a speculative render for the current state. Debounced, and a
     /// no-op if we already have (or are already building) this exact state.
-    /// Pass a live event snapshot read straight from AppState after `save()`.
-    func schedule(for event: Event) {
-        guard let fp = fingerprint(for: event) else { return }
+    ///
+    /// Takes the event by id and reads it here, after claiming its folder, so
+    /// the render cannot be handed a snapshot that writes somewhere its own
+    /// folder is not (#1450). Call it after `save()`.
+    func schedule(eventID: UUID, in appState: AppState) {
+        guard let event = appState.claimFolder(eventID),
+              let fp = fingerprint(for: event) else { return }
         // Already have it, or already building it — nothing to do.
         if completed?.fingerprint == fp { return }
         if inFlight?.fingerprint == fp { return }

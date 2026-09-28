@@ -820,6 +820,37 @@ final class AppState {
         }
     }
 
+    /// Pin the folder this event's files go in, before anything is written
+    /// there, and return the event as it now stands (#1450).
+    ///
+    /// Every writer calls this first, so the snapshot it renders from carries
+    /// the pinned name. A pin already made is kept. Otherwise the event takes
+    /// the name it derives, unless another event already resolves to that name
+    /// and this one has nothing on disk yet: then it takes the next free
+    /// numbered name, so a duplicate rendered straight away gets its own folder
+    /// while an original with a week on disk is never moved out of its own.
+    ///
+    /// Synchronous on the main actor and a no-op once pinned, so two writers
+    /// claiming at once land in the same folder.
+    @discardableResult
+    func claimFolder(_ eventID: UUID) -> Event? {
+        guard var event = events.first(where: { $0.id == eventID }) else { return nil }
+        if event.folderName != nil { return event }
+        let base = EventFolder.name(for: event)
+        var name = base
+        if !event.hasFilesOnDisk {
+            let taken = Set(events.filter { $0.id != eventID }.map(EventFolder.name(for:)))
+            var next = 2
+            while taken.contains(name) {
+                name = "\(base)_\(next)"
+                next += 1
+            }
+        }
+        event.folderName = name
+        updateEvent(event)
+        return event
+    }
+
     /// Put an event's Edit Details sheet on screen (#1448).
     func presentEditDetails(eventID: UUID) {
         sheets.request(.editDetails(eventID), from: .person)
