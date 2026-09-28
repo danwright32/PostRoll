@@ -65,8 +65,9 @@ enum ScrollReelTiming {
     // so the sentence the editor shows and the reel the encoder makes cannot
     // describe different speeds.
 
-    /// The frame rate the reel is encoded at, and that Instagram re-encodes to.
-    static let fps: Double = 30
+    /// The frame rate the reel is encoded at, and that Instagram plays (#1456:
+    /// posted both ways and watched in the app, 2026-09-28).
+    static let fps: Double = 60
 
     /// How much of the gallery a viewer sees at once. The reading below is
     /// expressed as how long a full screen takes to be replaced, because that
@@ -79,6 +80,7 @@ enum ScrollReelTiming {
 
     /// The speed Dan settled on by watching a ladder of ten renders of one
     /// reel on 2026-08-30: 11.50px a frame read as fast, 10.81 read as right.
+    /// Per 60fps frame: that ladder was watched at 60 (#1456).
     static let comfortableTravelPx: Double = 10.81
 
     /// How far the strip travels in total. A strip no taller than the viewport
@@ -129,10 +131,11 @@ enum ScrollReelTiming {
     /// blocks no render and changes no reel.
     ///
     /// It names BOTH remedies with real numbers, and which one it leads with is
-    /// decided by whether the slider can actually reach the answer. At 234
-    /// photographs the slider's 90 second maximum still leaves the reel faster
-    /// than one Dan had already called too fast, so naming only the duration
-    /// would point at a control that cannot solve the problem (L80, L111).
+    /// decided by whether the slider can actually reach the answer. A strip
+    /// the slider's 90 second maximum still leaves too fast gets only the photo
+    /// count, since naming the duration would point at a control that cannot
+    /// solve the problem (L80, L111). At 60fps no measured reel is that long
+    /// (#1456), but a Thursday of 400 photographs would be.
     static func speedNotice(stripHeight: Double, photoCount: Int,
                             scrollSeconds: Double) -> String? {
         guard photoCount > 0, scrollSeconds > 0 else { return nil }
@@ -147,7 +150,14 @@ enum ScrollReelTiming {
         // Named as a whole reel, the unit the slider sets (#1433).
         let needed = reelSeconds(scrollSeconds: comfortableScrollSeconds(stripHeight: stripHeight))
         if needed <= sliderMaximumSeconds {
-            return opening + "Try \(Int(needed.rounded())) seconds."
+            // Both remedies, because the longer reel is not the only one: Dan
+            // prefers keeping the length and leaving photographs out
+            // (2026-09-28), and the editor can do that now.
+            let fewer = comfortablePhotoCount(
+                stripHeight: stripHeight, photoCount: photoCount,
+                scrollSeconds: scrollSeconds)
+            return opening + "Try \(Int(needed.rounded())) seconds, or about "
+                + "\(fewer) photographs rather than \(photoCount)."
         }
 
         let fewer = comfortablePhotoCount(

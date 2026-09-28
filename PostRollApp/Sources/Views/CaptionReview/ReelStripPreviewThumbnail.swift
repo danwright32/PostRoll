@@ -43,7 +43,8 @@ struct ReelStripPreviewThumbnail: View {
     var onSwapAudio: (() -> Void)? = nil
     var onUploadAudio: (() -> Void)? = nil
     var onChangePhotos: (() -> Void)? = nil
-    var onSwapPhotos: ((URL, URL) -> Void)? = nil
+    /// Swapping and leaving out photos. Nil hides both modes.
+    var photoEdits: ReelPhotoEdits? = nil
     /// The whole reel's length, holds included (#1433), shown on the "Reel
     /// length…" item and where its popover starts. nil hides the item.
     var currentReelLength: Double? = nil
@@ -67,6 +68,10 @@ struct ReelStripPreviewThumbnail: View {
     // cell tapped; the next cell tap completes the swap and exits the mode.
     @State private var swapMode: Bool = false
     @State private var swapSourceIdx: Int? = nil
+    // Removal mode: every tap marks or unmarks a photo to leave out of the
+    // reel. Marks are saved as they are made and baked in by "Apply changes",
+    // like swaps and crops.
+    @State private var removeMode: Bool = false
 
     /// One sentence when this reel is faster than is comfortable to watch.
     ///
@@ -78,6 +83,32 @@ struct ReelStripPreviewThumbnail: View {
     /// fast at.
     /// Whether the pace sample is open.
     @State private var showingPace = false
+
+    /// Each cell's key, as `reelRemovedPhotos` and `reelCropOffsets` hold it.
+    private var shownKeys: [String] {
+        cells.map { URL(fileURLWithPath: $0.photoPath).absoluteString }
+    }
+
+    private var removed: Set<String> { photoEdits?.removed ?? [] }
+
+    /// The line over the strip while marking photos to leave out.
+    private var removeBanner: String {
+        let marked = shownKeys.filter { removed.contains($0) }.count
+        let comfortable = currentReelLength.map {
+            ScrollReelTiming.comfortablePhotoCount(
+                stripHeight: Double(stripH), photoCount: cells.count,
+                scrollSeconds: ScrollReelTiming.scrollSeconds(reelSeconds: $0))
+        }
+        return ReelRemoval.banner(marked: marked, shown: cells.count,
+                                  comfortable: comfortable, reelSeconds: currentReelLength)
+    }
+
+    private func enterRemoveMode() {
+        removeMode = true
+        swapMode = false
+        swapSourceIdx = nil
+        selectedCellIndex = nil
+    }
 
     private var speedNotice: String? {
         guard let currentReelLength else { return nil }
@@ -107,6 +138,27 @@ struct ReelStripPreviewThumbnail: View {
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
                     .foregroundStyle(ink.accentText)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(PaintedSurfaces.taggedAccountsFill)
+                .clipShape(RoundedRectangle(cornerRadius: Radius.xs))
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+            if removeMode {
+                HStack(spacing: 8) {
+                    Image(systemName: "minus.circle")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(ink.accentMark)
+                    Text(removeBanner)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(ink.strong)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button("Done") { removeMode = false }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11))
+                        .foregroundStyle(ink.accentText)
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
@@ -150,14 +202,20 @@ struct ReelStripPreviewThumbnail: View {
                                     get: { cropOffsets[photoKey] ?? CropOffset() },
                                     set: { cropOffsets[photoKey] = $0 }
                                 ),
-                                isSelected: !swapMode && selectedCellIndex == idx,
+                                isSelected: !swapMode && !removeMode && selectedCellIndex == idx,
                                 isDragTarget: swapMode && swapSourceIdx == idx,
                                 cellW: CGFloat(cell.w) * sx,
                                 cellH: CGFloat(cell.h) * sx,
                                 photoURL: URL(fileURLWithPath: cell.photoPath),
                                 onTap: { handleCellTap(idx: idx) },
-                                onDragEnd: { if !swapMode { selectedCellIndex = idx } }
+                                onDragEnd: { if !swapMode && !removeMode { selectedCellIndex = idx } }
                             )
+                            .overlay {
+                                if removed.contains(photoKey) {
+                                    LeftOutMark(width: CGFloat(cell.w) * sx,
+                                                height: CGFloat(cell.h) * sx)
+                                }
+                            }
                             .position(
                                 x: CGFloat(cell.x) * sx + CGFloat(cell.w) * sx / 2,
                                 y: CGFloat(cell.y) * sx + CGFloat(cell.h) * sx / 2
@@ -221,13 +279,20 @@ struct ReelStripPreviewThumbnail: View {
                             }
                             .disabled(isRegenerating)
                         }
-                        if onSwapPhotos != nil {
+                        if photoEdits != nil {
                             Button {
                                 swapMode = true
+                                removeMode = false
                                 swapSourceIdx = nil
                                 selectedCellIndex = nil
                             } label: {
                                 Label("Swap two photos", systemImage: "arrow.left.arrow.right")
+                            }
+                            .disabled(isRegenerating || cells.count < 2)
+                            Button {
+                                enterRemoveMode()
+                            } label: {
+                                Label("Remove photos", systemImage: "minus.circle")
                             }
                             .disabled(isRegenerating || cells.count < 2)
                         }
@@ -358,6 +423,21 @@ struct ReelStripPreviewThumbnail: View {
             .padding(.horizontal, 2)
             .animation(.easeOut(duration: 0.15), value: selectedCellIndex != nil)
 
+            if let photoEdits {
+                LeftOutRow(
+                    items: ReelRemoval.leftOut(all: photoEdits.allPhotos,
+                                               removed: photoEdits.removed,
+                                               shown: shownKeys),
+                    isRegenerating: isRegenerating,
+                    onToggle: { url in
+                        photoEdits.setRemoved(
+                            photoEdits.removed.symmetricDifference([url.absoluteString]))
+                    },
+                    onRestoreAll: {
+                        photoEdits.setRemoved(photoEdits.removed.intersection(shownKeys))
+                    })
+            }
+
             // Apply-changes bar — explicit, always visible so the user knows
             // how to bake their crops into the actual MP4. Matches Wednesday's
             // "Apply frame changes" pattern.
@@ -369,13 +449,22 @@ struct ReelStripPreviewThumbnail: View {
                         .font(.system(size: 11))
                         .foregroundStyle(ink.sentence)
                     Spacer()
-                    if onSwapPhotos != nil && !swapMode {
+                    if photoEdits != nil && !swapMode && !removeMode {
                         Button {
                             swapMode = true
                             swapSourceIdx = nil
                             selectedCellIndex = nil
                         } label: {
                             Label("Swap photos", systemImage: "arrow.left.arrow.right")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(ink.accentText)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isRegenerating || cells.count < 2)
+                        Button {
+                            enterRemoveMode()
+                        } label: {
+                            Label("Remove photos", systemImage: "minus.circle")
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundStyle(ink.accentText)
                         }
@@ -435,11 +524,17 @@ struct ReelStripPreviewThumbnail: View {
     }
 
     private func handleCellTap(idx: Int) {
+        if removeMode {
+            guard let photoEdits, idx < shownKeys.count else { return }
+            photoEdits.setRemoved(ReelRemoval.toggling(
+                shownKeys[idx], in: photoEdits.removed, shown: shownKeys))
+            return
+        }
         if swapMode {
             if let src = swapSourceIdx {
                 if src == idx {
                     swapSourceIdx = nil
-                } else if let onSwap = onSwapPhotos,
+                } else if let onSwap = photoEdits?.swap,
                           src < cells.count, idx < cells.count {
                     let a = URL(fileURLWithPath: cells[src].photoPath)
                     let b = URL(fileURLWithPath: cells[idx].photoPath)

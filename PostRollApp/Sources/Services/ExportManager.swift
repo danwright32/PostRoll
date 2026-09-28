@@ -470,7 +470,7 @@ final class ExportManager {
                 }
 
                 // Thursday reel renders a live overlay on saved frames; if the user
-                // has crop offsets, force a Python regen so they bake in.
+                // has crop offsets or left photos out, force a Python regen so they bake in.
                 let hasUnflattenedEdits: Bool = {
                     guard let pd = capturedEvent.days[day.rawValue] else { return false }
                     // Keeping the approved video means taking the copy, which
@@ -480,7 +480,7 @@ final class ExportManager {
                     // add is a different arrangement, which is the thing Dan
                     // just said no to.
                     if day == .thursday, reelDecision == .keepApproved { return false }
-                    if day == .thursday { return !pd.reelCropOffsets.isEmpty }
+                    if day == .thursday { return pd.hasReelEdits }
                     return false
                 }()
 

@@ -31,7 +31,7 @@ struct CollageCellOverlay: View {
     @State private var dragTranslation: CGSize = .zero
     @State private var photo: NSImage? = nil
 
-    private var isMoved: Bool { cropOffset.x != 0 || cropOffset.y != 0 || cropOffset.scale != 1.0 }
+    private var isMoved: Bool { cropOffset.isMoved }
     private var isFillMode: Bool { CollageGeometry.isFillMode(scale: cropOffset.scale) }
     private var isDragging: Bool { dragTranslation != .zero }
 

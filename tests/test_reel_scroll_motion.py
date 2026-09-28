@@ -45,10 +45,11 @@ REPORTED_DURATION = 35.0
 #: and the reel disagree about what comfortable means.
 COMFORTABLE_TRAVEL_PX = scroll_mod.COMFORTABLE_TRAVEL_PX
 
-#: What the reported reel needs to reach that speed, given its 234 photographs.
-#: Its shipped 35s is a third of this, which is the defect, and the fix belongs
-#: to the photo count and the duration rather than to anything in here.
-COMFORTABLE_DURATION_S = 100.0
+#: What the reported reel needs to reach that speed, given its 234 photographs:
+#: 50 seconds of scroll at 60fps. It read 100 while the pace was mistaken for a
+#: 30fps step (#1456). The fix for a fast reel belongs to the photo count and
+#: the duration rather than to anything in here.
+COMFORTABLE_DURATION_S = 50.0
 
 EVENT = ("Battery Dance Festival", "Battery Dance", "Wagner Park")
 

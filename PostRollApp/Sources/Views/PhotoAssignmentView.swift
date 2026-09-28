@@ -1130,7 +1130,7 @@ private struct CroppablePhotoThumb: View {
     @State private var isHovered = false
 
     var offset: CropOffset { cropOffset?.wrappedValue ?? CropOffset() }
-    var hasCrop: Bool { offset.x != 0 || offset.y != 0 }
+    var hasCrop: Bool { offset.isMoved }
     var hasTags: Bool { !(photoTags?.wrappedValue.isEmpty ?? true) }
 
     var body: some View {

@@ -47,13 +47,15 @@ final class SpeculativeReelRenderer {
               let seed = pd.reelSeed
         else { return nil }
         var parts: [String] = []
-        parts.append("photos:" + pd.photoPaths.map { $0.path }.joined(separator: "|"))
+        // The photos the reel shows, so leaving one out is a different reel.
+        parts.append("photos:" + pd.reelPhotoPaths.map { $0.path }.joined(separator: "|"))
         parts.append("audio:" + (pd.audioPath?.path ?? "nil"))
         parts.append("dur:" + String(format: "%.3f", pd.scrollDuration))
         parts.append("seed:\(seed)")
-        let offsets = pd.reelCropOffsets
-            .sorted { $0.key < $1.key }
-            .map { "\($0.key)=\($0.value.x),\($0.value.y),\($0.value.scale)" }
+        // The crops the render is handed, lined up with the photos above, so a
+        // crop stored for a photo the reel leaves out changes nothing here.
+        let offsets = pd.reelCropOffsetList
+            .map { $0.map { String($0) }.joined(separator: ",") }
             .joined(separator: ";")
         parts.append("crops:" + offsets)
         return parts.joined(separator: "\n")
