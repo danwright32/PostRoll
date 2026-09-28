@@ -1719,7 +1719,9 @@ extension HostedControlLegibilityTests {
         let strip = Self.reelEditorStrip(fill: fill)
         let shown = strip.layout.cells.map { URL(fileURLWithPath: $0.photoPath) }
         let gone = (0..<3).map { URL(fileURLWithPath: "/review/reel/left-\($0).jpg") }
-        let removed = Set([shown[4], shown[9], gone[0], gone[1]].map(\.absoluteString))
+        // Nothing marked when the strip is one flat colour: a Left out mark
+        // over the sampled points would be read as the strip not drawing.
+        let removed = fill != nil ? [] : Set([shown[4], shown[9], gone[0], gone[1]].map(\.absoluteString))
         let editor = ReelStripPreviewThumbnail(
             url: URL(fileURLWithPath: "/review/reel/none.png"),
             layoutURL: URL(fileURLWithPath: "/review/reel/none.json"),
@@ -1743,12 +1745,24 @@ extension HostedControlLegibilityTests {
     /// strip only ever arrived from disk, after any render had been taken.
     func testTheReelEditorDrawsAStripItIsHanded() throws {
         let rep = try renderReelEditor(fill: NSColor(red: 0, green: 0.8, blue: 0, alpha: 1))
-        let colour = try XCTUnwrap(rep.colorAt(x: rep.pixelsWide / 2,
-                                               y: rep.pixelsHigh / 4)?
-            .usingColorSpace(.sRGB))
-        XCTAssertGreaterThan(colour.greenComponent, colour.redComponent + 0.3,
-                             "the strip area shows \(colour), not the strip it was handed")
-        XCTAssertGreaterThan(colour.greenComponent, colour.blueComponent + 0.3)
+        // Several points across the strip window, gaps between prints
+        // included: the flat fill covers the whole strip, so every one of them
+        // is the strip whatever the row pattern puts under it (L178).
+        for fx in [0.25, 0.5, 0.75] {
+            for fy in [0.15, 0.3, 0.5] {
+                let colour = try XCTUnwrap(rep.colorAt(x: Int(Double(rep.pixelsWide) * fx),
+                                                       y: Int(Double(rep.pixelsHigh) * fy))?
+                    .usingColorSpace(.sRGB))
+                // Green DOMINATES rather than reads bright: each print's own
+                // overlay dims it while that photo loads, which a render never
+                // waits for. The loading placeholder is a grey, which fails.
+                let g = colour.greenComponent
+                XCTAssertGreaterThan(g, 0.08, "at (\(fx), \(fy)) the strip area is black: \(colour)")
+                XCTAssertGreaterThan(g, colour.redComponent * 3,
+                                     "at (\(fx), \(fy)) the strip area shows \(colour), not the strip it was handed")
+                XCTAssertGreaterThan(g, colour.blueComponent * 3)
+            }
+        }
     }
 
     /// The Settings screen, which nothing rendered until now (#918).
