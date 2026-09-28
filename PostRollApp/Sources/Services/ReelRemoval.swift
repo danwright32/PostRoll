@@ -19,6 +19,27 @@ enum ReelRemoval {
         return removed.union([key])
     }
 
+    /// A photograph on the day that the strip on screen does not show.
+    struct LeftOut: Equatable {
+        let url: URL
+        /// Restored since the strip was rendered: it comes back on the next
+        /// render rather than being left out of it.
+        let returning: Bool
+    }
+
+    /// The row under the strip: every photo the rendered strip left out, in
+    /// the day's order. Derived from the strip on screen rather than from the
+    /// removed list alone, because a photo marked since the last render is
+    /// still in the strip (shown dimmed there) and a restored one is not yet.
+    static func leftOut(all: [URL], removed: Set<String>, shown: [String]) -> [LeftOut] {
+        let inStrip = Set(shown)
+        return all.compactMap { url in
+            let key = url.absoluteString
+            guard !inStrip.contains(key) else { return nil }
+            return LeftOut(url: url, returning: !removed.contains(key))
+        }
+    }
+
     /// The line over the strip while marking: how many are marked, how many
     /// remain, and how many is comfortable at this reel's length, so Dan can
     /// see when he has taken out enough without rendering to find out.
@@ -37,4 +58,19 @@ enum ReelRemoval {
         }
         return count + " About \(comfortable) is comfortable at \(seconds) seconds."
     }
+}
+
+/// What the Thursday editor may change about which photographs the reel shows
+/// and in what order, handed down as one value.
+///
+/// One value rather than a parameter each, because `CaptionReviewView`'s body
+/// is at the Swift type checker's limit: it replaced the swap closure that was
+/// passed before, so the call site carries the same number of arguments.
+struct ReelPhotoEdits {
+    /// Every photograph on the day, removed ones included, in reel order.
+    var allPhotos: [URL]
+    /// Keys of the photographs the reel leaves out (`PostingDay.reelRemovedPhotos`).
+    var removed: Set<String>
+    var swap: (URL, URL) -> Void
+    var setRemoved: (Set<String>) -> Void
 }

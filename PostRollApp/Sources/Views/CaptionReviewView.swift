@@ -354,7 +354,7 @@ struct CaptionReviewView: View {
                             onSkipFridayClips: day == .friday ? { skipFridayClipsKeepStoryOnly() } : nil,
                             onChangeCollagePhotos: isCollageDay(day) ? { changeCollagePhotos(day: day) } : nil,
                             onChooseLayout: isCollageDay(day) ? { layoutGalleryTarget = GalleryTarget(day: day) } : nil,
-                            onSwapReelPhotos: day == .thursday ? { a, b in swapPhotos(day: .thursday, a: a, b: b) } : nil,
+                            reelPhotoEdits: day == .thursday ? reelPhotoEdits() : nil,
                             onAssignReelPhotos: day == .tuesday ? { raw, edited, bw in
                                 assignReelPhotosAndGenerate(raw: raw, edited: edited, bw: bw)
                             } : nil,
@@ -1487,6 +1487,31 @@ struct CaptionReviewView: View {
         appState.updateEvent(ev)
         // Pre-render the swapped order in the background ahead of "Apply changes".
         if day == .thursday { graphics.speculativeReel(for: event.id).schedule(eventID: event.id, in: appState) }
+    }
+
+    /// Swapping and leaving photos out of the Thursday reel, as the editor
+    /// receives them. Read from the stored event, so the removed list the
+    /// editor draws is the one that was saved.
+    private func reelPhotoEdits() -> ReelPhotoEdits {
+        let current = appState.events.first(where: { $0.id == event.id }) ?? event
+        let pd = current.days[DayName.thursday.rawValue]
+        return ReelPhotoEdits(
+            allPhotos: pd?.photoPaths ?? [],
+            removed: pd?.reelRemovedPhotos ?? [],
+            swap: { a, b in swapPhotos(day: .thursday, a: a, b: b) },
+            setRemoved: { setReelRemoved($0) })
+    }
+
+    /// Persist which photos the reel leaves out. Like a swap it does not
+    /// re-render: removals are batched with crops and swaps and baked in by
+    /// "Apply changes", with a background pre-render started meanwhile.
+    private func setReelRemoved(_ removed: Set<String>) {
+        var ev = appState.events.first(where: { $0.id == event.id }) ?? event
+        guard var pd = ev.days[DayName.thursday.rawValue], pd.reelRemovedPhotos != removed else { return }
+        pd.reelRemovedPhotos = removed
+        ev.days[DayName.thursday.rawValue] = pd
+        appState.updateEvent(ev)
+        graphics.speculativeReel(for: event.id).schedule(eventID: event.id, in: appState)
     }
 
     /// Claim the day, persist what the rebuild is for, and render it.

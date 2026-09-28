@@ -75,7 +75,8 @@ struct CaptionSection: View {
     var onChangeCollagePhotos: (() -> Void)? = nil
     /// Open the collage layout gallery to pick a layout (collage days only).
     var onChooseLayout: (() -> Void)? = nil
-    var onSwapReelPhotos: ((URL, URL) -> Void)? = nil
+    /// Swapping and leaving out Thursday reel photos. Nil everywhere else.
+    var reelPhotoEdits: ReelPhotoEdits? = nil
     /// Called when the user assigns RAW + Edited photos inline (review screen fallback).
     var onAssignReelPhotos: ((URL, URL, URL?) -> Void)? = nil
     /// Inline photo picker callbacks (hoisted to parent for fileImporter presentation)
@@ -818,7 +819,7 @@ struct CaptionSection: View {
                                             onSwapAudio: onSwapReelAudio,
                                             onUploadAudio: onUploadReelAudio,
                                             onChangePhotos: onChangeReelPhotos,
-                                            onSwapPhotos: onSwapReelPhotos,
+                                            photoEdits: reelPhotoEdits,
                                             currentReelLength: reelLength,
                                             onChangeReelLength: onChangeReelLength,
                                             maxHeight: storyExpandedMaxHeight - 60

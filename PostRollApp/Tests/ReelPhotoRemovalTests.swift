@@ -166,6 +166,30 @@ final class ReelPhotoRemovalTests: XCTestCase {
                        "1 marked, 1 photo left.")
     }
 
+    // MARK: - The removed row
+
+    func testTheRowListsWhatTheRenderedStripLeftOut() {
+        // The strip on screen shows a and c; b was removed and rendered out.
+        let row = ReelRemoval.leftOut(all: [a, b, c], removed: [b.absoluteString],
+                                      shown: [a, c].map(\.absoluteString))
+        XCTAssertEqual(row, [ReelRemoval.LeftOut(url: b, returning: false)])
+    }
+
+    func testARestoredPhotoIsMarkedAsReturningUntilTheNextRender() {
+        // Restored: no longer in the removed list, still not in the strip.
+        let row = ReelRemoval.leftOut(all: [a, b, c], removed: [],
+                                      shown: [a, c].map(\.absoluteString))
+        XCTAssertEqual(row, [ReelRemoval.LeftOut(url: b, returning: true)])
+    }
+
+    func testAPhotoMarkedButStillInTheStripIsNotInTheRow() {
+        // It is shown dimmed in the strip itself, so listing it again would
+        // state one fact twice.
+        let row = ReelRemoval.leftOut(all: [a, b, c], removed: [b.absoluteString],
+                                      shown: keys)
+        XCTAssertEqual(row, [])
+    }
+
     // MARK: - The warning names both remedies
 
     func testTheSpeedWarningOffersFewerPhotosBesideALongerReel() throws {
