@@ -117,43 +117,102 @@ final class EventFolderClaimTests: XCTestCase {
 
     // MARK: - Every writer claims first
 
-    /// The places that start writing an event's files, found from the source
-    /// rather than listed, so a new one is covered the day it is written (L96).
-    private func writers() throws -> [String] {
-        let services = RepoFixture.repoRoot().appendingPathComponent("PostRollApp/Sources")
-        var found: [String] = []
-        for (relative, url) in RepoFixture.files(under: services, withExtension: "swift") {
-            guard !relative.hasSuffix("PythonBridge.swift") else { continue }
-            let code = SwiftSourceText.withoutComments(try String(contentsOf: url, encoding: .utf8))
-            let calls = ["runPreviewGeneration(", "runMediaGeneration(", "renderPreview("]
-            if calls.contains(where: code.contains) { found.append(relative) }
+    /// A call that starts writing an event's files, and the function it sits in.
+    private struct WriteSite {
+        let file: String
+        let function: String
+        /// The function's text from its declaration up to the call.
+        let before: String
+    }
+
+    private static let writeCalls = ["runPreviewGeneration(", "runMediaGeneration(",
+                                     "renderPreview("]
+
+    /// Functions that write from an event their caller already claimed, and
+    /// that caller. Each is checked below: the caller must claim and then call
+    /// it, or the entry excuses nothing (L233).
+    private static let handedAClaimedEvent: [String: String] = [
+        "runExport": "start",          // ExportManager: start claims, runExport writes
+        "startRender": "schedule",     // SpeculativeReelRenderer: schedule claims
+    ]
+
+    private func sources() throws -> [(file: String, code: String)] {
+        let root = RepoFixture.repoRoot().appendingPathComponent("PostRollApp/Sources")
+        return try RepoFixture.files(under: root, withExtension: "swift")
+            .filter { !$0.0.hasSuffix("PythonBridge.swift") }
+            .map { ($0.0, SwiftSourceText.withoutComments(
+                try String(contentsOf: $0.1, encoding: .utf8))) }
+    }
+
+    /// Every write call, found from the source rather than listed, so a new
+    /// one is covered the day it is written (L96). The test seam's own
+    /// declaration is skipped: it is where the real render is plugged in,
+    /// not a writer.
+    private func writeSites() throws -> [WriteSite] {
+        var sites: [WriteSite] = []
+        for (file, code) in try sources() {
+            for call in Self.writeCalls {
+                var searchFrom = code.startIndex
+                while let hit = code.range(of: call, range: searchFrom..<code.endIndex) {
+                    searchFrom = hit.upperBound
+                    let head = code[..<hit.lowerBound]
+                    if let seam = head.range(of: "renderPreview: @Sendable", options: .backwards),
+                       !head[seam.upperBound...].contains("func ") { continue }
+                    guard let decl = head.range(of: "func ", options: .backwards) else { continue }
+                    let name = code[decl.upperBound...].prefix { $0.isLetter || $0.isNumber }
+                    sites.append(WriteSite(file: file, function: String(name),
+                                           before: String(code[decl.lowerBound..<hit.lowerBound])))
+                }
+            }
         }
-        return found.sorted()
+        return sites
+    }
+
+    private func body(of function: String, in code: String) -> String? {
+        guard let start = code.range(of: "func \(function)(") else { return nil }
+        let rest = code[start.upperBound...]
+        let end = rest.range(of: "\n    func ")?.lowerBound ?? rest.endIndex
+        return String(rest[..<end])
     }
 
     func testTheWriterSweepFindsTheWriters() throws {
         // The positive control: a sweep that found nothing would pass the
-        // check below for every file (L98).
-        let found = try writers()
-        for expected in ["GenerationManager.swift", "ExportManager.swift",
-                         "PreviewGraphicsManager.swift", "SpeculativeReelRenderer.swift"] {
-            XCTAssertTrue(found.contains { $0.hasSuffix(expected) },
-                          "\(expected) was not found among \(found)")
+        // check below for every call (L98).
+        let sites = try writeSites()
+        for (file, count) in [("PreviewGraphicsManager.swift", 3), ("GenerationManager.swift", 1),
+                              ("ExportManager.swift", 1), ("SpeculativeReelRenderer.swift", 1)] {
+            XCTAssertGreaterThanOrEqual(sites.filter { $0.file.hasSuffix(file) }.count, count,
+                                        "\(file) has fewer write calls than it really makes")
         }
     }
 
-    func testEveryWriterClaimsTheFolderFirst() throws {
-        let missing = try writers().filter { relative in
-            let url = RepoFixture.repoRoot().appendingPathComponent("PostRollApp/Sources")
-                .appendingPathComponent(relative)
-            let code = SwiftSourceText.withoutComments(
-                (try? String(contentsOf: url, encoding: .utf8)) ?? "")
-            return !code.contains("claimFolder(")
-        }
+    func testEveryWriteClaimsTheFolderFirst() throws {
+        // Per call, not per file: a file with three writers passes a
+        // whole-file search while one of them skips the claim (L135).
+        let missing = try writeSites()
+            .filter { !$0.before.contains("claimFolder(") }
+            .filter { Self.handedAClaimedEvent[$0.function] == nil }
+            .map { "\($0.file) \($0.function)" }
 
         XCTAssertEqual(missing, [],
                        "these start writing an event's files without claiming its "
-                       + "folder, so a duplicate rendered there writes into its "
-                       + "original's week")
+                       + "folder first, so a duplicate rendered there writes into "
+                       + "its original's week")
+    }
+
+    func testEveryWriterHandedAnEventGetsItFromACaller() throws {
+        let files = try sources()
+        for (writer, caller) in Self.handedAClaimedEvent {
+            // The caller in whichever file actually calls this writer, since
+            // several types have a function called `start`.
+            let callerBody = files.compactMap { body(of: caller, in: $0.code) }
+                .first { $0.contains("\(writer)(") }
+            let found = try XCTUnwrap(callerBody,
+                                      "no \(caller) calls \(writer) any more, so this "
+                                      + "entry excuses nothing")
+            let beforeCall = found.components(separatedBy: "\(writer)(").first ?? ""
+            XCTAssertTrue(beforeCall.contains("claimFolder("),
+                          "\(caller) hands \(writer) an event it never claimed")
+        }
     }
 }
