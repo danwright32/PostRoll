@@ -43,7 +43,9 @@ are three different things and only one of them may be merged on:
     1  red            an expected check failed, was cancelled, or skipped
                       where the workflow said it should run
     2  never appeared the deadline passed with an expected check absent
-    3  still running  the deadline passed with everything present but pending
+    3  still running  everything present but pending, and either nothing
+                      changed for the whole timeout or the ceiling (three
+                      timeouts) passed (#1461)
     4  unusable       gh could not be asked, or the workflows could not be read
     5  not merged     the commit was green and GitHub refused to merge it,
                       which is what a head that moved in between looks like
@@ -102,6 +104,9 @@ EXIT_GREEN = 0
 EXIT_RED = 1
 EXIT_NEVER_APPEARED = 2
 EXIT_STILL_RUNNING = 3
+
+#: How many timeouts a wait may run for in all, however much the checks move.
+CEILING_FACTOR = 3
 EXIT_UNUSABLE = 4
 EXIT_NOT_MERGED = 5
 EXIT_BEHIND = 6
@@ -830,6 +835,9 @@ def poll_checks(number: str, *, api: Callable[[str], dict] | None = None) -> Pol
                 "name": str(job.get("name") or ""),
                 "bucket": bucket_of(str(job.get("status") or ""),
                                     job.get("conclusion")),
+                # The raw status too, so a job moving from queued to running
+                # reads as progress to the wait (#1461) though both are pending.
+                "status": str(job.get("status") or ""),
             })
     return Poll(head_sha=head_sha, rows=rows, unfinished=unfinished, repo=repo)
 
@@ -1095,9 +1103,18 @@ def main(
 
     number, timeout, interval = (
         arguments.number, arguments.timeout, arguments.interval)
-    out(f"waiting for pull request {number}, up to {timeout:.0f}s")
+    out(f"waiting for pull request {number}, until nothing has changed for "
+        f"{timeout:.0f}s or {CEILING_FACTOR * timeout:.0f}s have passed")
     started = now()
-    deadline = started + timeout
+    # The timeout counts from the last CHANGE in what the checks report, not
+    # from the start (#1461). A fixed total gave up on healthy runs queued
+    # behind the macOS runner pool, twice on 2026-09-28, each green minutes
+    # later. Progress may extend the wait but never unbound it: the ceiling
+    # holds whatever moves (L110).
+    ceiling = started + CEILING_FACTOR * timeout
+    last_change = started
+    signature: tuple | None = None
+    deadline = min(last_change + timeout, ceiling)
     expected: set[ExpectedCheck] = set()
     answer = Verdict(state="missing")
     judged = ""
@@ -1136,6 +1153,12 @@ def main(
         judged = reading.head_sha
 
         answer = verdict(expected, reading.rows, reading.unfinished)
+        seen = (reading.head_sha,
+                frozenset(tuple(sorted(row.items())) for row in reading.rows),
+                tuple(sorted(reading.unfinished)))
+        if seen != signature:
+            signature, last_change = seen, now()
+        deadline = min(last_change + timeout, ceiling)
         if answer.state == "green":
             out(f"green at {judged[:12]}: {answer.summary}")
             if not arguments.merge:
@@ -1236,7 +1259,13 @@ def main(
             f"{len(reading.rows)} reported: {answer.summary}")
         sleep(min(interval, left))
 
-    out(f"gave up after {timeout:.0f}s at {judged[:12]}. {answer.summary}")
+    if now() >= ceiling:
+        out(f"gave up at the {CEILING_FACTOR * timeout:.0f}s ceiling at "
+            f"{judged[:12]}, though the checks were still changing. "
+            f"{answer.summary}")
+    else:
+        out(f"gave up at {judged[:12]}: nothing changed for {timeout:.0f}s. "
+            f"{answer.summary}")
     return EXIT_NEVER_APPEARED if answer.missing else EXIT_STILL_RUNNING
 
 
