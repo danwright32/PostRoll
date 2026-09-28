@@ -25,6 +25,8 @@ import sys
 import tempfile
 from functools import lru_cache
 from pathlib import Path
+
+from postroll.temp_files import temp_sibling
 from PIL import Image, ImageDraw
 
 # Reuse the collage's pan/zoom-aware crop so per-photo offsets produce
@@ -902,7 +904,7 @@ def generate_reel_scroll(
     # suffix keeps the two encodes from sharing a temp file either.
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
-    encode_tmp = output.with_suffix(f".{os.getpid()}.tmp.mp4")
+    encode_tmp = temp_sibling(output, "tmp.mp4")  # sweeps dead runs' temps (#1458)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir = Path(tmpdir)
