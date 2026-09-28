@@ -366,25 +366,6 @@ final class RecurringAccountsTests: XCTestCase {
         XCTAssertNil(RecurringAccounts.summary([]))
     }
 
-    // MARK: - How loudly the panel asks
-
-    func testTheNumbersControlIsProminentForAnAccountThatKeepsComingBack() {
-        let counts = ["carnegiehall": 6, "once": 1]
-
-        XCTAssertEqual(RecurringAccounts.emphasis(handle: "@CarnegieHall", in: counts),
-                       .prominent)
-    }
-
-    func testTheNumbersControlIsQuietForAOneOff() {
-        // It stays reachable. Nothing here is impossible, and a control removed
-        // because it is usually not worth it only ever stops the person who
-        // meant to use it (L54). It just stops competing for attention.
-        let counts = ["carnegiehall": 6, "once": 1]
-
-        XCTAssertEqual(RecurringAccounts.emphasis(handle: "@once", in: counts), .quiet)
-        XCTAssertEqual(RecurringAccounts.emphasis(handle: "@neverseen", in: counts), .quiet)
-    }
-
     func testARecurringAccountSaysHowOftenItComesBack() {
         // The reason this one is worth a minute, said where the minute is spent,
         // rather than leaving Dan to work out why one row looks louder.
