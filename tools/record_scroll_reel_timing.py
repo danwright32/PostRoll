@@ -84,6 +84,11 @@ def build() -> dict:
         "measured_reels": [
             {"name": "Battery Dance Festival", "photos": 234, "strip_h": 29000},
             {"name": "DiGangi With A G", "photos": 149, "strip_h": 18695},
+            # Measured 2026-09-28, with full row landscapes uncropped. Dan
+            # posted it at a 50 second scroll (a 56 second reel) and watched
+            # it on Instagram: smooth at 60fps, jittery at 30. The only reel
+            # judged where viewers see it, so it anchors the comfortable pace.
+            {"name": "Broadway Undressed", "photos": 219, "strip_h": 28712},
         ],
     }
 

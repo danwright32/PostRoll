@@ -172,6 +172,16 @@ extension ScrollReelTimingTests {
         XCTAssertEqual(checked, 4, "a renamed reel would skip these silently")
     }
 
+    /// The reel Dan posted and watched smooth in the Instagram app on
+    /// 2026-09-28 (#1456): 219 photographs at a 50 second scroll. The editor
+    /// must not warn about the pace he approved where viewers see it.
+    func testTheReelWatchedSmoothOnInstagramIsNotWarnedAbout() throws {
+        let fixture = try loadSpeedFixture()
+        let reel = try XCTUnwrap(fixture.measured_reels.first { $0.name == "Broadway Undressed" })
+        XCTAssertNil(ScrollReelTiming.speedNotice(
+            stripHeight: reel.strip_h, photoCount: reel.photos, scrollSeconds: 50))
+    }
+
     func testAComfortableReelIsNotWarnedAbout() throws {
         let fixture = try loadSpeedFixture()
         let digangi = try XCTUnwrap(fixture.measured_reels.first { $0.photos == 149 })
@@ -216,54 +226,44 @@ extension ScrollReelTimingTests {
         XCTAssertTrue(notice.hasSuffix("or about \(fewer) photographs rather than 120."), notice)
     }
 
-    /// Of the two reels on disk, the slider now fixes one and not the other.
-    ///
-    /// Until #1415 raised the maximum from 60 to 90 seconds neither could be
-    /// fixed by length alone (DiGangi needs 63, Battery Dance 100), which is
-    /// why the notice grew a second shape. Now DiGangi is told a length and
-    /// Battery Dance is still told to lose photographs, so both shapes have a
-    /// real reel behind them. If a change to the layout, the threshold or the
-    /// range moves either across the line, this says so rather than leaving a
-    /// branch unreachable with nobody noticing.
-    func testTheSliderFixesDiGangiButNotBatteryDance() throws {
+    /// Every measured reel can be made comfortable by length alone at 60fps
+    /// (#1456): Battery Dance needs a 56 second reel, DiGangi 37, Broadway
+    /// Undressed 56. Until then the pace was read as a 30fps step, which put
+    /// Battery Dance at 106 seconds, past the slider, and gave the photo count
+    /// branch a real reel behind it. Now it has none; the case below keeps it
+    /// honest with a strip sized from the threshold.
+    func testTheSliderFixesEveryMeasuredReel() throws {
         let fixture = try loadSpeedFixture()
-        let digangi = try XCTUnwrap(fixture.measured_reels.first { $0.photos == 149 })
-        let battery = try XCTUnwrap(fixture.measured_reels.first { $0.photos == 234 })
-
-        let digangiNeeds = ScrollReelTiming.reelSeconds(
-            scrollSeconds: ScrollReelTiming.comfortableScrollSeconds(stripHeight: digangi.strip_h))
-        XCTAssertLessThanOrEqual(digangiNeeds, fixture.slider.max_s,
-                                 "DiGangi no longer fits inside the slider's range")
-        let notice = try XCTUnwrap(ScrollReelTiming.speedNotice(
-            stripHeight: digangi.strip_h, photoCount: digangi.photos, scrollSeconds: 40))
-        XCTAssertTrue(notice.contains("Try \(Int(digangiNeeds.rounded())) seconds"), notice)
-
-        XCTAssertGreaterThan(
-            ScrollReelTiming.reelSeconds(scrollSeconds: ScrollReelTiming
-                .comfortableScrollSeconds(stripHeight: battery.strip_h)),
-            fixture.slider.max_s, "Battery Dance now fits inside the slider's range")
+        XCTAssertGreaterThanOrEqual(fixture.measured_reels.count, 3)
+        for reel in fixture.measured_reels {
+            let needs = ScrollReelTiming.reelSeconds(
+                scrollSeconds: ScrollReelTiming.comfortableScrollSeconds(stripHeight: reel.strip_h))
+            XCTAssertLessThanOrEqual(needs, fixture.slider.max_s,
+                                     "\(reel.name) no longer fits inside the slider's range")
+        }
     }
 
-    /// And one it CANNOT names the photo count instead, because a message that
-    /// points only at a control unable to solve the problem is a dead end
-    /// (L80, L111). At 234 photographs the slider's maximum still leaves the
-    /// reel faster than the one Dan had already called too fast.
+    /// A strip the slider CANNOT fix names the photo count instead, because a
+    /// message that points only at a control unable to solve the problem is a
+    /// dead end (L80, L111). Sized from the threshold rather than a reel, since
+    /// no measured reel is that long at 60fps: half as tall again as the
+    /// longest strip the slider's maximum makes comfortable (L401).
     func testAReelTheSliderCannotFixNamesThePhotoCount() throws {
         let fixture = try loadSpeedFixture()
-        let battery = try XCTUnwrap(fixture.measured_reels.first { $0.photos == 234 })
+        let atMax = ScrollReelTiming.scrollSeconds(reelSeconds: fixture.slider.max_s)
+        let reachable = ScrollReelTiming.comfortableTravelPx * atMax * ScrollReelTiming.fps
+            / ScrollReelTiming.cruiseFactor
+        let strip = ScrollReelTiming.viewportHeight + reachable * 1.5
+        let photos = 400
 
         let notice = try XCTUnwrap(ScrollReelTiming.speedNotice(
-            stripHeight: battery.strip_h, photoCount: battery.photos, scrollSeconds: 35))
-
-        // The slider's top is a whole reel, so its scroll is that less the holds.
+            stripHeight: strip, photoCount: photos, scrollSeconds: 35))
         let fewer = ScrollReelTiming.comfortablePhotoCount(
-            stripHeight: battery.strip_h, photoCount: battery.photos,
-            scrollSeconds: ScrollReelTiming.scrollSeconds(reelSeconds: fixture.slider.max_s))
-        XCTAssertLessThan(fewer, battery.photos, "fewer photographs means fewer")
+            stripHeight: strip, photoCount: photos, scrollSeconds: atMax)
+        XCTAssertLessThan(fewer, photos, "fewer photographs means fewer")
         XCTAssertGreaterThan(fewer, 0)
-        XCTAssertTrue(notice.contains("\(fewer)"),
+        XCTAssertTrue(notice.contains("about \(fewer) photographs rather than \(photos)"),
                       "the notice does not name how many photographs would fit: \(notice)")
-        XCTAssertTrue(notice.lowercased().contains("photograph"), notice)
     }
 
     /// A strip that fits the viewport does not scroll at all, so there is no

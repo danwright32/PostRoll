@@ -196,9 +196,9 @@ final class ReelPhotoRemovalTests: XCTestCase {
         // A strip the slider CAN fix still says how many photos would do it at
         // the length Dan chose, since that is the remedy he prefers.
         let notice = try XCTUnwrap(ScrollReelTiming.speedNotice(
-            stripHeight: 15_000, photoCount: 100, scrollSeconds: 40))
+            stripHeight: 30_000, photoCount: 100, scrollSeconds: 40))
         let fewer = ScrollReelTiming.comfortablePhotoCount(
-            stripHeight: 15_000, photoCount: 100, scrollSeconds: 40)
+            stripHeight: 30_000, photoCount: 100, scrollSeconds: 40)
         XCTAssertLessThan(fewer, 100)
         XCTAssertTrue(notice.contains("or about \(fewer) photographs rather than 100"), notice)
     }

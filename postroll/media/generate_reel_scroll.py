@@ -63,19 +63,16 @@ from .layout_sidecar import layout_sidecar_path
 
 CANVAS_W = 1080
 CANVAS_H = 1920
-# 30, and it was briefly 60 (#. 2026-08-30). Instagram RE-ENCODES every reel to
-# 30fps and it DROPS frames rather than blending them, both measured off a reel
-# posted and saved back that day: 720x1280, 30fps, 0.70 Mbps, and its frames as
-# vertically sharp as our master (ratio 0.99), which a blend could not be.
+# 60, because Instagram PLAYS 60 (#1456). Settled on 2026-09-28 by posting this
+# week's reel twice, identical but for the frame rate, and watching both in the
+# Instagram app: the 60fps upload smooth, the 30fps one jittery. On a ladder of
+# one stretch, Dan found every 30fps version jittery, at 10.81, 7 and 5px a frame
+# and with motion blur, so no pace makes a 30fps scroll smooth.
 #
-# So a 60fps master reaches nobody. Half its frames are discarded and the
-# survivors are the ones we would have rendered anyway, which makes the movement
-# a viewer sees identical either way. What 60fps DID change was the preview: it
-# looked twice as smooth as the posted reel, and a whole evening of judging
-# scroll speed was spent against a file no viewer sees. Rendering at the rate
-# that ships is what keeps what is reviewed and what is published the same
-# picture (L64).
-FPS = 30
+# It was 30 from 2026-08-30 to then, on a reel posted and SAVED back, which came
+# out 720x1280 at 30fps. That was the saved copy, not what the app plays, and it
+# was one file. A reading of what viewers see is taken where they see it (L64).
+FPS = 60
 
 ROW_GAP = GAP          # gap between rows
 COL_GAP = GAP          # gap between photos in a row
@@ -99,15 +96,17 @@ SCROLL_DURATION = 40.0   # seconds to scroll the full strip
 HOLD_END = 1.0           # hold at bottom before closing
 CLOSING_FRAME_DURATION = 5.0
 
-#: How far the strip may advance between frames before the scroll reads as
-#: rushed, in canvas pixels at the frame rate a viewer actually sees.
+#: How far the strip may advance between 60fps frames before the scroll reads
+#: as rushed, in canvas pixels.
 #:
 #: Not chosen from theory. Dan judged a ladder of the reel this was reported on
 #: (Battery Dance Festival, 234 photographs, a 29,000px strip) on 2026-08-30,
 #: one layout, one photo set, speed the only variable: 11.50 px a frame read as
-#: fast and 10.81 read as right. Instagram re-encodes every reel to 30fps
-#: whatever it is given, so this is the number a viewer sees rather than one
-#: only the master has.
+#: fast and 10.81 read as right. That ladder was watched at 60fps. For four
+#: weeks the number was read as a 30fps step, which is half the speed and a
+#: pace nobody judged, and every 30fps scroll jittered (#1456). Confirmed on
+#: Instagram on 2026-09-28: Broadway Undressed, 219 photographs at a 50 second
+#: scroll, 10.7px a 60fps frame, smooth.
 #:
 #: Here rather than in the test that first recorded it, because it decides what
 #: the app TELLS Dan before he renders (#1066), and a value the product acts on

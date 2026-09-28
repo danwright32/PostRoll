@@ -201,14 +201,15 @@ final class ReelLengthControlTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url) }
 
         let layout = try XCTUnwrap(ReelStripLayout.load(from: url), "the layout did not decode")
-        // Whole reel lengths since #1433: a 46 second reel scrolls for 40, and
-        // the 63 seconds of scroll DiGangi needs is a 69 second reel.
-        let notice = try XCTUnwrap(layout.paceNotice(reelSeconds: 46),
-                                   "a 46 second DiGangi reel is too fast")
+        // Whole reel lengths since #1433: a 25 second reel scrolls for 19, and
+        // the 31 seconds of scroll DiGangi needs at 60fps (#1456) is a 37
+        // second reel.
+        let notice = try XCTUnwrap(layout.paceNotice(reelSeconds: 25),
+                                   "a 25 second DiGangi reel is too fast")
         XCTAssertEqual(notice, ScrollReelTiming.speedNotice(
-            stripHeight: 18695, photoCount: 149, scrollSeconds: 40))
-        XCTAssertTrue(notice.contains("Try 69 seconds"), notice)
-        XCTAssertNil(layout.paceNotice(reelSeconds: 76), "a 76 second reel is comfortable for DiGangi")
+            stripHeight: 18695, photoCount: 149, scrollSeconds: 19))
+        XCTAssertTrue(notice.contains("Try 37 seconds"), notice)
+        XCTAssertNil(layout.paceNotice(reelSeconds: 40), "a 40 second reel is comfortable for DiGangi")
     }
 
     func testAMissingLayoutGivesNoPaceRatherThanAWrongOne() {

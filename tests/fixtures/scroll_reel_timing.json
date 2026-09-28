@@ -85,7 +85,7 @@
     "83": 89.0,
     "84": 90.0
   },
-  "fps": 30,
+  "fps": 60,
   "viewport_h": 1430,
   "ease_ramp": 0.15,
   "cruise_factor": 1.1764705882352942,
@@ -100,6 +100,11 @@
       "name": "DiGangi With A G",
       "photos": 149,
       "strip_h": 18695
+    },
+    {
+      "name": "Broadway Undressed",
+      "photos": 219,
+      "strip_h": 28712
     }
   ]
 }

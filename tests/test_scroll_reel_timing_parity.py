@@ -148,41 +148,40 @@ def test_the_measured_reels_are_real_journeys():
             f"scroll at all and says nothing about speed")
 
 
-def test_the_reported_reel_reaches_the_comfortable_speed_at_the_recorded_duration():
-    """The one reading everything else is anchored to.
+def test_the_reel_dan_watched_smooth_on_instagram_reads_as_comfortable():
+    """The pace judged where viewers see it (2026-09-28, #1456).
 
-    Dan reported Battery Dance Festival as too fast at 35 seconds and the
-    ladder settled at 10.81px a frame, which is 100 seconds for that strip.
-    Computed through the renderer's own easing and frame rate rather than
-    restated, so the contract cannot describe a speed the reel does not reach.
+    Broadway Undressed, 219 photographs at a 50 second scroll, posted twice and
+    watched in the Instagram app: the 60fps upload smooth, the 30fps one
+    jittery. So this reel, at this length, is comfortable by definition, and a
+    renderer or threshold that calls it too fast is measuring something else.
+    """
+    doc = _fixture()
+    reel = next(r for r in doc["measured_reels"] if r["name"] == "Broadway Undressed")
+    travel = scroll.max_scroll_for(reel["strip_h"])
+    px_per_frame = travel / (50.0 * scroll.FPS) * doc["cruise_factor"]
+
+    assert px_per_frame <= doc["comfortable_travel_px"], (
+        f"the reel Dan found smooth on Instagram advances {px_per_frame:.2f}px a "
+        f"frame at {scroll.FPS}fps, past the {doc['comfortable_travel_px']} "
+        f"called comfortable")
+
+
+def test_the_reported_reel_reaches_the_comfortable_speed_at_the_recorded_duration():
+    """The ladder Dan judged on 2026-08-30, restated at the rate he watched it.
+
+    Battery Dance Festival was reported too fast at 35 seconds and the ladder
+    settled at 10.81px a frame. That ladder played at 60fps, so the reading is
+    50 seconds for that strip; it read 100 while the number was mistaken for a
+    30fps step (#1456). Computed through the renderer's own easing and frame
+    rate rather than restated, so the contract cannot describe a speed the reel
+    does not reach.
     """
     doc = _fixture()
     reel = next(r for r in doc["measured_reels"] if r["photos"] == 234)
     travel = scroll.max_scroll_for(reel["strip_h"])
-    px_per_frame = travel / (100.0 * scroll.FPS) * doc["cruise_factor"]
+    px_per_frame = travel / (50.0 * scroll.FPS) * doc["cruise_factor"]
 
     assert px_per_frame == pytest.approx(doc["comfortable_travel_px"], rel=0.01), (
-        f"a {reel['strip_h']}px strip over 100s advances {px_per_frame:.2f}px a "
+        f"a {reel['strip_h']}px strip over 50s advances {px_per_frame:.2f}px a "
         f"frame, not the {doc['comfortable_travel_px']} the ladder settled on")
-
-
-def test_the_reported_reel_is_still_too_fast_at_the_sliders_maximum():
-    """Why the warning cannot name only the duration (L111).
-
-    At 234 photographs the slider's maximum (a 90 second reel since #1415 and
-    #1433, so 84 seconds of scroll) still
-    leaves the reel faster than the DiGangi one Dan had already called too fast, so a message
-    pointing only at that control would name a remedy the person cannot take.
-    """
-    doc = _fixture()
-    reel = next(r for r in doc["measured_reels"] if r["photos"] == 234)
-    travel = scroll.max_scroll_for(reel["strip_h"])
-    # The slider's top is a whole reel since #1433, so the scroll it leaves is
-    # that less the end hold and the closing graphic.
-    scroll_at_max = (doc["slider"]["max_s"] - scroll.HOLD_END
-                     - scroll.CLOSING_FRAME_DURATION)
-    at_max = travel / (scroll_at_max * scroll.FPS) * doc["cruise_factor"]
-
-    assert at_max > doc["comfortable_travel_px"], (
-        "the slider can now reach a comfortable speed on the reel this was "
-        "reported on, so the warning no longer needs to name the photo count")
