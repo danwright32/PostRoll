@@ -30,9 +30,12 @@ HERO_INDEX = sum(ROW_SIZES[:ROW_SIZES.index(1)])
 
 
 def _photos(tmp_path, hero_size: tuple[int, int]) -> list[str]:
+    """Small files: the layout reads only each photo's SHAPE, and every
+    photograph is resized to its cell anyway, so a tenth of the pixels asks
+    the same question for a fraction of the decode."""
     paths = []
     for n in range(HERO_INDEX + 1):
-        size = hero_size if n == HERO_INDEX else (1500, 1000)
+        size = hero_size if n == HERO_INDEX else (150, 100)
         path = tmp_path / f"p{n}.jpg"
         Image.new("RGB", size, (40 + n * 7 % 200, 90, 120)).save(path, "JPEG")
         paths.append(str(path))
@@ -49,7 +52,7 @@ def _hero_cell(tmp_path, hero_size):
     return cell
 
 
-@pytest.mark.parametrize("size", [(1500, 1000), (1600, 900), (2000, 1000)])
+@pytest.mark.parametrize("size", [(150, 100), (160, 90), (200, 100)])
 def test_a_landscape_hero_keeps_its_own_aspect_ratio(tmp_path, size):
     cell = _hero_cell(tmp_path, size)
     want = size[0] / size[1]
@@ -63,5 +66,5 @@ def test_a_landscape_hero_keeps_its_own_aspect_ratio(tmp_path, size):
 def test_a_portrait_hero_is_still_capped(tmp_path):
     """The other half, so the case above cannot pass by uncapping every hero
     (L159): a 2:3 portrait at full width would be about 1500px, past the cap."""
-    cell = _hero_cell(tmp_path, (1000, 1500))
+    cell = _hero_cell(tmp_path, (100, 150))
     assert cell["h"] == HERO_MAX_H_PORTRAIT
