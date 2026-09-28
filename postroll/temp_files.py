@@ -26,6 +26,9 @@ from typing import Callable
 #: it has gone, so a file still being written is not yet a leftover.
 QUIET_FOR_S = 60.0
 
+#: The largest process id any Unix hands out fits a signed 32 bit integer.
+MAX_PID = 2**31 - 1
+
 
 def pid_is_alive(pid: int) -> bool:
     """Whether a process with this id exists. A process owned by somebody else
@@ -58,13 +61,19 @@ def temp_sibling(output: Path, tag: str, *, now: float | None = None,
     try:
         siblings = list(output.parent.iterdir())
     except FileNotFoundError:
+        siblings = []  # a folder not made yet holds no leftovers
+    except OSError as e:
+        print(f"[temp_files] could not look in {output.parent} for leftovers: {e}",
+              file=sys.stderr, flush=True)
         siblings = []
     for path in siblings:
         match = pattern.match(path.name)
         if not match:
             continue
         pid = int(match.group(1))
-        if pid == os.getpid() or alive(pid):
+        # Past any process id the system hands out, so no run of ours wrote
+        # it, and asking the system about it raises rather than answering.
+        if pid > MAX_PID or pid == os.getpid() or alive(pid):
             continue
         try:
             if now - path.stat().st_mtime < QUIET_FOR_S:

@@ -109,3 +109,21 @@ def test_no_module_names_a_pid_temp_by_hand():
         if path.name != "temp_files.py" and pattern.search(path.read_text(encoding="utf-8"))
     ]
     assert not offenders, f"these build a pid temp name without the sweep: {offenders}"
+
+
+def test_a_folder_that_cannot_be_read_does_not_stop_the_render(tmp_path, capsys):
+    # A FILE where the output's folder should be: listing it fails with
+    # something other than "not found", and the render must still get its name.
+    blocker = tmp_path / "not_a_folder"
+    blocker.write_text("x")
+    name = _temp(blocker / "reel_scroll.mp4")
+    assert name.name == f"reel_scroll.{os.getpid()}.tmp.mp4"
+    assert "could not look" in capsys.readouterr().err
+
+
+def test_a_pid_too_large_to_be_a_process_is_left_alone(tmp_path):
+    """No process has this id, so no run of ours wrote it: it is not ours to
+    remove, and asking the system about it raises rather than answering."""
+    odd = _leftover(tmp_path, "reel_scroll.99999999999999999999.tmp.mp4", age_s=86_400)
+    temp_files.temp_sibling(tmp_path / "reel_scroll.mp4", "tmp.mp4", now=NOW)
+    assert odd.exists()
