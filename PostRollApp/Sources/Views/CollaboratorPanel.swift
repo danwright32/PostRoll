@@ -217,21 +217,17 @@ struct CollaboratorPanel: View {
             // figure it corrects, so a stale count is fixed where it is read
             // rather than on some other screen.
             //
-            // Quieter on an account tagged once and never again (#289): the ask
-            // is still there, it just stops competing with the handful whose
-            // numbers the ranking actually leans on. Measured on the real
-            // events: 32 of 38 accounts are one-offs.
-            //
             // Drawn as a button (#1452): as plain grey text at the row's edge it
-            // read as a status word, not a control (L49). A one-off account's
-            // control is still quieter, faded rather than hidden as plain text.
+            // read as a status word, not a control (L49). The same on every
+            // row. It used to be quieter on accounts tagged once (#289), but
+            // that took a fade, and any fade over this label drops it below
+            // readable contrast. The accounts that come back are still marked,
+            // by the recurrence note under their name.
             Button(CollaboratorPick.figuresControlLabel(
                 hasEngagementData: candidate.stats?.hasEngagementData == true)) {
                 onEditNumbers(candidate.handle)
             }
             .buttonStyle(BrandOutlineButtonStyle())
-            .opacity(RecurringAccounts.emphasis(handle: candidate.handle, in: eventCounts)
-                         == .prominent ? 1 : 0.8)
             .accessibilityLabel(CollaboratorPick.figuresControlSpoken(
                 hasEngagementData: candidate.stats?.hasEngagementData == true,
                 handle: candidate.handle))

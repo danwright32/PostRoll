@@ -1374,6 +1374,20 @@ final class CollaboratorPickTests: XCTestCase {
         XCTAssertNotNil(CollaboratorPick.panelSubtitle(for: nothingCountable))
     }
 
+    func testTheFiguresButtonIsNeverFaded() throws {
+        // The outline style's label clears 4.5:1 on the panel; any fade over
+        // it drops the text below that (L149), so no row may dim it.
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Sources/Views/CollaboratorPanel.swift")
+        let code = SwiftSourceText.withoutComments(try String(contentsOf: url, encoding: .utf8))
+        let start = try XCTUnwrap(code.range(of: "Button(CollaboratorPick.figuresControlLabel("))
+        let end = try XCTUnwrap(code.range(of: ".accessibilityLabel(", range: start.upperBound..<code.endIndex))
+
+        XCTAssertFalse(code[start.lowerBound..<end.lowerBound].contains(".opacity("),
+                       "the figures button is faded below readable contrast")
+    }
+
     func testTheFiguresControlIsSpokenAsItReads() {
         // The screen reader hears the same action the button shows, named for
         // the account, so "Add figures" is never announced as "Edit figures".
