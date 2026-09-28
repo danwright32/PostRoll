@@ -84,10 +84,14 @@ SIDE_MARGIN = MAT      # kept as an alias; the mat is the side margin
 # Row patterns — fewer heroes, more pairs/trios for even density
 ROW_SIZES = [2, 3, 2, 3, 2, 3, 3, 1, 2, 3, 2, 3]  # hero every ~8th row
 
-# Max height cap for hero (single photo) rows — prevents them dominating
-HERO_MAX_H = 480
-# Portrait heroes need more vertical room to read as hero rather than squashed.
-# 65% of canvas height feels impactful without swallowing the scroll.
+# The height cap for a PORTRAIT hero (a single photo row). 65% of the canvas
+# reads as a hero without swallowing the scroll; at full width a 2:3 portrait
+# would be about 1500px, taller than the gallery window, so it is cropped.
+#
+# A landscape hero has no cap. It had one, 480px, which cut a third off the top
+# and bottom of a 3:2 print wanting about 667px, and Dan asked for the photo
+# that fills its row to keep its own shape (2026-09-28). Landscapes only, by
+# his choice: portraits stay capped.
 HERO_MAX_H_PORTRAIT = int(CANVAS_H * 0.65)
 
 # Scroll timing
@@ -292,12 +296,10 @@ def build_collage_strip(
         # Natural height where all photos fit side by side
         natural_h = int(row_avail_w / sum(ratios))
 
-        # Cap hero rows so they don't dominate scroll time. Portraits get a
-        # taller cap so a single portrait reads as a hero instead of a stripe.
-        if photos_in_row == 1:
-            cap = HERO_MAX_H_PORTRAIT if ratios[0] < 1.0 else HERO_MAX_H
-            if natural_h > cap:
-                natural_h = cap
+        # Cap a portrait hero so it cannot swallow the scroll. A landscape
+        # hero keeps its natural height, so nothing of it is cropped.
+        if photos_in_row == 1 and ratios[0] < 1.0:
+            natural_h = min(natural_h, HERO_MAX_H_PORTRAIT)
 
         # Compute widths with slight asymmetry
         if photos_in_row == 1:
