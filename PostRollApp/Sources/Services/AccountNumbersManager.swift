@@ -82,7 +82,19 @@ final class AccountNumbersManager {
     /// than two properties a consumer reads separately, because every consumer
     /// wants all of them, and two parallel pipes is two things to keep in step
     /// and one to forget (L41).
-    var notes: [String] { [failureNote, backfillNote].compactMap { $0 } }
+    ///
+    /// The launch note joins it only when that pass left the ranking short
+    /// (#1452). Every launch still records what it did in `backfillNote`, so a
+    /// pass that found nothing and one that could not run stay distinguishable;
+    /// only the one that could not says so on screen and in CAPTIONS.txt.
+    var notes: [String] {
+        let launch = backfillOutcome.map(Self.launchNoteIsShown(for:)) == true
+            ? backfillNote : nil
+        return [failureNote, launch].compactMap { $0 }
+    }
+
+    /// What the last launch pass did, beside the sentence saying so.
+    private(set) var backfillOutcome: PassOutcome?
 
     /// Whether the last fetch could not get figures, as a fact rather than a
     /// sentence (#1431), for the collaborator panel choosing which way out to
@@ -175,11 +187,14 @@ final class AccountNumbersManager {
     /// one sentence for the state however it was reached (L70).
     func backfill(_ handles: [String], asOf now: Date = Date()) {
         guard !handles.isEmpty else {
+            backfillOutcome = .nothingDue
             backfillNote = Self.launchNote(for: .nothingDue)
             return
         }
         queue { manager in
-            manager.backfillNote = Self.launchNote(for: await manager.run(handles, asOf: now))
+            let outcome = await manager.run(handles, asOf: now)
+            manager.backfillOutcome = outcome
+            manager.backfillNote = Self.launchNote(for: outcome)
         }
     }
 
@@ -217,6 +232,16 @@ final class AccountNumbersManager {
     /// it asks again next launch": `AccountFetchDue.inProgressBackfill` derives
     /// what is still due from the outcomes themselves, so a pass that failed
     /// leaves every handle exactly as due as it found them.
+    static func launchNoteIsShown(for outcome: PassOutcome) -> Bool {
+        // Shown only where it explains a ranking left without figures. The
+        // others need nothing from anybody, and as a warning line over a
+        // healthy list they read as something wrong (#1452).
+        switch outcome {
+        case .couldNotRun, .asked(_, 0): return true
+        case .nothingDue, .alreadyRunning, .asked: return false
+        }
+    }
+
     static func launchNote(for outcome: PassOutcome) -> String {
         let opening = "The launch check of the accounts on events still in progress "
         switch outcome {

@@ -48,7 +48,7 @@ struct CollaboratorPanel: View {
     /// four were typed in here until #1115, which is the drift a shared
     /// wording exists to prevent, and `CollaboratorPickTests` holds this file
     /// to it rather than trusting the habit.
-    private var subtitle: String { CollaboratorPick.panelSubtitle(for: result) }
+    private var subtitle: String? { CollaboratorPick.panelSubtitle(for: result) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
@@ -56,10 +56,12 @@ struct CollaboratorPanel: View {
                 .font(.system(size: 9, weight: .medium))
                 .tracking(0.8)
                 .foregroundStyle(PaintedSurfaces.secondaryText)
-            Text(subtitle)
-                .font(.system(size: 11))
-                .foregroundStyle(PaintedSurfaces.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
+            if let subtitle {
+                Text(subtitle)
+                    .font(.system(size: 11))
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             // Under the headline, not under the last row (#1431). These say why
             // the rows look as they do, a failed fetch or an unreadable book,
@@ -215,19 +217,20 @@ struct CollaboratorPanel: View {
             // figure it corrects, so a stale count is fixed where it is read
             // rather than on some other screen.
             //
-            // Quieter on an account tagged once and never again (#289): the ask
-            // is still there, it just stops competing with the handful whose
-            // numbers the ranking actually leans on. Measured on the real
-            // events: 32 of 38 accounts are one-offs.
-            Button(candidate.stats?.hasEngagementData == true ? "Update" : "Add numbers") {
+            // Drawn as a button (#1452): as plain grey text at the row's edge it
+            // read as a status word, not a control (L49). The same on every
+            // row. It used to be quieter on accounts tagged once (#289), but
+            // that took a fade, and any fade over this label drops it below
+            // readable contrast. The accounts that come back are still marked,
+            // by the recurrence note under their name.
+            Button(CollaboratorPick.figuresControlLabel(
+                hasEngagementData: candidate.stats?.hasEngagementData == true)) {
                 onEditNumbers(candidate.handle)
             }
-            .buttonStyle(.plain)
-            .font(.system(size: 11))
-            .foregroundStyle(
-                RecurringAccounts.emphasis(handle: candidate.handle, in: eventCounts) == .prominent
-                    ? PaintedSurfaces.pageAccentText : PaintedSurfaces.secondaryText)
-            .accessibilityLabel("Edit numbers for \(candidate.handle)")
+            .buttonStyle(BrandOutlineButtonStyle())
+            .accessibilityLabel(CollaboratorPick.figuresControlSpoken(
+                hasEngagementData: candidate.stats?.hasEngagementData == true,
+                handle: candidate.handle))
         }
     }
 }

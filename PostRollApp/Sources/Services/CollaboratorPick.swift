@@ -842,7 +842,23 @@ enum CollaboratorPick {
                  + "none has numbers and there is nothing to rank until it can."
         }
         return opening + "none of them has any numbers yet, so there is nothing "
-             + "to rank. Add numbers and this will name \(maxPerPost)."
+             + "to rank. \(addFiguresLabel) and this will name \(maxPerPost)."
+    }
+
+    /// The control that opens an account's figures form, named by what it
+    /// finds there (#1452). Its own constant because the nothing to rank
+    /// sentence names it, and a renamed button behind an unrenamed sentence
+    /// sends Dan looking for a control that is not there (L111).
+    static let addFiguresLabel = "Add figures"
+
+    static func figuresControlLabel(hasEngagementData: Bool) -> String {
+        hasEngagementData ? "Edit figures" : addFiguresLabel
+    }
+
+    /// What a screen reader hears for that control: the same action, named
+    /// for the account, so the spoken and shown labels cannot disagree.
+    static func figuresControlSpoken(hasEngagementData: Bool, handle: String) -> String {
+        "\(figuresControlLabel(hasEngagementData: hasEngagementData)) for \(handle)"
     }
 
     /// The sentence the review screen puts under its heading, for any answer.
@@ -851,7 +867,10 @@ enum CollaboratorPick {
     /// to describe the same day differently. Two of the four already read from
     /// this file and two were typed into the view, which is the drift this
     /// closes; `CollaboratorPickTests` holds the view to it.
-    static func panelSubtitle(for result: Result) -> String {
+    ///
+    /// Nil for a ranked day: the numbered list is the answer, and the sentence
+    /// that sat over it said nothing new on any day (#1452).
+    static func panelSubtitle(for result: Result) -> String? {
         switch result.coverage {
         case .nothingTagged:
             return nobodyTaggedLine
@@ -863,8 +882,7 @@ enum CollaboratorPick {
         case .nothingToRank:
             return nothingToRankLine(result.unranked.count, fetchFailed: result.fetchFailed)
         case .ranked:
-            return "Instagram allows \(maxPerPost) per post. "
-                 + "A collaborator invite puts this post on their own grid."
+            return nil
         }
     }
 

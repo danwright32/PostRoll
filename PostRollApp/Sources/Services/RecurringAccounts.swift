@@ -181,21 +181,6 @@ enum RecurringAccounts {
         Array(items.prefix(namesShown))
     }
 
-    // MARK: - How loudly to ask, per account
-
-    /// How prominently to offer the numbers control beside one account.
-    ///
-    /// The collaborator panel offers it on every tagged account, and most of
-    /// those are people Dan tags once and never again, so the ask that matters
-    /// sits in a column of thirty that do not. Quieted, never removed: nothing
-    /// here is impossible, and a control taken away because it is usually not
-    /// worth it only ever stops the person who meant to use it (L54).
-    enum Emphasis: Equatable { case quiet, prominent }
-
-    static func emphasis(handle: String, in counts: [String: Int]) -> Emphasis {
-        (counts[AccountBook.key(handle)] ?? 0) >= minimumEvents ? .prominent : .quiet
-    }
-
     /// Why this row is worth a minute, or nil when it is not one of them.
     static func recurrenceNote(handle: String, in counts: [String: Int]) -> String? {
         let count = counts[AccountBook.key(handle)] ?? 0
