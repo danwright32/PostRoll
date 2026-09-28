@@ -185,14 +185,17 @@ enum WindowSheet: WindowModal {
     case outdatedDesigns
     /// The running app is older than the code it was built from (#675).
     case buildBehind(BuildBehind)
+    /// An existing event's name, organisation and venue (#1448).
+    case editDetails(UUID)
 
-    enum Kind { case newEvent, outdatedDesigns, buildBehind }
+    enum Kind { case newEvent, outdatedDesigns, buildBehind, editDetails }
 
     var kind: Kind {
         switch self {
         case .newEvent: return .newEvent
         case .outdatedDesigns: return .outdatedDesigns
         case .buildBehind: return .buildBehind
+        case .editDetails: return .editDetails
         }
     }
 
@@ -204,6 +207,7 @@ enum WindowSheet: WindowModal {
         case .newEvent: return "newEvent"
         case .outdatedDesigns: return "outdatedDesigns"
         case .buildBehind(let behind): return "buildBehind-\(behind.id)"
+        case .editDetails(let eventID): return "editDetails-\(eventID)"
         }
     }
 }

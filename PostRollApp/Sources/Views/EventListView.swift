@@ -25,8 +25,6 @@ struct EventListView: View {
     /// rows whose backgrounds changed and nothing else.
     @State private var hover = EventListHover()
     @State private var showExported = false
-    @State private var renamingEventID: Event.ID? = nil
-    @State private var renameText = ""
     @Namespace private var selectionNamespace
 
     private var exportedCount: Int {
@@ -57,10 +55,6 @@ struct EventListView: View {
                 EventRow(
                         event: event,
                         isSelected: isSelected,
-                        isRenaming: renamingEventID == event.id,
-                        renameText: $renameText,
-                        onRenameCommit: { commitRename(event: event) },
-                        onRenameCancel: { renamingEventID = nil }
                     )
                     .tag(event.id)
                     .listRowBackground(
@@ -81,9 +75,10 @@ struct EventListView: View {
                         }
                     }
                     .contextMenu {
-                        Button("Rename") {
-                            renameText = event.name
-                            renamingEventID = event.id
+                        // Replaces an inline Rename that could change the
+                        // name only (#1448).
+                        Button("Edit Details\u{2026}") {
+                            appState.presentEditDetails(eventID: event.id)
                         }
                         Divider()
                         Button("Duplicate") {
@@ -255,19 +250,6 @@ struct EventListView: View {
         undoDismissWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + DeletionPolicy.undoWindow, execute: work)
     }
-
-    private func commitRename(event: Event) {
-        // One line, not merely trimmed (#688): the name reaches folder names,
-        // file names and captions.
-        let trimmed = FieldText.singleLine(renameText)
-        if !trimmed.isEmpty,
-           var ev = appState.events.first(where: { $0.id == event.id }) {
-            // Live read (#103): renaming must not revert other saved work.
-            ev.name = trimmed
-            appState.updateEvent(ev)
-        }
-        renamingEventID = nil
-    }
 }
 
 // MARK: - Event Row
@@ -282,46 +264,26 @@ struct EventListView: View {
 struct EventRow: View {
     let event: Event
     let isSelected: Bool
-    var isRenaming: Bool = false
-    @Binding var renameText: String
-    var onRenameCommit: (() -> Void)? = nil
-    var onRenameCancel: (() -> Void)? = nil
 
     @Environment(GenerationManager.self) private var genManager
     @Environment(OCRManager.self) private var ocrManager
     @Environment(ExportManager.self) private var exportManager
-    @FocusState private var renameFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.xs) {
-            if isRenaming {
-                TextField("Event name", text: $renameText)
-                    .font(.signPainter(19))
-                    .foregroundStyle(PaintedSurfaces.bodyText)
-                    .textFieldStyle(.plain)
-                    .focused($renameFocused)
-                    .onSubmit { onRenameCommit?() }
-                    .onExitCommand { onRenameCancel?() }
-                    .onChange(of: renameFocused) { _, focused in
-                        if !focused { onRenameCommit?() }
-                    }
-                    .onAppear { renameFocused = true }
-                    .padding(.bottom, 2)
-            } else {
-                // Event name in SignPainter — the visual thread to the generated assets.
-                // Larger size and bottom padding create a clear hierarchy break.
-                Text(event.name)
-                    .font(.signPainter(19))
-                    // Warms towards the system label colour on selection, and
-                    // stays the custom warm colour otherwise. Named rather
-                    // than written here, so the pair walk can say what it
-                    // measures: 11.61:1 selected, which is why this one moved
-                    // nowhere while the lines below it did (#590).
-                    .foregroundStyle(isSelected ? PaintedSurfaces.eventRowNameSelected
-                                                : PaintedSurfaces.bodyText)
-                    .lineLimit(1)
-                    .padding(.bottom, 2)
-            }
+            // Event name in SignPainter: the visual thread to the generated assets.
+            // Larger size and bottom padding create a clear hierarchy break.
+            Text(event.name)
+                .font(.signPainter(19))
+                // Warms towards the system label colour on selection, and
+                // stays the custom warm colour otherwise. Named rather
+                // than written here, so the pair walk can say what it
+                // measures: 11.61:1 selected, which is why this one moved
+                // nowhere while the lines below it did (#590).
+                .foregroundStyle(isSelected ? PaintedSurfaces.eventRowNameSelected
+                                            : PaintedSurfaces.bodyText)
+                .lineLimit(1)
+                .padding(.bottom, 2)
 
             HStack(spacing: 3) {
                 // The organisation when there is one, the venue when there is
@@ -383,9 +345,6 @@ struct EventRow: View {
             name: event.name, org: event.org, venue: event.venue,
             date: event.displayDate, shootType: event.shootType.rawValue,
             stage: event.stage.rawValue))
-        .onChange(of: isRenaming) { _, renaming in
-            if renaming { renameFocused = true }
-        }
     }
 }
 

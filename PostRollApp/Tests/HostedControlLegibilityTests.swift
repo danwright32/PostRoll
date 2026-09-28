@@ -21,7 +21,7 @@ private struct EventListRowPreview: View {
     private let hover = EventListHover()
 
     var body: some View {
-        EventRow(event: event, isSelected: isSelected, renameText: .constant(""))
+        EventRow(event: event, isSelected: isSelected)
             .padding(.horizontal, Spacing.rowInset)
             .padding(.vertical, Spacing.rowV)
             .background(EventRowBackground(eventID: event.id,

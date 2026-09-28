@@ -8,13 +8,13 @@ import Foundation
 /// Safety: every delete path is constrained to subfolders inside the data
 /// root so a misconfigured event URL can't escape and remove user data.
 ///
-/// Correctness ALSO depends on `slugify` producing byte-for-byte what Python's
-/// `_slug` produced when it created the folder, because that is how the folder
-/// to delete is identified. Two implementations in two languages with nothing
-/// forcing them to agree: drift one way leaks a folder forever, drift the other
-/// way deletes a folder some other event is still using.
-/// `tests/fixtures/event_slug.json` is the contract, and
-/// `EventSlugParityTests` holds this side to it (#108).
+/// Correctness ALSO depends on `EventFolder.name(for:)` resolving to the
+/// folder's real name, because that is how the folder to delete is identified:
+/// drift one way leaks a folder forever, drift the other way deletes a folder
+/// some other event is still using. An edited event resolves to the name it was
+/// pinned under (#1448); every other one to the name Python built when it made
+/// the folder, which `tests/fixtures/event_slug.json` records and
+/// `EventSlugParityTests` holds this side to (#108).
 ///
 /// Every reclaim is written to an audit log, because a mistargeted delete was
 /// otherwise completely silent: the folder is simply gone, months after the

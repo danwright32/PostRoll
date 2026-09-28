@@ -39,4 +39,34 @@ enum NewEventForm {
             downbeatBookingID: bookingID
         )
     }
+
+    /// The event Edit Details saves (#1448): the four text fields replaced and
+    /// folded the way Create folds them, everything else left as it was.
+    ///
+    /// An event with anything on disk keeps the folder it was written under,
+    /// pinned here before the fields that name it change. One with nothing
+    /// written yet follows its new details, so a Duplicate edited into a second
+    /// night gets its own folder rather than the first night's.
+    static func edited(_ event: Event,
+                       name: String,
+                       org: String,
+                       venue: String,
+                       venueContext: String) -> Event {
+        var edited = event
+        if edited.folderName == nil && hasWrittenToDisk(event) {
+            edited.folderName = EventFolder.name(for: event)
+        }
+        edited.name = FieldText.singleLine(name)
+        edited.org = FieldText.singleLine(org)
+        edited.venue = FieldText.singleLine(venue)
+        edited.venueContext = FieldText.singleLine(venueContext)
+        return edited
+    }
+
+    /// Whether a folder named after this event may exist: previews rendered,
+    /// a week generated (the step that renders them), or an export run.
+    private static func hasWrittenToDisk(_ event: Event) -> Bool {
+        !event.previewMediaPaths.isEmpty || event.weekResult != nil
+            || event.exportPath != nil
+    }
 }

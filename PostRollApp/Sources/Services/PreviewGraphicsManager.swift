@@ -407,6 +407,28 @@ final class PreviewGraphicsManager {
 
     // MARK: - Redraw a day's images without touching its caption (#1010)
 
+    /// The redraw in flight per event, so it can be stopped (#1448).
+    private var redrawTasks: [UUID: Task<Void, Never>] = [:]
+    /// Which redraws have been asked to stop and have not stopped yet.
+    private var stoppingRedraws: Set<UUID> = []
+
+    /// Stop the redraw running for this event. Returns whether there was one
+    /// to stop, so a press after it finished is not mistaken for a stop (L197).
+    @discardableResult
+    func stopRedraw(_ eventID: UUID) -> Bool {
+        guard let task = redrawTasks[eventID], !stoppingRedraws.contains(eventID) else {
+            return false
+        }
+        stoppingRedraws.insert(eventID)
+        task.cancel()
+        return true
+    }
+
+    /// A stop was asked for and the redraw has not stopped yet.
+    func isStoppingRedraw(_ eventID: UUID) -> Bool {
+        stoppingRedraws.contains(eventID) && redrawTasks[eventID] != nil
+    }
+
     /// Redraw these days' images, with no caption run anywhere near it (#1010).
     ///
     /// Claims BEFORE anything else happens and answers false if it cannot, so
@@ -416,15 +438,25 @@ final class PreviewGraphicsManager {
     /// Returns whether the run started. Not `@discardableResult`, for the same
     /// reason `beginDayRegen` is not: the answer is the only thing standing
     /// between this and a second writer on the same files (#728).
-    func startRedraw(_ days: [DayName], for eventID: UUID, appState: AppState) -> Bool {
+    func startRedraw(_ days: [DayName], for eventID: UUID, appState: AppState,
+                     work: RedrawWork) -> Bool {
         guard !days.isEmpty else { return false }
         // Claimed against an event that is really there, but deliberately NOT
         // rendered from the copy read here.
         guard appState.events.contains(where: { $0.id == eventID }) else { return false }
         guard beginDayRegen(days, for: eventID) else { return false }
+        // A fresh redraw was not stopped, whatever happened to the last one.
+        stoppingRedraws.remove(eventID)
 
-        Task { [weak self] in
+        // Held so it can be stopped (#1448). It was a bare `Task { }`, the
+        // shape #1050 removed from every other long action, and nothing found
+        // it because this owner composes no `JobTracker`.
+        redrawTasks[eventID] = Task { [weak self] in
             guard let self else { return }
+            defer {
+                self.redrawTasks.removeValue(forKey: eventID)
+                self.stoppingRedraws.remove(eventID)
+            }
             // Read at RUN time, never at claim time (#1010).
             //
             // The claim is taken BEFORE the caller writes its switch, on
@@ -457,7 +489,13 @@ final class PreviewGraphicsManager {
             await MainActor.run {
                 switch outcome {
                 case .success(let result):
-                    self.applyRedraw(result, days: days, for: eventID, appState: appState)
+                    self.applyRedraw(result, days: days, for: eventID, appState: appState,
+                                     work: work)
+                case .failure where Task.isCancelled || self.stoppingRedraws.contains(eventID):
+                    // Dan pressed stop. Every day goes back to what it showed
+                    // before, and nothing is reported as failed, because
+                    // nothing did (L11).
+                    for day in days { self.endDayRegen(day, for: eventID) }
                 case .failure(let error):
                     // A run that DIED says nothing per day, so every day it
                     // claimed has to be failed by hand or each keeps a spinner
@@ -472,7 +510,7 @@ final class PreviewGraphicsManager {
                     // most worth saying out loud: every day it claimed is back
                     // where it started (#1046).
                     self.announce(landed: [], failed: days,
-                                  for: eventID, appState: appState)
+                                  for: eventID, appState: appState, work: work)
                 }
             }
         }
@@ -598,7 +636,8 @@ final class PreviewGraphicsManager {
     func applyRedraw(_ result: PythonBridge.PreviewGenerationResult,
                      days: [DayName],
                      for eventID: UUID,
-                     appState: AppState) {
+                     appState: AppState,
+                     work: RedrawWork) {
         // Each day judged alone, so one day's failure does not take away
         // another day's finished work (L53).
         var landed: [DayName] = []
@@ -610,7 +649,8 @@ final class PreviewGraphicsManager {
                 failed.append(day)
             }
         }
-        announce(landed: landed, failed: failed, for: eventID, appState: appState)
+        announce(landed: landed, failed: failed, for: eventID, appState: appState,
+                 work: work)
     }
 
     /// One notice for a whole layout switch (#1046).
@@ -626,7 +666,8 @@ final class PreviewGraphicsManager {
     /// ready (L12), and a run that died reports the days it lost rather than
     /// nothing at all (L110).
     private func announce(landed: [DayName], failed: [DayName],
-                          for eventID: UUID, appState: AppState) {
+                          for eventID: UUID, appState: AppState,
+                          work: RedrawWork) {
         guard let notice = LayoutSwitchNotice.of(landed: landed, failed: failed)
         else { return }
         // The live name, read after the writes: the run takes minutes and the
@@ -635,7 +676,7 @@ final class PreviewGraphicsManager {
         else { return }
         if notice.isFailure {
             NotificationService.shared.notifyWorkFailed(
-                work: "Layout switch", eventName: name, reason: notice.what)
+                work: work.label, eventName: name, reason: notice.what)
         } else {
             NotificationService.shared.notifyRegenerationComplete(
                 eventName: name, what: notice.what)
@@ -846,5 +887,21 @@ final class PreviewGraphicsManager {
         let made = SpeculativeReelRenderer(day: .thursday)
         speculativeReels[eventID] = made
         return made
+    }
+}
+
+/// What a redraw was started for, so a failure is announced as that (#1448).
+///
+/// Required at every call rather than defaulted, because the default was the
+/// one caller that existed and the second would have inherited its wording.
+enum RedrawWork {
+    case layoutSwitch
+    case detailsEdited
+
+    var label: String {
+        switch self {
+        case .layoutSwitch:  return "Layout switch"
+        case .detailsEdited: return "Refresh text"
+        }
     }
 }

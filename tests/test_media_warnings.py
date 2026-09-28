@@ -25,7 +25,7 @@ def _manifest(day: str, tmp_path, photo, bw: str) -> dict:
     return {
         "event": "Test Event",
         "org": "Test Org",
-        "venue": "Test Venue",
+        "venue": "Test Venue", "folder_name": "test_event",
         "days": {
             day: {
                 "raw_photo": str(photo),

@@ -153,7 +153,7 @@ def test_fridays_cover_pick_is_told_what_the_week_already_used(monkeypatch, tmp_
     monkeypatch.setattr(gm_mod, "select_cover_photo", spy_pick)
 
     manifest = {
-        "event": "Test Show", "org": "Org", "venue": "Hall", "date": "2026-01-01",
+        "event": "Test Show", "org": "Org", "venue": "Hall", "folder_name": "test_event", "date": "2026-01-01",
         "days": {
             "tuesday": {"raw_photo": str(shared), "edited_photo": str(shared)},
             "friday": {"clips": clips},
@@ -179,7 +179,7 @@ def test_friday_cover_generated_from_clip_reel_frames(monkeypatch, tmp_path):
     monkeypatch.setattr(gm_mod, "select_cover_photo", fake_select_cover_photo)
 
     manifest = {
-        "event": "Test Show", "org": "Org", "venue": "Hall", "date": "2026-01-01",
+        "event": "Test Show", "org": "Org", "venue": "Hall", "folder_name": "test_event", "date": "2026-01-01",
         "days": {"friday": {"clips": clips}},
     }
     result = gm_mod.generate_media(manifest, tmp_path / "out")
@@ -204,7 +204,7 @@ def test_friday_cover_not_generated_when_clip_reel_not_rendered(tmp_path):
     Image.new("RGB", (400, 600), "blue").save(edit)
 
     manifest = {
-        "event": "Test Show", "org": "Org", "venue": "Hall", "date": "2026-01-01",
+        "event": "Test Show", "org": "Org", "venue": "Hall", "folder_name": "test_event", "date": "2026-01-01",
         "days": {"friday": {"clips": clips, "raw_photo": str(raw), "edited_photo": str(edit)}},
     }
     result = gm_mod.generate_media(manifest, tmp_path / "out")
@@ -228,7 +228,7 @@ def test_friday_cover_sticky_gate_skips_selection_when_cover_source_present(monk
     monkeypatch.setattr(gm_mod, "select_cover_photo", _spy_select_cover_photo)
 
     manifest = {
-        "event": "Test Show", "org": "Org", "venue": "Hall", "date": "2026-01-01",
+        "event": "Test Show", "org": "Org", "venue": "Hall", "folder_name": "test_event", "date": "2026-01-01",
         "days": {"friday": {"clips": clips, "cover_source": str(persisted_source)}},
     }
     result = gm_mod.generate_media(manifest, tmp_path / "out")
@@ -261,7 +261,7 @@ def test_thursday_produces_no_cover(monkeypatch, tmp_path):
 
     photos = _make_photos(tmp_path, 3)
     manifest = {
-        "event": "Test Show", "org": "Org", "venue": "Hall", "date": "2026-01-01",
+        "event": "Test Show", "org": "Org", "venue": "Hall", "folder_name": "test_event", "date": "2026-01-01",
         "days": {"thursday": {"photos": photos}},
     }
     out = tmp_path / "out"
@@ -296,7 +296,7 @@ def test_a_persisted_cover_source_does_not_bring_thursdays_cover_back(
 
     photos = _make_photos(tmp_path, 3)
     manifest = {
-        "event": "Test Show", "org": "Org", "venue": "Hall", "date": "2026-01-01",
+        "event": "Test Show", "org": "Org", "venue": "Hall", "folder_name": "test_event", "date": "2026-01-01",
         "days": {"thursday": {"photos": photos, "cover_source": photos[0]}},
     }
     out = tmp_path / "out"

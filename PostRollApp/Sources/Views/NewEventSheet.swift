@@ -60,14 +60,8 @@ struct NewEventSheet: View {
                         // Event details
                         VStack(alignment: .leading, spacing: Spacing.sm) {
                             BrandSectionLabel("Event Details")
-                            BrandTextField("Event name", text: $name)
-                            // Named as optional in the field itself rather
-                            // than in a hint beside it, so the one place Dan
-                            // looks while filling the form is the place that
-                            // says so (#689).
-                            BrandTextField("Organization (optional)", text: $org)
-                            BrandTextField("Venue (optional)", text: $venue)
-                            BrandTextField("Specific hall/room (optional, for blog context)", text: $venueContext)
+                            EventDetailsFields(name: $name, org: $org, venue: $venue,
+                                               venueContext: $venueContext)
 
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("Date")
@@ -173,18 +167,54 @@ struct BrandSectionLabel: View {
     }
 }
 
+/// The four text fields an event is named by, shared by New Event and Edit
+/// Details (#1448) so the two forms cannot drift apart.
+///
+/// Each carries its label above the box rather than only as a placeholder: a
+/// placeholder disappears once the box holds a value, and in Edit Details every
+/// box starts full. Optional fields say so in the label (#689).
+struct EventDetailsFields: View {
+    @Binding var name: String
+    @Binding var org: String
+    @Binding var venue: String
+    @Binding var venueContext: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            labelled("Event name", $name)
+            labelled("Organization (optional)", $org)
+            labelled("Venue (optional)", $venue)
+            labelled("Specific hall/room (optional, for blog context)", $venueContext)
+        }
+    }
+
+    private func labelled(_ label: String, _ text: Binding<String>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.light(11))
+                .foregroundStyle(PaintedSurfaces.secondaryText)
+                .accessibilityHidden(true)
+            BrandTextField(label, text: text)
+        }
+    }
+}
+
 struct BrandTextField: View {
-    let placeholder: String
+    let label: String
     @Binding var text: String
     @FocusState private var focused: Bool
 
-    init(_ placeholder: String, text: Binding<String>) {
-        self.placeholder = placeholder
+    init(_ label: String, text: Binding<String>) {
+        self.label = label
         _text = text
     }
 
+    /// No placeholder on the box: `EventDetailsFields` prints the name above
+    /// it, and saying it twice on an empty box is noise. It stays the
+    /// accessible name.
     var body: some View {
-        TextField(placeholder, text: $text)
+        TextField("", text: $text)
+            .accessibilityLabel(label)
             .textFieldStyle(.plain)
             .focused($focused)
             .font(.system(size: 13))

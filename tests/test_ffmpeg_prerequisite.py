@@ -78,7 +78,7 @@ def test_generate_media_reports_the_missing_tool_instead_of_shipping_a_still(
     monkeypatch.setattr("shutil.which", lambda name: None)
 
     manifest = {
-        "event": "Concert", "org": "Org", "venue": "Hall",
+        "event": "Concert", "org": "Org", "venue": "Hall", "folder_name": "test_event",
         "days": {"thursday": {"photos": [str(sample_photo)]}},
     }
     results = gm.generate_media(manifest, tmp_output)
@@ -165,7 +165,7 @@ def test_the_run_records_which_toolchain_made_the_renders(
     monkeypatch.setattr("shutil.which", lambda name: None)
 
     manifest = {
-        "event": "Concert", "org": "Org", "venue": "Hall",
+        "event": "Concert", "org": "Org", "venue": "Hall", "folder_name": "test_event",
         "days": {"thursday": {"photos": [str(sample_photo)]}},
     }
     gm.generate_media(manifest, tmp_output)

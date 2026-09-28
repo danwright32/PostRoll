@@ -820,6 +820,11 @@ final class AppState {
         }
     }
 
+    /// Put an event's Edit Details sheet on screen (#1448).
+    func presentEditDetails(eventID: UUID) {
+        sheets.request(.editDetails(eventID), from: .person)
+    }
+
     // MARK: - postroll:// links (#840)
 
     /// Put the New Event sheet on screen.
@@ -985,6 +990,9 @@ final class AppState {
         copy.blogPhotoPaths = []
         copy.weekResult = nil
         copy.exportPath = nil
+        // Its media is cleared, so it has no folder of its own yet, and it
+        // must not keep writing into the original's (#1448).
+        copy.folderName = nil
         // Resume from the earliest stage that requires new input
         if original.ocrReviewDone {
             copy.stage = .photosAssigned

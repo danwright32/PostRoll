@@ -71,7 +71,8 @@ struct PostingLayoutControl: View {
     private func redrawStale() {
         let days = staleDays
         guard !days.isEmpty else { return }
-        _ = previews.startRedraw(days, for: event.id, appState: appState)
+        _ = previews.startRedraw(days, for: event.id, appState: appState,
+                                 work: .layoutSwitch)
     }
 
     var body: some View {
@@ -187,7 +188,7 @@ struct PostingLayoutControl: View {
         var claimedRedraw = false
         if !work.redrawDays.isEmpty {
             claimedRedraw = previews.startRedraw(work.redrawDays, for: event.id,
-                                                 appState: appState)
+                                                 appState: appState, work: .layoutSwitch)
             guard claimedRedraw else { return }
         }
 

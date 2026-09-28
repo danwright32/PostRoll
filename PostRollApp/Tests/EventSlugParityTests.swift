@@ -1,10 +1,11 @@
 import XCTest
 
-/// #108: the event folder slug is one rule, satisfied by both languages.
+/// #108: the event folder slug is one rule, and it matches the folders on disk.
 ///
-/// Python creates the per-event preview folder named by this slug. This side
-/// re-derives the same name months later in order to DELETE that folder, from
-/// a completely separate implementation, and nothing forced the two to agree.
+/// Python named these folders itself until #1448, when the app became the only
+/// place the name is decided and started sending it in the manifest. Every
+/// folder made before then carries the name Python built, and this side has to
+/// go on deriving exactly that name to find them again.
 ///
 /// Drift is bad in both directions. A slug built differently here misses the
 /// folder and leaks it forever; one that happens to collide with another
@@ -12,8 +13,7 @@ import XCTest
 ///
 /// `tests/fixtures/event_slug.json` is the contract, and every expected value
 /// in it was measured by running Python's `_slug` rather than written by hand,
-/// so it cannot record a shape the real function does not produce (L48).
-/// `tests/test_event_slug_parity.py` asserts the Python side satisfies it.
+/// so it cannot record a shape the real function did not produce (L48).
 final class EventSlugParityTests: XCTestCase {
 
     private struct Fixture: Decodable {

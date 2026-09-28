@@ -5,15 +5,16 @@ import Foundation
 ///
 /// Three places built this name and two of them slugged their text with
 /// different code: `ArchiveCleanup` walked the characters, `EventExporter` ran
-/// a regular expression, and Python has a third implementation again. They
+/// a regular expression, and Python had a third implementation again. They
 /// agreed, which is exactly why nobody noticed there were three: the day one of
 /// them changes, the archive sweep stops finding the folder the export made and
 /// leaks it, or worse, finds somebody else's.
 ///
-/// So the rule lives here once and everything calls it. `tests/fixtures/
-/// event_slug.json` holds the contract the Python side is held to as well, and
-/// every expected value in it was measured by running Python's own function
-/// rather than written by hand (L48).
+/// So the rule lives here once and everything calls it, Python included: the
+/// media manifest carries the name rather than Python rebuilding it (#1448).
+/// `tests/fixtures/event_slug.json` records the names Python built for the
+/// folders already on disk, measured by running its function rather than
+/// written by hand (L48).
 enum EventFolder {
 
     /// The folder name for one event.
@@ -57,10 +58,14 @@ enum EventFolder {
         return lead.isEmpty ? tail : "\(lead)_\(tail)"
     }
 
-    /// The folder name for an event, from the event.
+    /// The folder name for an event: the one pinned on it when an edit would
+    /// have moved it (#1448), otherwise derived from its details.
+    ///
+    /// Every reader goes through here, the orphan sweep included, which
+    /// deletes any preview folder no event resolves to.
     static func name(for event: Event) -> String {
-        name(org: event.org, venue: event.venue, name: event.name,
-             isoDate: event.isoDate)
+        event.folderName ?? name(org: event.org, venue: event.venue,
+                                 name: event.name, isoDate: event.isoDate)
     }
 
     /// Lowercase, every run of characters outside a-z0-9 collapsed to one

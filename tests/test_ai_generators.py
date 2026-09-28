@@ -729,7 +729,7 @@ def test_thursday_produces_no_story_when_the_reel_is_skipped(tmp_path, monkeypat
         photos.append(str(p))
 
     manifest = {
-        "event": "Show", "org": "Org", "venue": "Hall", "date": "2026-04-04",
+        "event": "Show", "org": "Org", "venue": "Hall", "folder_name": "test_event", "date": "2026-04-04",
         "days": {"thursday": {"photos": photos}},
     }
     out = tmp_path / "out"

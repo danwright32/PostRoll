@@ -25,6 +25,14 @@ struct Event: Identifiable, Codable, Hashable {
     /// that existed before this shipped. A nil must never match another nil.
     var downbeatBookingID: UUID? = nil
 
+    /// The folder this event's media was rendered under, pinned the first time
+    /// an edit to its name, organisation or venue would have moved it (#1448).
+    ///
+    /// `nil` means the name is still derived from those fields, which is every
+    /// event until it is edited after something was written to disk. Read it
+    /// through `EventFolder.name(for:)`, never directly.
+    var folderName: String? = nil
+
     // Program OCR inputs
     var programImagePaths: [URL] = []
     /// A single searchable PDF of the whole program, built from the page scans
@@ -183,6 +191,7 @@ extension Event {
         shootType    = try c.decode(ShootType.self, forKey: .shootType)
         stage             = try c.decodeIfPresent(EventStage.self,                 forKey: .stage)             ?? .created
         downbeatBookingID = try c.decodeIfPresent(UUID.self,                       forKey: .downbeatBookingID)
+        folderName        = try c.decodeIfPresent(String.self,                     forKey: .folderName)
         programImagePaths = try c.decodeIfPresent([URL].self,                      forKey: .programImagePaths) ?? []
         programPDFPath    = try c.decodeIfPresent(URL.self,                        forKey: .programPDFPath)
         programPDFFingerprint = try c.decodeIfPresent(String.self,                 forKey: .programPDFFingerprint)

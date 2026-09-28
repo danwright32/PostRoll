@@ -67,6 +67,26 @@ final class WindowSheetPresentationTests: XCTestCase {
                        + "sheets when at most one can be on screen")
     }
 
+    @MainActor
+    func testEditDetailsOpensAsTheWindowsSheetForThatEvent() {
+        // #1448: the one sheet the window shows, not a second modifier on the
+        // list, so it cannot stack on the New Event form.
+        let state = state()
+        let id = UUID()
+
+        state.presentEditDetails(eventID: id)
+
+        XCTAssertEqual(state.presentedSheet, .editDetails(id))
+    }
+
+    @MainActor
+    func testEditDetailsForAnotherEventIsAnotherSheet() {
+        // Keyed on the event, so asking for a second event's details redraws
+        // the sheet rather than leaving the first event's values in it.
+        XCTAssertNotEqual(WindowSheet.editDetails(UUID()).id,
+                          WindowSheet.editDetails(UUID()).id)
+    }
+
     // MARK: - What Dan asks for wins the screen
 
     @MainActor

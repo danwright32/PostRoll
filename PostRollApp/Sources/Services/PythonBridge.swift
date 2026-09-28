@@ -1166,7 +1166,9 @@ actor PythonBridge {
             "event":      event.name,
             "org":        event.org,
             "venue":      event.venue,
-            "date":       event.isoDate,
+            // The folder to render into, decided here rather than rebuilt in
+            // Python from the fields above, which an edit can change (#1448).
+            "folder_name": EventFolder.name(for: event),
             "shoot_type": event.shootType.pythonValue,
             "pieces":     pieces,
             "days":       daysDict,
