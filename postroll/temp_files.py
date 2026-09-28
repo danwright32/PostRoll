@@ -40,7 +40,7 @@ def pid_is_alive(pid: int) -> bool:
 
 
 def temp_sibling(output: Path, tag: str, *, now: float | None = None,
-                 is_alive: Callable[[int], bool] = pid_is_alive) -> Path:
+                 is_alive: Callable[[int], bool] | None = None) -> Path:
     """This process's temp name for `output`, after sweeping dead runs' ones.
 
     Only `<output stem>.<digits>.<tag>` beside `output` is ever considered, so
@@ -51,6 +51,9 @@ def temp_sibling(output: Path, tag: str, *, now: float | None = None,
     """
     output = Path(output)
     now = time.time() if now is None else now
+    # Resolved here rather than defaulted in the signature, so the real check
+    # stays replaceable (L394): a default binds once, at definition.
+    alive = pid_is_alive if is_alive is None else is_alive
     pattern = re.compile(rf"^{re.escape(output.stem)}\.(\d+)\.{re.escape(tag)}$")
     try:
         siblings = list(output.parent.iterdir())
@@ -61,7 +64,7 @@ def temp_sibling(output: Path, tag: str, *, now: float | None = None,
         if not match:
             continue
         pid = int(match.group(1))
-        if pid == os.getpid() or is_alive(pid):
+        if pid == os.getpid() or alive(pid):
             continue
         try:
             if now - path.stat().st_mtime < QUIET_FOR_S:
