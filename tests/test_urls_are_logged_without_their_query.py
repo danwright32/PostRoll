@@ -44,3 +44,8 @@ def test_a_dropped_suggestion_logs_its_profile_without_the_share_id(capsys):
     err = capsys.readouterr().err
     assert "someoneelse" in err, "the warning no longer names the profile"
     assert "SECRETSHAREID" not in err and "igsh" not in err, err
+
+
+def test_credentials_in_front_of_the_host_come_off_too():
+    logged = url_for_log("https://jane:s3cret@example.com:8443/p?x=1")
+    assert logged == "https://example.com:8443/p"
