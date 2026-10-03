@@ -49,7 +49,10 @@ from PIL import ImageFont
 #: caption band. Measured on 2026-08-28 from real photographs: the worst
 #: arrangement the old pool offered hid 88.9% of its bottom row, three of seven
 #: photographs effectively absent, and the file on disk was perfectly correct.
-COLLAGE_DESIGN_VERSION = 2
+#:
+#: 3 is the wordmark on the caption plate drawn at 400 rather than 240
+#: (2026-10-03), after Dan found it unreadable on his phone.
+COLLAGE_DESIGN_VERSION = 3
 
 
 #: Which generation of each template's design this build renders (#286).
@@ -246,7 +249,7 @@ class DesignChange:
 #: drifted by the next day, because a squash merge rewrites the hash the work
 #: was done under (measured 2026-08-21, three of the six named were wrong).
 MEDIA_DESIGN_CHANGED: dict[str, "DesignChange"] = {
-    "collage": DesignChange(version=2, day="2026-08-28"),
+    "collage": DesignChange(version=3, day="2026-10-03"),
     "story": DesignChange(version=2, day="2026-08-21"),
     "cover": DesignChange(version=2, day="2026-08-21"),
     "before_after": DesignChange(version=3, day="2026-10-03"),

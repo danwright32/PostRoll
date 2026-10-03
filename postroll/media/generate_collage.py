@@ -64,7 +64,11 @@ CANVAS_H = 1920
 STRIP_H = 90
 
 # Logo
-LOGO_WIDTH = 240
+#: 400 since a design round on Dan's own Sunday collage (2026-10-03): at 240
+#: the mark was unreadable on a phone. It still fits the 90px plate, because the
+#: file is mostly padding and only its ink has to clear the plate's edges; the
+#: transparent margin overhangs onto the photographs and draws nothing there.
+LOGO_WIDTH = 400
 PLATE_PADDING = 24  # inset of the plate's text and logo from its own edges
 
 # Layout patterns: (top_half, bottom_half) — photos split around center strip

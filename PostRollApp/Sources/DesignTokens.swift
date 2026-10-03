@@ -50,7 +50,7 @@ enum PhoneSafeArea {
 /// older design, and is badged rather than left to render the old look
 /// indefinitely until somebody happens to regenerate that day.
 enum CollageDesign {
-    static let collageDesignVersion = 2
+    static let collageDesignVersion = 3
 }
 
 /// Which generation of each template's design this build renders (#286).
@@ -66,7 +66,7 @@ enum CollageDesign {
 /// what the stamp records and what a day folder is scanned for.
 enum MediaDesign {
     static let mediaDesignVersions: [String: Int] = [
-        "collage": 2,
+        "collage": 3,
         "story": 2,
         "cover": 2,
         "before_after": 3,
@@ -94,7 +94,7 @@ enum MediaDesign {
     /// still at its first version has no change to be older than, only a date
     /// on which a number was first written down.
     static let mediaDesignChanged: [String: String] = [
-        "collage": "2026-08-28",
+        "collage": "2026-10-03",
         "story": "2026-08-21",
         "cover": "2026-08-21",
         "before_after": "2026-10-03",
