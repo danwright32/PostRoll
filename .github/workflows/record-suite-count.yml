@@ -39,7 +39,7 @@ jobs:
     # ubuntu, not a Mac. This reads a finished run's log through gh and writes
     # one small file; nothing here needs Xcode, and a macOS runner bills at ten
     # times the rate (#1246, L306).
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Only a run that went green. A run that failed may have stopped early, and
     # a floor pinned to how far a broken run got is refused by nothing forever
     # after (L182). A dispatched run carries no `workflow_run` context at all,
@@ -135,7 +135,7 @@ jobs:
       # record and could not propose it must not throw the reading away (L277).
       - name: Keep the record this run computed
         if: always() && steps.moved.outputs.moved == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: swift-suite-count
           path: tests/fixtures/swift_suite_count.json
