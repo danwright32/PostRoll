@@ -224,3 +224,14 @@ def newest_full_sweep(*, repo: str | None = None,
                     newest = sweep
                 break
     return newest
+
+
+def sweep_of(run_id: int | str, *, repo: str | None = None) -> Sweep:
+    """One guard-workflow run, summarised by what its shards proved.
+
+    For the guard cost recorder, which follows the exact run that just
+    finished rather than the newest of some kind (#1467).
+    """
+    name = _repo(repo)
+    run = _gh(f"repos/{name}/actions/runs/{run_id}")
+    return _summarise(name, [run], skip_run_id=None)[0]
