@@ -95,7 +95,7 @@ def get_video_duration(path: str) -> float:
     return seconds
 
 
-def cfr_frame_count(cfr_path: str, rec_duration: float, run=subprocess.run) -> int:
+def cfr_frame_count(cfr_path: str, rec_duration: float, run=None) -> int:
     """How many frames the 30fps conversion of the recording holds.
 
     Counted by decoding it, which takes longer the longer the recording is, so
@@ -104,6 +104,8 @@ def cfr_frame_count(cfr_path: str, rec_duration: float, run=subprocess.run) -> i
     unreadable or too slow, and a long recording is never a failed reel.
     """
     estimate = int(rec_duration * 30)
+    if run is None:
+        run = subprocess.run
     try:
         counted = run(
             ["ffprobe", "-v", "error", "-count_frames",
