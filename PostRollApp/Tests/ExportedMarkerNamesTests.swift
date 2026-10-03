@@ -214,7 +214,7 @@ final class ExportedMarkerNamesTests: XCTestCase {
     /// The test #1142 asks for, and the one that matters: built is not wired
     /// (L3). Every `[PHOTO:]` filename in the exported draft must name a file
     /// that is in the exported folder. It failed before the exporter was
-    /// changed, with all seven unit tests above already passing.
+    /// changed, with every unit test above it already passing.
     func testEveryMarkerInTheExportedDraftNamesAFileInTheFolder() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("exported-markers-\(UUID().uuidString)")
