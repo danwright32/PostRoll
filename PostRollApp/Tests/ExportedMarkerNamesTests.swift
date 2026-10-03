@@ -2,11 +2,11 @@ import XCTest
 
 /// #1142: the exported draft names the files that are actually in the export.
 ///
-/// `EventExporter` writes the blog photographs out renumbered as `photo_01.jpg`,
-/// `photo_02.jpg` and so on, in `blogPhotoPaths` order, and writes `draft.md`
-/// from the body unchanged. So every `[PHOTO:]` marker in the exported draft
-/// named a file that is not in the export, and every file in the export was
-/// named by nothing.
+/// `EventExporter` wrote the blog photographs out under export names and wrote
+/// `draft.md` from the body unchanged. So every `[PHOTO:]` marker in the
+/// exported draft named a file that is not in the export, and every file in
+/// the export was named by nothing. The export names are the photographs' own
+/// since #1477, made distinct only where two of them clash.
 ///
 /// The export folder is the deliverable: it is what gets uploaded. Somebody
 /// pasting the draft into a blog editor had to work out which photograph each
@@ -125,10 +125,79 @@ final class ExportedMarkerNamesTests: XCTestCase {
         let blogDir = folder.appendingPathComponent("0. Blog")
         let names = try FileManager.default.contentsOfDirectory(atPath: blogDir.path)
 
-        XCTAssertTrue(names.contains("photo_01.jpg"), names.sorted().description)
-        XCTAssertTrue(names.contains("photo_02.jpg"),
+        XCTAssertTrue(names.contains("DSC4821.jpg"), names.sorted().description)
+        XCTAssertTrue(names.contains("DSC4821-2.jpg"),
                       "the second photograph did not reach the export, so one "
                       + "overwrote the other: \(names.sorted())")
+    }
+
+    // MARK: - the exported names (#1477)
+
+    /// Dan uploads from his own library, where the photographs carry their real
+    /// filenames. A `photo_11` in the draft named nothing he could find there,
+    /// so each marker had to be matched to a picture by eye.
+
+    func testDistinctNamesAreKeptAsTheyAre() {
+        let photos = [URL(fileURLWithPath: "/a/DSC4821.jpg"),
+                      URL(fileURLWithPath: "/a/DSC4822.JPG")]
+        XCTAssertEqual(BlogDraftText.exportNames(for: photos),
+                       ["DSC4821.jpg", "DSC4822.JPG"])
+    }
+
+    func testOnlyTheSecondOfTwoSharingANameIsSuffixed() {
+        let photos = [URL(fileURLWithPath: "/day 1/DSC4821.jpg"),
+                      URL(fileURLWithPath: "/day 2/DSC4821.jpg"),
+                      URL(fileURLWithPath: "/day 3/DSC4821.jpg")]
+        XCTAssertEqual(BlogDraftText.exportNames(for: photos),
+                       ["DSC4821.jpg", "DSC4821-2.jpg", "DSC4821-3.jpg"])
+    }
+
+    func testNamesDifferingOnlyInCaseAreTreatedAsTheSameFile() {
+        // The Mac's disk ignores case, so these are one file there, and the
+        // second copy would quietly replace the first.
+        let photos = [URL(fileURLWithPath: "/a/DSC4821.jpg"),
+                      URL(fileURLWithPath: "/b/dsc4821.JPG")]
+        XCTAssertEqual(BlogDraftText.exportNames(for: photos),
+                       ["DSC4821.jpg", "dsc4821-2.JPG"])
+    }
+
+    func testASuffixNeverLandsOnARealName() {
+        // A real photograph already called DSC4821-2.jpg keeps that name, and
+        // the clashing DSC4821.jpg moves on to the next free number.
+        let photos = [URL(fileURLWithPath: "/a/DSC4821.jpg"),
+                      URL(fileURLWithPath: "/a/DSC4821-2.jpg"),
+                      URL(fileURLWithPath: "/b/DSC4821.jpg")]
+        XCTAssertEqual(BlogDraftText.exportNames(for: photos),
+                       ["DSC4821.jpg", "DSC4821-2.jpg", "DSC4821-3.jpg"])
+    }
+
+    func testAnOrdinaryExportKeepsTheRealNamesInTheDraftAndTheFolder() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("real-names-\(UUID().uuidString)")
+        let assets = root.appendingPathComponent("_assets")
+        try FileManager.default.createDirectory(at: assets, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let name = "Broadway Undressed (54 Below) @dwphotony-130.jpg"
+        let photo = assets.appendingPathComponent(name)
+        FileManager.default.createFile(atPath: photo.path, contents: Data("img".utf8))
+
+        var event = Event(name: "Broadway Undressed", org: "Tom Guthrie", venue: "54 Below",
+                          date: Date(timeIntervalSince1970: 1_700_000_000),
+                          shootType: .fullShow)
+        event.blogPhotoPaths = [photo]
+        var result = WeekGenerationResult()
+        result.blog = BlogOutput(title: "T", body: "Prose.\n\n[PHOTO: \(name) | Alt text]")
+        event.weekResult = result
+
+        let folder = try EventExporter.export(event: event, to: root).staging.commit()
+        let blogDir = folder.appendingPathComponent("0. Blog")
+        let draft = try String(contentsOf: blogDir.appendingPathComponent("draft.md"),
+                               encoding: .utf8)
+
+        let listing = try FileManager.default.contentsOfDirectory(atPath: blogDir.path)
+        XCTAssertTrue(listing.contains(name), listing.sorted().description)
+        XCTAssertTrue(draft.contains("[PHOTO: \(name) | Alt text]"), draft)
     }
 
     // MARK: - the export actually uses it

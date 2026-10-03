@@ -146,7 +146,7 @@ final class EventExporterTests: XCTestCase {
         let blogText = try String(contentsOf: blog, encoding: .utf8)
         XCTAssertTrue(blogText.contains("# Inside the Music"))
         XCTAssertTrue(blogText.contains("A long blog body."))
-        XCTAssertTrue(fm.fileExists(atPath: folder.appendingPathComponent("0. Blog/photo_01.jpg").path))
+        XCTAssertTrue(fm.fileExists(atPath: folder.appendingPathComponent("0. Blog/blog1.jpg").path))
 
         // Wednesday carousel copied in order, zero-padded
         XCTAssertTrue(fm.fileExists(atPath: folder.appendingPathComponent("4. Wednesday/carousel/01.jpg").path))
