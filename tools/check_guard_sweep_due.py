@@ -241,12 +241,14 @@ class SweepDecision:
         if not self.due_shards:
             return ("Every shard has already proved this tree, inside the "
                     "window, so the sweep starts no macOS runner today.")
+        return f"{self._what_is_due()}, so the sweep runs."
+
+    def _what_is_due(self) -> str:
         which = ", ".join(str(shard) for shard in self.due_shards)
         # The reasons, deduplicated, because seven shards saying the same
         # thing seven times buries the one that differs (L11).
         reasons = sorted({d.due.value for d in self.decisions if d.run})
-        return (f"Shard(s) {which} have something to prove ({'; '.join(reasons)}), "
-                f"so the sweep runs.")
+        return f"Shard(s) {which} have something to prove ({'; '.join(reasons)})"
 
     def say(self, *, event: str, last_sweep: Sweep | LastSweepUnknown,
             now: datetime) -> str:
@@ -262,10 +264,7 @@ class SweepDecision:
             # Still say when the last sweep ran: this text is also the overdue
             # issue's body, and a tree proved a month ago is quiet AND overdue.
             return f"{self.message} {_last_sweep_sentence(last_sweep, now)}"
-        which = ", ".join(str(shard) for shard in self.due_shards)
-        reasons = sorted({d.due.value for d in self.decisions if d.run})
-        return (f"Shard(s) {which} have something to prove "
-                f"({'; '.join(reasons)}), but the full sweep runs only when "
+        return (f"{self._what_is_due()}, but the full sweep runs only when "
                 "started by hand (`gh workflow run guards.yml`), so this run "
                 f"proved nothing. {_last_sweep_sentence(last_sweep, now)}")
 
