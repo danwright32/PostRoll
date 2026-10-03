@@ -34,20 +34,26 @@ enum BlogDraftText {
         func markerSafe(_ text: String) -> String {
             String(text.map { "|[]".contains($0) ? "_" : $0 })
         }
-        let real = Set(photos.map { markerSafe($0.lastPathComponent).lowercased() })
+        // How the Mac's disk tells two names apart: ignoring case, and ignoring
+        // how an accent was typed, so `Café.jpg` with a precomposed é and with a
+        // combining accent are one file there too.
+        func onDisk(_ name: String) -> String {
+            name.precomposedStringWithCanonicalMapping.lowercased()
+        }
+        let real = Set(photos.map { onDisk(markerSafe($0.lastPathComponent)) })
         var taken: Set<String> = []
         return photos.map { photo in
             var name = markerSafe(photo.lastPathComponent)
-            if taken.contains(name.lowercased()) {
+            if taken.contains(onDisk(name)) {
                 let stem = markerSafe(photo.deletingPathExtension().lastPathComponent)
                 let ext = markerSafe(photo.pathExtension)
                 var n = 2
                 repeat {
                     name = ext.isEmpty ? "\(stem)-\(n)" : "\(stem)-\(n).\(ext)"
                     n += 1
-                } while taken.contains(name.lowercased()) || real.contains(name.lowercased())
+                } while taken.contains(onDisk(name)) || real.contains(onDisk(name))
             }
-            taken.insert(name.lowercased())
+            taken.insert(onDisk(name))
             return name
         }
     }

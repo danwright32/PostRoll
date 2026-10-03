@@ -161,6 +161,18 @@ final class ExportedMarkerNamesTests: XCTestCase {
                        ["DSC4821.jpg", "dsc4821-2.JPG"])
     }
 
+    func testAnAccentTypedTwoWaysIsTheSameFile() {
+        let precomposed = "Caf\u{00E9}.jpg"
+        let combining = "Cafe\u{0301}.jpg"
+        let photos = [URL(fileURLWithPath: "/a/\(precomposed)"),
+                      URL(fileURLWithPath: "/b/\(combining)")]
+        let names = BlogDraftText.exportNames(for: photos)
+        XCTAssertEqual(names.count, 2)
+        XCTAssertNotEqual(names[0].precomposedStringWithCanonicalMapping,
+                          names[1].precomposedStringWithCanonicalMapping,
+                          "both export to one file on the Mac's disk: \(names)")
+    }
+
     func testASuffixNeverLandsOnARealName() {
         // A real photograph already called DSC4821-2.jpg keeps that name, and
         // the clashing DSC4821.jpg moves on to the next free number.
