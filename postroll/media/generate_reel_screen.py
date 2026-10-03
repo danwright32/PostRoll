@@ -95,6 +95,34 @@ def get_video_duration(path: str) -> float:
     return seconds
 
 
+def cfr_frame_count(cfr_path: str, rec_duration: float, run=None) -> int:
+    """How many frames the 30fps conversion of the recording holds.
+
+    Counted by decoding it, which takes longer the longer the recording is, so
+    the count is bounded (#1479, L743). The conversion forced 30 frames a
+    second, so length times 30 is the answer whenever counting cannot give one,
+    unreadable or too slow, and a long recording is never a failed reel.
+    """
+    estimate = int(rec_duration * 30)
+    if run is None:
+        run = subprocess.run
+    try:
+        counted = run(
+            ["ffprobe", "-v", "error", "-count_frames",
+             "-show_entries", "stream=nb_read_frames",
+             "-of", "csv=p=0", cfr_path],
+            capture_output=True, text=True, timeout=120,
+        )
+    except subprocess.TimeoutExpired:
+        print(f"counting the recording's frames took over 120s, so using its "
+              f"length at 30fps ({estimate} frames)", file=sys.stderr, flush=True)
+        return estimate
+    try:
+        return int(counted.stdout.strip())
+    except ValueError:
+        return estimate
+
+
 def build_background() -> Image.Image:
     """Flat brand-cream background behind the recording (gallery style)."""
     return Image.new("RGB", (CANVAS_W, CANVAS_H), CREAM)
@@ -278,17 +306,7 @@ def generate_reel_screen(
         if result.returncode != 0:
             raise RuntimeError(f"CFR convert failed: {result.stderr[-500:]}")
 
-        # Get actual CFR frame count
-        count_result = subprocess.run(
-            ["ffprobe", "-v", "error", "-count_frames",
-             "-show_entries", "stream=nb_read_frames",
-             "-of", "csv=p=0", cfr_path],
-            capture_output=True, text=True, timeout=120,
-        )
-        try:
-            total_src_frames = int(count_result.stdout.strip())
-        except ValueError:
-            total_src_frames = int(rec_duration * 30)
+        total_src_frames = cfr_frame_count(cfr_path, rec_duration)
 
         # Pass 2: Sample every Nth frame for smooth timelapse
         total_out_frames = int(target_duration * FPS)

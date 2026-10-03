@@ -2650,6 +2650,12 @@ actor PythonBridge {
         // Fold into the shared log whatever happened, so the history a human
         // reads still has every run in it, and no per-run file is left behind.
         defer { PythonBridgeLog.foldIntoShared(runLog: runLogURL, sharedLog: logURL) }
+        let started = Date()
         try await runner.run()
+        // Only a run that passed: how close the slowest passing run comes to
+        // the limit is the measurement the limit is judged by (#1479).
+        PythonBridgeLog.appendHeadroom(to: runLogURL,
+                                       elapsed: Date().timeIntervalSince(started),
+                                       limit: timeout)
     }
 }
