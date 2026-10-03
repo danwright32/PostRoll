@@ -19,12 +19,14 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO_ROOT / "tools"))
-
-from say_when_ci_goes_red import CannotAsk, _gh, file_once, open_titled  # noqa: E402
-
 sys.path.insert(0, str(REPO_ROOT))
+
+# Through the package, one name for one module. Importing it by its bare name
+# as well would load a second copy with its own CannotAsk, and a caller
+# catching one would miss the other.
 from tools.check_guard_sweep_due import OVERDUE_AFTER  # noqa: E402
+from tools.say_when_ci_goes_red import (  # noqa: E402
+    CannotAsk, _gh, file_once, open_titled)
 
 #: No number in it. The threshold is OVERDUE_AFTER, and the issue is found by
 #: this exact title, so a title quoting the threshold would turn false when the

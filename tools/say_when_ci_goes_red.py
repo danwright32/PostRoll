@@ -88,7 +88,9 @@ def open_titled(title: str, run=None) -> list[int]:
     issue the same way, so there is one implementation of "the one issue"
     rather than two that can come to disagree (L41).
     """
-    raw = _gh(["issue", "list", "--state", "open", "--limit", "50",
+    # Every open issue rather than a page of them: an existing report missed
+    # because it sat past the page would be filed again every day.
+    raw = _gh(["issue", "list", "--state", "open", "--limit", "1000",
                "--json", "number,title"], run=run)
     return sorted(issue["number"] for issue in json.loads(raw)
                   if issue["title"] == title)

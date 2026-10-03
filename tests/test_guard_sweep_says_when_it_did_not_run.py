@@ -365,3 +365,17 @@ def test_the_message_is_written_so_a_newline_cannot_end_it(monkeypatch, tmp_path
             i += 1
     assert outputs["overdue"] == "unknown"
     assert outputs["said"].startswith("Shard(s)"), outputs
+
+
+def test_the_nag_and_the_red_report_share_one_refusal_type():
+    from tools import say_when_ci_goes_red, say_when_the_sweep_is_overdue
+    assert say_when_the_sweep_is_overdue.CannotAsk is say_when_ci_goes_red.CannotAsk
+
+
+def test_the_issue_lookup_reads_past_the_first_fifty():
+    gh = FakeGitHub([{"number": n, "title": f"other {n}"} for n in range(60)]
+                    + [{"number": 99, "title": OVERDUE_TITLE}])
+    keep_the_overdue_issue_current(overdue=True, said="x", run=gh)
+    listed = gh.did("list")[0]
+    assert int(listed[listed.index("--limit") + 1]) > 60
+    assert not gh.did("create"), "it refiled an issue that was already open"
