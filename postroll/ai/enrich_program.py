@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from ..caption_blocks import is_handle_shaped
+from ..url_for_log import url_for_log
 from .claude_client import run_json_prompt, ClaudeError
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
@@ -459,7 +460,7 @@ def _normalise_handle_suggestions(data: list) -> list[dict]:
         # nothing downstream could tell (#481).
         if not handle_matches_profile(handle, profile_url):
             print(f"warning: dropped a handle suggestion for {name}: {handle} does not "
-                  f"match the profile it was given, {profile_url}.",
+                  f"match the profile it was given, {url_for_log(profile_url)}.",
                   file=sys.stderr, flush=True)
             continue
         # A handle that is not shaped like one (#899). `handle_matches_profile`
