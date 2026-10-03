@@ -314,3 +314,32 @@ def test_it_says_which_mode_it_took(workflow: str) -> None:
         "took is only in a log nobody opens")
     assert "upload-artifact" in body, (
         "a run that could not open a pull request throws its measurement away")
+
+
+def test_one_run_is_read_and_summarised_by_what_it_proved(monkeypatch) -> None:
+    from tools import guard_sweep_history as history
+    asked = []
+
+    def fake_gh(path):
+        asked.append(path)
+        if path.endswith("/jobs?per_page=100"):
+            return {"jobs": [{"name": "full (2)", "steps": [
+                {"name": history.PROOF_STEP, "conclusion": "success"}]}]}
+        return {"id": 42, "head_sha": "b" * 40,
+                "created_at": "2026-10-01T07:00:00Z"}
+
+    monkeypatch.setattr(history, "_gh", fake_gh)
+    sweep = history.sweep_of(42, repo="o/r")
+    assert sweep.run_id == 42 and sweep.passed_shards == frozenset({2})
+    assert asked[0] == "repos/o/r/actions/runs/42"
+
+
+def test_a_run_that_cannot_be_read_is_refused_not_read_as_unswept(monkeypatch) -> None:
+    from tools import guard_sweep_history as history
+
+    def broken(path):
+        raise HistoryUnreadable("HTTP 404: run not found")
+
+    monkeypatch.setattr(history, "_gh", broken)
+    with pytest.raises(HistoryUnreadable, match="404"):
+        history.sweep_of(42, repo="o/r")
