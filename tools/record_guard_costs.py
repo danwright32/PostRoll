@@ -147,7 +147,11 @@ def newest_sweep_run(find=None) -> str:
     """
     if find is None:
         from tools.guard_sweep_history import newest_full_sweep
-        find = newest_full_sweep
+
+        def find():
+            # Successful runs only, as the workflow follows: a failed run's
+            # readings stop wherever it died (L331).
+            return newest_full_sweep(require_success=True)
     from tools.guard_sweep_history import HistoryUnreadable
     try:
         sweep = find()

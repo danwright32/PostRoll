@@ -11,20 +11,21 @@ once the record covers less than 85% of the registry, and names the command.
 That catches the drift late rather than preventing it, and it fails a suite for
 a reason unrelated to whatever change is being made.
 
-So a scheduled job records against the newest complete sweep and opens a pull
-request when the record moves, and the readings arrive as a reviewed change
-rather than as a push from a scheduled job.
+So a job records from the guard run that just finished, scheduled or started
+by hand (#1467), and opens a pull request when the record moves, and the
+readings arrive as a reviewed change rather than as a push from a scheduled
+job.
 
 ## What this file checks, and what it cannot
 
-It checks the piece that decides WHICH run to record from, which is ordinary
-Python with the `gh` call injected, and it checks the workflow's shape: that it
-never became a check a pull request waits on, that it opens a pull request
-rather than committing to main, and that it says out loud which of its two modes
-it took.
+It checks the pieces that decide WHICH run to record from and HOW (replace,
+fold in, or nothing to record), which are ordinary Python with the run history
+and the download injected, and it checks the workflow's shape: that it never
+became a check a pull request waits on, that it opens a pull request rather
+than committing to main, and that it says out loud which mode it took.
 
-It cannot check that the job runs. Only a scheduled run can, and the record's
-own `measured_from_run` is what shows it did.
+It cannot check that the job runs. Only a real run can, and the record's own
+`measured_from_run` is what shows it did.
 """
 
 from __future__ import annotations
@@ -343,3 +344,26 @@ def test_a_run_that_cannot_be_read_is_refused_not_read_as_unswept(monkeypatch) -
     monkeypatch.setattr(history, "_gh", broken)
     with pytest.raises(HistoryUnreadable, match="404"):
         history.sweep_of(42, repo="o/r")
+
+
+def test_by_hand_a_failed_run_is_passed_over_for_the_newest_successful_one(
+        monkeypatch) -> None:
+    from tools import guard_sweep_history as history
+
+    def run(run_id, day, conclusion):
+        return {"id": run_id, "head_sha": "c" * 40, "conclusion": conclusion,
+                "created_at": f"2026-10-{day:02d}T07:00:00Z"}
+
+    runs = [run(2, 3, "failure"), run(1, 1, "success")]
+
+    def fake_gh(path):
+        if "/jobs" in path:
+            return {"jobs": [{"name": "full (1)", "steps": [
+                {"name": history.PROOF_STEP, "conclusion": "success"}]}]}
+        if "event=workflow_dispatch" in path:
+            return {"workflow_runs": runs}
+        return {"workflow_runs": []}
+
+    monkeypatch.setattr(history, "_gh", fake_gh)
+    assert history.newest_full_sweep(repo="o/r").run_id == 2
+    assert history.newest_full_sweep(repo="o/r", require_success=True).run_id == 1
