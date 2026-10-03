@@ -39,17 +39,22 @@ jobs:
     # `workflow_run` fires for EVERY trigger of the upstream workflow, and the
     # sweep's `changed` job runs on every pull request. Recording from one of
     # those would price the whole registry from the handful of entries one diff
-    # touched, because `--from` REPLACES the record. So the schedule is what is
-    # followed, and a sweep that failed is not followed at all: a shard that
-    # died early measured the entries it reached and nothing about the rest
-    # (L331).
+    # touched, because `--from` REPLACES the record. So scheduled and
+    # hand-started runs are followed, never a pull request's, and a sweep that
+    # failed is not followed at all: a shard that died early measured the
+    # entries it reached and nothing about the rest (L331).
     #
-    # A dispatched run carries no `workflow_run` context at all, so it is
-    # admitted by its own name. Without that the manual trigger would be a
-    # control that does nothing (L109).
+    # Hand-started upstream runs since #1467. Since #1428 the sweep runs only
+    # when started by hand, so following scheduled runs alone meant following
+    # runs that swept nothing, and the record never moved again.
+    #
+    # A dispatched run of THIS workflow carries no `workflow_run` context at
+    # all, so it is admitted by its own name. Without that the manual trigger
+    # would be a control that does nothing (L109).
     if: >-
       github.event_name == 'workflow_dispatch'
-      || (github.event.workflow_run.event == 'schedule'
+      || ((github.event.workflow_run.event == 'schedule'
+           || github.event.workflow_run.event == 'workflow_dispatch')
           && github.event.workflow_run.conclusion == 'success')
     # A job without a deadline cannot fail, it can only hang (L110, L313). This
     # downloads a handful of small artifacts and writes one file.
@@ -96,16 +101,23 @@ jobs:
       # entry, a zero, an empty file, and a shard that ran out of time. A step
       # that wrote the record itself would carry none of them.
       #
-      # `continue-on-error` is deliberate, and it is not silence: the tool
-      # prints its own refusal, and the last step reports what happened either
-      # way. A day with no successful sweep to record from must not read as a
-      # failing workflow, which is what teaches somebody to ignore it (L36).
-      - name: Fold the newest sweep's readings into the record
+      # The run this job FOLLOWED, not the newest of some kind (#1467). A run
+      # that swept nothing, the ordinary daily run, exits 0 and says so, so a
+      # quiet day is not a failing workflow (L36). Anything else that stops a
+      # run that DID sweep from being recorded fails this step, and the run
+      # goes red: `continue-on-error` here kept it green while the record stood
+      # still from 2026-09-28 (L289).
+      - name: Fold the swept run's readings into the record
         id: record
-        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python tools/record_guard_costs.py --from-newest-run
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            python tools/record_guard_costs.py --from-newest-run
+          else
+            python tools/record_guard_costs.py --from-upstream-run ${{ github.event.workflow_run.id }}
+          fi
 
       - name: Say whether the record moved
         id: moved
@@ -158,7 +170,7 @@ jobs:
             --record tests/fixtures/guard_entry_costs.json \
             --branch-prefix guard-costs \
             --title "Record what each guard entry costs (#1099)" \
-            --body "Folded in from the newest scheduled guard sweep by tools/record_guard_costs.py --from-newest-run. Every refusal that tool carries applied: the readings all came from one run, none is zero, no entry is duplicated, and no shard ran out of time."
+            --body "Folded in from a guard sweep by tools/record_guard_costs.py, replacing the record from a whole sweep or folding a partial one in. Every refusal that tool carries applied: the readings all came from one run, none is zero, no entry is duplicated, and no shard ran out of time."
       # Three outcomes, said apart. A day with nothing to record, a record that
       # moved and was proposed, and a record that moved with no way to propose
       # it are different events, and only the third needs anybody to do
@@ -169,11 +181,11 @@ jobs:
           {
             echo "### Guard cost record"
             if [ "${{ steps.record.outcome }}" != "success" ]; then
-              echo "The recorder refused. Its reason is in the step above:"
-              echo "nothing was written and nothing was proposed."
+              echo "The recorder could not record a run that swept. Its reason"
+              echo "is in the step above: nothing was written or proposed."
             elif [ "${{ steps.moved.outputs.moved }}" != "true" ]; then
-              echo "The record already matches the newest sweep, so there is"
-              echo "nothing to propose."
+              echo "Nothing to propose: the run did not sweep, or the record"
+              echo "already matches it."
             elif [ -n "${RECORD_UPDATE_TOKEN}" ]; then
               echo "The record moved and a pull request was opened."
             else
@@ -185,6 +197,9 @@ jobs:
               echo "commit it and open the pull request by hand, or add the"
               echo "secret and this job will do it tomorrow."
             fi
+            # How old the record is, every run, so a record that has stopped
+            # moving is visible rather than inferred (#1467).
+            python tools/record_guard_costs.py --describe
           } >> "${GITHUB_STEP_SUMMARY}"
 
       # A red run here reaches nobody otherwise (#1011).

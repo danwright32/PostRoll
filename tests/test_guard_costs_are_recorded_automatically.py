@@ -34,63 +34,128 @@ import json
 import pytest
 
 from tests.mac_build_setup import uncommented
-from tools.record_guard_costs import NoSweepFound, newest_sweep_run
+from tools.guard_sweep_history import HistoryUnreadable, Sweep
+from tools.record_guard_costs import (
+    NoSweepFound, newest_sweep_run, record_from_run)
+from tools.check_guard_sweep_due import SHARD_COUNT
 
 
 WORKFLOW = ".github/workflows/record-guard-costs.yml"
+ALL = frozenset(range(1, SHARD_COUNT + 1))
 
 
-def _gh(reply: str, code: int = 0):
-    asked: list[list[str]] = []
-
-    def run(args: list[str]) -> tuple[int, str]:
-        asked.append(args)
-        return code, reply
-
-    run.asked = asked  # type: ignore[attr-defined]
-    return run
+def _sweep(run_id: int, shards) -> Sweep:
+    from datetime import datetime, timezone
+    return Sweep(run_id=run_id, head_sha="a" * 40,
+                 created_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+                 passed_shards=frozenset(shards))
 
 
-RUNS = json.dumps([
-    {"databaseId": 33409212726, "conclusion": "success",
-     "createdAt": "2026-09-02T07:31:00Z"},
-])
+# ── which run gets recorded (#1467) ──────────────────────────────────────────
+#
+# It used to be "the newest SUCCESSFUL SCHEDULED run". Since #1428 the sweep is
+# hand-started and the scheduled runs sweep nothing, so that answer was a run
+# with no readings every day, refused, and green under continue-on-error: the
+# record stood still from 2026-09-28 while the workflow said nothing.
+
+def test_by_hand_it_records_from_the_newest_run_that_actually_swept() -> None:
+    assert newest_sweep_run(find=lambda: _sweep(37200000001, ALL)) == "37200000001"
 
 
-# ── which run gets recorded ──────────────────────────────────────────────────
-
-def test_it_records_from_the_newest_successful_scheduled_sweep() -> None:
-    gh = _gh(RUNS)
-
-    assert newest_sweep_run(run=gh) == "33409212726"
-
-    asked = " ".join(gh.asked[0])
-    assert "guards.yml" in asked, "it asked about some other workflow"
-    assert "schedule" in asked, (
-        "it did not scope the search to SCHEDULED runs, and the per-pull-request "
-        "`changed` job proves only the entries one diff touched, so its readings "
-        "would replace a whole-registry record with a handful of entries")
+def test_no_run_that_swept_is_a_named_refusal_not_an_empty_answer() -> None:
+    with pytest.raises(NoSweepFound, match="no run of guards.yml"):
+        newest_sweep_run(find=lambda: None)
 
 
-def test_no_sweep_at_all_is_a_named_refusal_not_an_empty_answer() -> None:
-    """A repository whose sweep has not run and a repository whose sweep found
-    nothing are different, and the second reads as a healthy record (L98)."""
-    with pytest.raises(NoSweepFound) as raised:
-        newest_sweep_run(run=_gh("[]"))
-    assert "no successful" in str(raised.value).lower()
+def test_a_history_that_could_not_be_read_is_not_read_as_no_sweep() -> None:
+    def broken():
+        raise HistoryUnreadable("HTTP 502")
+    with pytest.raises(NoSweepFound, match="could not be read.*502"):
+        newest_sweep_run(find=broken)
 
 
-def test_a_failed_gh_call_is_not_read_as_no_sweep() -> None:
-    """The two have to be told apart, or a broken token quietly means the job
-    reports nothing to record, every day, forever (L11)."""
-    with pytest.raises(NoSweepFound) as raised:
-        newest_sweep_run(run=_gh("gh: not logged in", code=4))
-    assert "4" in str(raised.value)
+class Fetched:
+    """Stands in for downloading a run's artifacts, recording what it was asked."""
+
+    def __init__(self, paths=None, fails=False):
+        self.paths, self.fails, self.asked = paths or [], fails, []
+
+    def __call__(self, run_id, into):
+        self.asked.append(run_id)
+        if self.fails:
+            raise SystemExit(f"gh could not download run {run_id}. Nothing was written.")
+        return self.paths
 
 
-def test_output_that_is_not_json_is_refused_rather_than_guessed() -> None:
-    with pytest.raises(NoSweepFound):
-        newest_sweep_run(run=_gh("<html>a proxy error page</html>"))
+def test_a_run_that_did_not_sweep_records_nothing_and_says_so(tmp_path, capsys):
+    fetch = Fetched()
+    code = record_from_run("37100000000", tmp_path / "rec.json",
+                           sweep_of=lambda run_id: _sweep(37100000000, []),
+                           fetch=fetch)
+    assert code == 0
+    assert fetch.asked == [], "it downloaded artifacts from a run that swept nothing"
+    assert not (tmp_path / "rec.json").exists()
+    assert "did not sweep" in capsys.readouterr().out
+
+
+def test_a_whole_sweep_replaces_the_record(tmp_path, monkeypatch):
+    from tools import record_guard_costs as rec
+    took = []
+    monkeypatch.setattr(rec, "_whole", lambda paths, record: took.append("whole") or 0)
+    monkeypatch.setattr(rec, "_add", lambda paths, record: took.append("add") or 0)
+    record_from_run("1", tmp_path / "rec.json",
+                    sweep_of=lambda run_id: _sweep(1, ALL), fetch=Fetched(["x"]))
+    assert took == ["whole"]
+
+
+def test_a_sweep_of_some_shards_is_folded_in_rather_than_replacing(tmp_path, monkeypatch):
+    """Since #1344 a sweep runs only the shards with something to prove, so a
+    hand-started sweep is often partial. Replacing the record from it would
+    price the whole registry from a fraction of it; `--add` exists for this."""
+    from tools import record_guard_costs as rec
+    took = []
+    monkeypatch.setattr(rec, "_whole", lambda paths, record: took.append("whole") or 0)
+    monkeypatch.setattr(rec, "_add", lambda paths, record: took.append("add") or 0)
+    record_from_run("1", tmp_path / "rec.json",
+                    sweep_of=lambda run_id: _sweep(1, [2, 5]), fetch=Fetched(["x"]))
+    assert took == ["add"]
+
+
+def test_a_run_that_swept_and_could_not_be_recorded_fails(tmp_path):
+    """The case the workflow used to swallow: green while nothing was written."""
+    with pytest.raises(SystemExit, match="could not download"):
+        record_from_run("1", tmp_path / "rec.json",
+                        sweep_of=lambda run_id: _sweep(1, ALL),
+                        fetch=Fetched(fails=True))
+
+
+def test_a_run_whose_jobs_could_not_be_read_fails(tmp_path):
+    def broken(run_id):
+        raise HistoryUnreadable("HTTP 404")
+    with pytest.raises(SystemExit, match="404"):
+        record_from_run("1", tmp_path / "rec.json", sweep_of=broken, fetch=Fetched())
+
+
+def test_the_summary_says_when_the_record_was_last_replaced(tmp_path) -> None:
+    from tools.record_guard_costs import describe
+    path = tmp_path / "rec.json"
+    path.write_text(json.dumps({"measured_on": "2026-09-27",
+                                "measured_from_run": "36319996693"}))
+    assert "2026-09-27, run 36319996693" in describe(path)
+
+
+@pytest.mark.parametrize("contents", [None, "{not json"])
+def test_an_unreadable_record_is_said_rather_than_crashing_the_summary(
+        tmp_path, contents) -> None:
+    from tools.record_guard_costs import describe
+    path = tmp_path / "rec.json"
+    if contents is not None:
+        path.write_text(contents)
+    assert describe(path).startswith("The guard cost record could not be read")
+
+
+def test_the_summary_asks_the_recorder_for_the_age(workflow: str) -> None:
+    assert "record_guard_costs.py --describe" in uncommented(workflow)
 
 
 # ── the workflow's shape ─────────────────────────────────────────────────────
@@ -180,6 +245,25 @@ def test_it_does_not_fire_on_every_pull_request(workflow: str) -> None:
     assert "workflow_run.event == 'schedule'" in body, (
         "the job does not check WHICH trigger produced the sweep it is "
         "following, so it records from the per-pull-request run too")
+    assert "'pull_request'" not in body.split("if: >-")[1].split("timeout-minutes")[0]
+
+
+def test_it_follows_a_hand_started_sweep(workflow: str) -> None:
+    """Since #1428 a hand-started run is the only kind that sweeps, so a
+    recorder that admitted only scheduled runs could never record again."""
+    assert "workflow_run.event == 'workflow_dispatch'" in uncommented(workflow)
+
+
+def test_it_records_the_run_it_followed_not_the_newest_of_some_kind(
+        workflow: str) -> None:
+    assert "--from-upstream-run ${{ github.event.workflow_run.id }}" in uncommented(workflow)
+
+
+def test_a_recording_that_failed_turns_the_run_red(workflow: str) -> None:
+    """A run with nothing to record exits 0 on its own now, so nothing needs
+    `continue-on-error`, which is what kept the run green while it wrote nothing
+    from 2026-09-28 (#1467)."""
+    assert "continue-on-error" not in uncommented(workflow)
 
 
 def test_it_does_not_record_from_a_sweep_that_failed(workflow: str) -> None:
