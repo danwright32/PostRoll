@@ -31,10 +31,11 @@ NOW = datetime(2026, 10, 3, 7, 0, tzinfo=timezone.utc)
 TREE = "a" * 40
 
 
-def swept(at, shards=range(1, 8)) -> Sweep:
-    """The last sweep, as the history helper returns it."""
+def swept(at, shards=None) -> Sweep:
+    """The last sweep, as the history helper returns it: every shard unless
+    told otherwise."""
     return Sweep(run_id=7, head_sha=TREE, created_at=at,
-                 passed_shards=frozenset(shards))
+                 passed_shards=frozenset(range(1, 8) if shards is None else shards))
 
 
 def unproved():
@@ -348,6 +349,19 @@ def test_the_message_is_written_so_a_newline_cannot_end_it(monkeypatch, tmp_path
     out = tmp_path / "out"
     due.main(["--shards", "--sha", TREE, "--event", "schedule",
               "--output", str(out)])
-    text = out.read_text()
-    assert "overdue=unknown\n" in text
-    assert "said<<SAID_END\n" in text and text.count("SAID_END") == 2
+    # Parsed as GitHub parses it: `key=value` lines, and a `key<<DELIM` value
+    # running to the line holding only DELIM.
+    lines = out.read_text().splitlines()
+    outputs, i = {}, 0
+    while i < len(lines):
+        if "<<" in lines[i]:
+            key, delim = lines[i].split("<<", 1)
+            end = lines.index(delim, i + 1)
+            outputs[key] = "\n".join(lines[i + 1:end])
+            i = end + 1
+        else:
+            key, value = lines[i].split("=", 1)
+            outputs[key] = value
+            i += 1
+    assert outputs["overdue"] == "unknown"
+    assert outputs["said"].startswith("Shard(s)"), outputs
