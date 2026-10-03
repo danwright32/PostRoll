@@ -645,6 +645,7 @@
 		C3B89354B750F8DA6889D3A8 /* MediaReclaimTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2744E745D0D8E9DADE2015C0 /* MediaReclaimTests.swift */; };
 		C43C32C4F3D58D3730D0ECD0 /* SafeFileSwap.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF921A8EB03CE6788174707D /* SafeFileSwap.swift */; };
 		C441BEFB00B24864E99F3F76 /* Analytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 131DFC672BC525BCA210EE58 /* Analytics.swift */; };
+		C4481F95CD8B136B3EEF076C /* NotificationSubscriptionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE53B3832AB20CD02CADC3EF /* NotificationSubscriptionTests.swift */; };
 		C46C310C1F27513DE20D3D45 /* SymbolNamesResolveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93A3980FB673654C1CD18D3B /* SymbolNamesResolveTests.swift */; };
 		C4920C499386570F56B113E2 /* EditEventDetailsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 912E71591E98167DE494D1A7 /* EditEventDetailsSheet.swift */; };
 		C4DCB83B9625F3088AFA4615 /* DeepLinkInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = EAAF0D6C3A611A1FA78E5594 /* DeepLinkInbox.swift */; };
@@ -1390,6 +1391,7 @@
 		DD6ED8A163E20A789685A874 /* SentenceList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SentenceList.swift; sourceTree = "<group>"; };
 		DDA770B9043744D31331F4A4 /* EventRowBackgroundTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventRowBackgroundTests.swift; sourceTree = "<group>"; };
 		DDE7344B2D80F86A9526DDC6 /* HostedControlLegibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostedControlLegibilityTests.swift; sourceTree = "<group>"; };
+		DE53B3832AB20CD02CADC3EF /* NotificationSubscriptionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationSubscriptionTests.swift; sourceTree = "<group>"; };
 		DE66D81389CE07DF37A4DB6E /* GenerationFailureText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerationFailureText.swift; sourceTree = "<group>"; };
 		DEDDAFD44D48647026AE7CAF /* HandleBookEntriesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandleBookEntriesTests.swift; sourceTree = "<group>"; };
 		DEEDE6F9DD9D9B527BB6E897 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -1987,6 +1989,7 @@
 				40B89BFE62B56617504EC1A3 /* NoScreenForcesTheWindowBiggerTests.swift */,
 				4BD1DFD05E502EC1BE864FA5 /* NotificationPermissionTests.swift */,
 				AF90F4571FBEC3A2B5B86F13 /* NotificationReachabilityTests.swift */,
+				DE53B3832AB20CD02CADC3EF /* NotificationSubscriptionTests.swift */,
 				8B7EAEA41C9BD19804B36EC7 /* OCROtherFieldTests.swift */,
 				B99F9FEA065BB7EA05E6D421 /* OCRPartialSalvageTests.swift */,
 				513046812EEA3DB60C6BB7F1 /* OCRProgressTextTests.swift */,
@@ -2894,6 +2897,7 @@
 				C12CF47A0CEC0A9F26469018 /* NotificationReachabilityTests.swift in Sources */,
 				B2072833161405FCE8D10D75 /* NotificationService.swift in Sources */,
 				1D5D8F078D474592F4D21FA7 /* NotificationSubscription.swift in Sources */,
+				C4481F95CD8B136B3EEF076C /* NotificationSubscriptionTests.swift in Sources */,
 				1EB4EE23647260954F2BE2BF /* OCRManager.swift in Sources */,
 				CCA8B43FDED74849797AD095 /* OCROtherFieldTests.swift in Sources */,
 				18FA4689F6E8344E613A009F /* OCRPartialSalvageTests.swift in Sources */,

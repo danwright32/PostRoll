@@ -487,8 +487,10 @@ final class AppState {
             // verdict alone rather than judging some other checkout and
             // reporting the answer as this one's (L75).
             let repo = CheckoutRevision.repo(in: notification)
-            // Hopped deliberately: the reading a generation takes is taken on a
-            // detached task, so this arrives off the main actor.
+            // Hopped deliberately. The reading is posted from a detached task;
+            // the subscription delivers it on the main queue (#1486), but this
+            // closure is not main-actor isolated by type, so the hop is still
+            // how it reaches main-actor state.
             Task { @MainActor in
                 self?.apply(reading)
                 if let repo { await self?.refreshBuildFreshness(inRepo: repo) }
