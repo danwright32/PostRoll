@@ -171,6 +171,15 @@ final class ExportedMarkerNamesTests: XCTestCase {
                        ["DSC4821.jpg", "DSC4821-2.jpg", "DSC4821-3.jpg"])
     }
 
+    func testANameTheMarkerCannotHoldHasThoseCharactersReplaced() {
+        // A marker is `[PHOTO: name | alt]`: a pipe ends the name and a closing
+        // bracket ends the marker, so a file named with either would export a
+        // draft whose marker names a file that is not there. Both are legal in
+        // a macOS filename.
+        let photos = [URL(fileURLWithPath: "/a/Act 1 | Scene [2].jpg")]
+        XCTAssertEqual(BlogDraftText.exportNames(for: photos), ["Act 1 _ Scene _2_.jpg"])
+    }
+
     func testAnOrdinaryExportKeepsTheRealNamesInTheDraftAndTheFolder() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("real-names-\(UUID().uuidString)")

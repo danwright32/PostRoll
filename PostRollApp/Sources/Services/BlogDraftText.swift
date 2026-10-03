@@ -26,13 +26,20 @@ enum BlogDraftText {
     /// of every REAL name in the list too, so a suffix never lands on a
     /// photograph actually called that. Compared ignoring case, because the
     /// Mac's disk does: `DSC4821.jpg` and `dsc4821.JPG` are one file there.
+    ///
+    /// A name a marker cannot hold has those characters replaced with `_`: a
+    /// marker is `[PHOTO: name | alt]`, so a pipe would end the name and a
+    /// bracket the marker, and the draft would name a file that is not there.
     static func exportNames(for photos: [URL]) -> [String] {
-        let real = Set(photos.map { $0.lastPathComponent.lowercased() })
+        func markerSafe(_ text: String) -> String {
+            String(text.map { "|[]".contains($0) ? "_" : $0 })
+        }
+        let real = Set(photos.map { markerSafe($0.lastPathComponent).lowercased() })
         var taken: Set<String> = []
         return photos.map { photo in
-            var name = photo.lastPathComponent
+            var name = markerSafe(photo.lastPathComponent)
             if taken.contains(name.lowercased()) {
-                let stem = photo.deletingPathExtension().lastPathComponent
+                let stem = markerSafe(photo.deletingPathExtension().lastPathComponent)
                 let ext = photo.pathExtension
                 var n = 2
                 repeat {
