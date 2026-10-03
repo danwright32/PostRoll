@@ -180,6 +180,11 @@ final class ExportedMarkerNamesTests: XCTestCase {
         XCTAssertEqual(BlogDraftText.exportNames(for: photos), ["Act 1 _ Scene _2_.jpg"])
     }
 
+    func testARenamedClashIsMarkerSafeInItsExtensionToo() {
+        let photos = [URL(fileURLWithPath: "/a/shot.j|g"), URL(fileURLWithPath: "/b/shot.j|g")]
+        XCTAssertEqual(BlogDraftText.exportNames(for: photos), ["shot.j_g", "shot-2.j_g"])
+    }
+
     func testAnOrdinaryExportKeepsTheRealNamesInTheDraftAndTheFolder() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("real-names-\(UUID().uuidString)")

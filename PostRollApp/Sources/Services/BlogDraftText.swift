@@ -40,7 +40,7 @@ enum BlogDraftText {
             var name = markerSafe(photo.lastPathComponent)
             if taken.contains(name.lowercased()) {
                 let stem = markerSafe(photo.deletingPathExtension().lastPathComponent)
-                let ext = photo.pathExtension
+                let ext = markerSafe(photo.pathExtension)
                 var n = 2
                 repeat {
                     name = ext.isEmpty ? "\(stem)-\(n)" : "\(stem)-\(n).\(ext)"
