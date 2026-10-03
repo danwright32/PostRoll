@@ -241,6 +241,7 @@
     "test_same_measurement.py": 0.18,
     "test_say_when_ci_goes_red.py": 0.0,
     "test_scene_labels_stay_in_step.py": 1.03,
+    "test_screen_reel_frame_count.py": 0.01,
     "test_screen_reel_logo_contrast.py": 0.0,
     "test_screens_draw_from_named_colours.py": 3.53,
     "test_screens_take_their_stores.py": 0.66,
@@ -1260,6 +1261,10 @@
     "test_scene_labels_stay_in_step.py": {
       "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
+    },
+    "test_screen_reel_frame_count.py": {
+      "run": "partial-2026-10-03T18:17Z",
+      "scale": 1.043
     },
     "test_screen_reel_logo_contrast.py": {
       "run": "full-2026-09-05T02:25Z",
