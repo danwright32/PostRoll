@@ -379,3 +379,13 @@ def test_the_issue_lookup_reads_past_the_first_fifty():
     listed = gh.did("list")[0]
     assert int(listed[listed.index("--limit") + 1]) > 60
     assert not gh.did("create"), "it refiled an issue that was already open"
+
+
+def test_a_quiet_tree_still_says_when_the_last_sweep_ran():
+    """That text is also the overdue issue's body: quiet and overdue at once."""
+    proved = [Sweep(run_id=1, head_sha=TREE, created_at=NOW - timedelta(days=20),
+                    passed_shards=frozenset(range(1, 8)))]
+    decision = decide_sweep(sha=TREE, shards=7, history=proved, now=NOW)
+    said = decision.say(event="schedule",
+                        last_sweep=swept(NOW - timedelta(days=20)), now=NOW)
+    assert "starts no macOS runner" in said and "20 days ago" in said, said

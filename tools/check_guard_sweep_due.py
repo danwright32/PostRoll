@@ -256,8 +256,12 @@ class SweepDecision:
         due proved nothing, and saying "so the sweep runs" there is how a
         lapsed sweep read as a running one for a week (#1466, L98).
         """
-        if not self.due_shards or event == "workflow_dispatch":
+        if event == "workflow_dispatch":
             return self.message
+        if not self.due_shards:
+            # Still say when the last sweep ran: this text is also the overdue
+            # issue's body, and a tree proved a month ago is quiet AND overdue.
+            return f"{self.message} {_last_sweep_sentence(last_sweep, now)}"
         which = ", ".join(str(shard) for shard in self.due_shards)
         reasons = sorted({d.due.value for d in self.decisions if d.run})
         return (f"Shard(s) {which} have something to prove "
