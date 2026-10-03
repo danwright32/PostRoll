@@ -107,7 +107,11 @@ MEDIA_DESIGN_VERSIONS: dict[str, int] = {
     #
     # It waited on #777 and #779, which is what the lift broke rather than the
     # design: two checks were reading the wrong part of the frame.
-    "before_after": 2,
+    #
+    # 3 is the wordmark drawn at 680 rather than 460, the same size as the
+    # plate reels that end on this slide (2026-10-03). Dan found the signature
+    # unreadable on his phone. The photographs shrink a little to pay for it.
+    "before_after": 3,
     # 2 is the same move on this template: its cream footer sits above the band
     # now rather than at the very foot of the frame.
     "reel_screen": 2,
@@ -126,7 +130,11 @@ MEDIA_DESIGN_VERSIONS: dict[str, int] = {
     # The print does shrink by SAFE_BOTTOM, but only for a photograph tall
     # enough to be clamped, and the caption of a 3:2 landscape does not move at
     # all. program_plate.MAX_PRINT_H carries that reading.
-    "reel_morph": 3,
+    #
+    # 4 is the wordmark drawn at 680 rather than 340 (2026-10-03): Dan found
+    # the signature unreadable on his phone, and the reel now signs at the
+    # same size as the before/after slide it closes on.
+    "reel_morph": 4,
     # 4 is the sweep no longer changing speed in a step (#1073).
     #
     # Its easing was three formulas stitched together, and the divider
@@ -134,7 +142,9 @@ MEDIA_DESIGN_VERSIONS: dict[str, int] = {
     # next at 30% of the way across the print, then dropped back the same
     # way at 70%. Every slider reel ever made carries both lurches, so
     # every one of them moves differently from one rendered now.
-    "reel_slider": 4,
+    #
+    # 5 is the wordmark at 680, the same change as reel_morph's 4.
+    "reel_slider": 5,
     # 3 is the gallery moving BELOW the chrome rather than under it (#898).
     #
     # 2 was the taller header that keeps the title out of the band the phone
@@ -239,10 +249,10 @@ MEDIA_DESIGN_CHANGED: dict[str, "DesignChange"] = {
     "collage": DesignChange(version=2, day="2026-08-28"),
     "story": DesignChange(version=2, day="2026-08-21"),
     "cover": DesignChange(version=2, day="2026-08-21"),
-    "before_after": DesignChange(version=2, day="2026-08-21"),
+    "before_after": DesignChange(version=3, day="2026-10-03"),
     "reel_screen": DesignChange(version=2, day="2026-08-21"),
-    "reel_morph": DesignChange(version=3, day="2026-08-21"),
-    "reel_slider": DesignChange(version=4, day="2026-09-02"),
+    "reel_morph": DesignChange(version=4, day="2026-10-03"),
+    "reel_slider": DesignChange(version=5, day="2026-10-03"),
     "reel_scroll": DesignChange(version=6, day="2026-09-28"),
     "reel_preview": DesignChange(version=4, day="2026-09-28"),
     "reel_clip": DesignChange(version=2, day="2026-08-22"),

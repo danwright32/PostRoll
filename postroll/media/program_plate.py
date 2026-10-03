@@ -38,7 +38,7 @@ from .design_tokens import (
     WARM_MID,
 )
 from .brand_text import detail_lines
-from .generate_before_after import placard_text
+from .generate_before_after import LOGO_WIDTH as BEFORE_AFTER_LOGO_WIDTH, placard_text
 
 
 CANVAS_W = 1080
@@ -68,7 +68,8 @@ PRINT_Y = 430                  # the print is hung here
 #: template with a different layout (#777, since fixed). Re-measured after that
 #: fix, with the rule lifted: every legibility band on both reels is green.
 FOOTER_RULE_Y = CANVAS_H - SAFE_BOTTOM - 214
-LOGO_WIDTH = 340
+#: One size with the closing slide the reels end on (see that module).
+LOGO_WIDTH = BEFORE_AFTER_LOGO_WIDTH
 
 # The caption placard sits under the print: a gap, the state word, then the
 # subtitle. Named because print_rect has to reserve room for it and the
