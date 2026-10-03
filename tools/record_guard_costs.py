@@ -383,6 +383,22 @@ def _whole(paths: list[Path], record_path: Path) -> int:
     return 0
 
 
+def describe(record_path: Path) -> str:
+    """When the record was last replaced, for the run's summary (#1467).
+
+    Said on every run, so a record that has stopped moving is visible rather
+    than inferred. Never raises: it runs in the step that reports what happened,
+    and a crash there would hide the report it exists to give.
+    """
+    try:
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        return f"The guard cost record could not be read: {error}"
+    return (f"The record was last replaced from a whole sweep on "
+            f"{record.get('measured_on')}, run {record.get('measured_from_run')}. "
+            "Partial sweeps since are folded in per entry.")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--from", dest="whole", nargs="+", type=Path,
@@ -399,8 +415,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--from-upstream-run", dest="upstream", default=None,
                         help="the guards.yml run the workflow followed: record "
                              "from it if it swept, say so if it did not")
+    parser.add_argument("--describe", action="store_true",
+                        help="say when the record was last replaced, and nothing else")
     parser.add_argument("--record", type=Path, default=RECORD)
     args = parser.parse_args(argv)
+
+    if args.describe:
+        print("\n" + describe(args.record))
+        return 0
 
     asked = [bool(args.whole), bool(args.add), bool(args.run_id),
              bool(args.newest), bool(args.upstream)]
