@@ -74,11 +74,11 @@ QUARTER_TIME = ("Quarter Time", "Young New Yorkers' Chorus",
                 "The Church of St. Mary the Virgin")
 BLUDLINE = ("BLUDLINE: A Hip-Hop Odyssey", "Fermin Suero, Jr. and Pete White",
             "Greenwich House Theater")
-#: Longer than anything in the library, so the last resorts are exercised
-#: rather than shipping as code nothing has ever run (L101).
 #: Columns of the mark's anti-aliased left edge that read as dark as text.
 MARK_FRINGE = 3
 
+#: Longer than anything in the library, so the last resorts are exercised
+#: rather than shipping as code nothing has ever run (L101).
 ABSURD = ("An Evening of Songs from the Golden Age of the American Musical",
           "The Metropolitan Community Chorus and Friends of the Orchestra",
           "The Cathedral Church of Saint John the Divine, Morningside Heights")
