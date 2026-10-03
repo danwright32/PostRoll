@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   python:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # A deadline, because a job without one cannot fail, it can only hang, and a
     # hang looks exactly like a slow queue (#832). This job wedged twice on one
     # commit on 2026-08-22 and ran 45 minutes before it was cancelled by hand.
@@ -105,7 +105,7 @@ jobs:
       # last one.
       - name: Restore the ffmpeg packages
         if: steps.already.outputs.run != 'false'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/ffmpeg-debs
           key: ffmpeg-debs-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}
