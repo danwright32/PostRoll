@@ -11,13 +11,20 @@ final class NotificationSubscription {
     private let center: NotificationCenter
     private let token: NSObjectProtocol
 
+    /// Delivered on the main queue unless `queue` says otherwise (#1486).
+    ///
+    /// A post runs its observers on the posting thread when no queue is given,
+    /// and work moved off main posts from off main (L1017). An observer that
+    /// touched main-actor state from there would race the UI, so main is the
+    /// default and a caller that genuinely wants the posting thread passes nil.
     init(center: NotificationCenter,
          name: Notification.Name,
          object: Any? = nil,
+         queue: OperationQueue? = .main,
          using block: @escaping @Sendable (Notification) -> Void) {
         self.center = center
         self.token = center.addObserver(forName: name, object: object,
-                                        queue: nil, using: block)
+                                        queue: queue, using: block)
     }
 
     deinit {
