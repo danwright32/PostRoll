@@ -274,7 +274,7 @@ jobs:
   # the bar derived at its own head (#1343).
   due:
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # A job without a deadline cannot fail, it can only hang (L110, L313). This
     # reads a page of run history, asks a few questions about it and writes one
     # output, so 10 is generous.
@@ -529,7 +529,7 @@ jobs:
       # away the timings of the other eighty.
       - name: Keep this shard's timings
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: guard-timings-${{ matrix.shard }}
           path: guard-timings-${{ matrix.shard }}.json
