@@ -107,6 +107,7 @@
     "test_collage_layout_override_is_refused.py": 0.12,
     "test_collage_layout_validity.py": 0.0,
     "test_collage_survives_the_phone_chrome.py": 0.09,
+    "test_collage_wordmark_reads_at_phone_size.py": 0.41,
     "test_compare_transports.py": 0.0,
     "test_cover_photo_reuse.py": 0.0,
     "test_crop_geometry_parity.py": 0.0,
@@ -723,6 +724,10 @@
     "test_collage_survives_the_phone_chrome.py": {
       "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
+    },
+    "test_collage_wordmark_reads_at_phone_size.py": {
+      "run": "partial-2026-10-03T15:55Z",
+      "scale": 1.075
     },
     "test_compare_transports.py": {
       "run": "full-2026-09-05T02:25Z",
