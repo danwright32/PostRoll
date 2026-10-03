@@ -319,6 +319,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python tools/check_guard_sweep_due.py --shards
 
+      # The nag (#1466). The sweep runs only when started by hand, and nothing
+      # said when nobody did: none ran from 2026-09-27 while every daily run
+      # read green. So the daily run keeps one issue open while the last sweep
+      # is older than OVERDUE_AFTER, and closes it after the next one.
+      #
+      # Schedule only: a hand-started run is the sweep itself. The message goes
+      # through the environment, never pasted into the script, because it holds
+      # backticks and the shell would run them.
+      - name: Keep the overdue sweep issue current
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OVERDUE: ${{ steps.ask.outputs.overdue }}
+          SAID: ${{ steps.ask.outputs.said }}
+        run: python tools/say_when_the_sweep_is_overdue.py --overdue "${OVERDUE}" --said "${SAID}"
+
       # The two monitors below moved here from the foot of `full` (#1259).
       #
       # They have to run whatever the sweep decides, and inside `full` they only
