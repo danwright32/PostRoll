@@ -199,7 +199,7 @@ jobs:
             fi
             # How old the record is, every run, so a record that has stopped
             # moving is visible rather than inferred (#1467).
-            python -c 'import json; r = json.load(open("tests/fixtures/guard_entry_costs.json")); print("\nThe record was last replaced from a whole sweep on " + str(r.get("measured_on")) + ", run " + str(r.get("measured_from_run")) + ". Partial sweeps since are folded in per entry.")'
+            python tools/record_guard_costs.py --describe
           } >> "${GITHUB_STEP_SUMMARY}"
 
       # A red run here reaches nobody otherwise (#1011).

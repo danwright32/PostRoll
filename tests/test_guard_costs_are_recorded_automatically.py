@@ -136,6 +136,28 @@ def test_a_run_whose_jobs_could_not_be_read_fails(tmp_path):
         record_from_run("1", tmp_path / "rec.json", sweep_of=broken, fetch=Fetched())
 
 
+def test_the_summary_says_when_the_record_was_last_replaced(tmp_path) -> None:
+    from tools.record_guard_costs import describe
+    path = tmp_path / "rec.json"
+    path.write_text(json.dumps({"measured_on": "2026-09-27",
+                                "measured_from_run": "36319996693"}))
+    assert "2026-09-27, run 36319996693" in describe(path)
+
+
+@pytest.mark.parametrize("contents", [None, "{not json"])
+def test_an_unreadable_record_is_said_rather_than_crashing_the_summary(
+        tmp_path, contents) -> None:
+    from tools.record_guard_costs import describe
+    path = tmp_path / "rec.json"
+    if contents is not None:
+        path.write_text(contents)
+    assert describe(path).startswith("The guard cost record could not be read")
+
+
+def test_the_summary_asks_the_recorder_for_the_age(workflow: str) -> None:
+    assert "record_guard_costs.py --describe" in uncommented(workflow)
+
+
 # ── the workflow's shape ─────────────────────────────────────────────────────
 
 @pytest.fixture
