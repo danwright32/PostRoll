@@ -285,6 +285,7 @@
     "test_update_wrapper.py": 13.950000000000001,
     "test_url_scheme_registered.py": 0.05,
     "test_url_scheme_registrations.py": 0.35,
+    "test_urls_are_logged_without_their_query.py": 0.0,
     "test_usage_log.py": 0.03,
     "test_usage_log_stays_off_the_live_file.py": 0.0,
     "test_usage_log_timestamps.py": 0.0,
@@ -1436,6 +1437,10 @@
     "test_url_scheme_registrations.py": {
       "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
+    },
+    "test_urls_are_logged_without_their_query.py": {
+      "run": "partial-2026-10-03T18:09Z",
+      "scale": 0.929
     },
     "test_usage_log.py": {
       "run": "full-2026-09-05T02:25Z",
