@@ -64,7 +64,11 @@ PLACARD_LETTER_SPACING = 9
 SUBTITLE_FONT_SIZE = 15
 SUBTITLE_LETTER_SPACING = 4
 EDITED_PHOTO_SCALE = 1.12  # in 3-photo mode, edits render slightly larger than the RAW
-LOGO_WIDTH = 460  # readable at phone size, including the small PHOTOGRAPHY.COM line
+#: The signature's width, shared with the plate reels that end on this slide so
+#: the mark does not change size on the last frame. 460 drew about 387px of ink
+#: (the file is mostly padding) and Dan found the plate's smaller 340 unreadable
+#: on his phone; 680 was settled in a design round on 2026-10-03.
+LOGO_WIDTH = 680
 # The closing colophon: a rose-gold rule, a gap, then the mark centred beneath.
 # The footer has to reserve all three or the mark runs off the bottom of the
 # page, which is what BOTTOM_CREAM_H alone did: 130px of footer for a block
