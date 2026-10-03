@@ -26,4 +26,12 @@ def url_for_log(url: str | None) -> str:
         return url.split("?", 1)[0].split("#", 1)[0]
     if not parts.scheme and not parts.netloc:
         return url.split("?", 1)[0].split("#", 1)[0]
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+    # The host and port only: a netloc can carry `user:token@` in front of
+    # them, and that is a credential.
+    try:
+        host = parts.hostname or ""
+        port = parts.port
+    except ValueError:
+        host, port = parts.netloc.rsplit("@", 1)[-1], None
+    netloc = f"{host}:{port}" if port else host
+    return urlunsplit((parts.scheme, netloc, parts.path, "", ""))
