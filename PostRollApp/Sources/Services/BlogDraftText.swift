@@ -13,10 +13,55 @@ import Foundation
 /// about.
 enum BlogDraftText {
 
+    /// The name each blog photograph is exported under, in `photos` order.
+    ///
+    /// Its own filename (#1477). Dan uploads from his own library, where the
+    /// photographs carry their real names, and a positional `photo_11` named
+    /// nothing he could find there.
+    ///
+    /// Two photographs from different folders can share a basename, `day 1/
+    /// DSC4821.jpg` and `day 2/DSC4821.jpg`, and one name cannot be two files
+    /// (#1142). So only a clash is renamed: the first keeps its name and each
+    /// later one takes the next free number, `DSC4821-2.jpg`. Free means free
+    /// of every REAL name in the list too, so a suffix never lands on a
+    /// photograph actually called that. Compared ignoring case, because the
+    /// Mac's disk does: `DSC4821.jpg` and `dsc4821.JPG` are one file there.
+    ///
+    /// A name a marker cannot hold has those characters replaced with `_`: a
+    /// marker is `[PHOTO: name | alt]`, so a pipe would end the name and a
+    /// bracket the marker, and the draft would name a file that is not there.
+    static func exportNames(for photos: [URL]) -> [String] {
+        func markerSafe(_ text: String) -> String {
+            String(text.map { "|[]".contains($0) ? "_" : $0 })
+        }
+        // How the Mac's disk tells two names apart: ignoring case, and ignoring
+        // how an accent was typed, so `Café.jpg` with a precomposed é and with a
+        // combining accent are one file there too.
+        func onDisk(_ name: String) -> String {
+            name.precomposedStringWithCanonicalMapping.lowercased()
+        }
+        let real = Set(photos.map { onDisk(markerSafe($0.lastPathComponent)) })
+        var taken: Set<String> = []
+        return photos.map { photo in
+            var name = markerSafe(photo.lastPathComponent)
+            if taken.contains(onDisk(name)) {
+                let stem = markerSafe(photo.deletingPathExtension().lastPathComponent)
+                let ext = markerSafe(photo.pathExtension)
+                var n = 2
+                repeat {
+                    name = ext.isEmpty ? "\(stem)-\(n)" : "\(stem)-\(n).\(ext)"
+                    n += 1
+                } while taken.contains(onDisk(name)) || real.contains(onDisk(name))
+            }
+            taken.insert(onDisk(name))
+            return name
+        }
+    }
+
     /// `body` with each photo marker's FILENAME swapped for its exported name.
     ///
-    /// The export writes the blog photographs out renumbered as `photo_01.jpg`
-    /// and so on, and wrote `draft.md` from the body unchanged, so every
+    /// The export writes the blog photographs out under `exportNames`, and
+    /// once wrote `draft.md` from the body unchanged, so every
     /// marker in the exported draft named a file that is not in the export and
     /// every file in the export was named by nothing (#1142). The export
     /// folder is the deliverable: it is what gets uploaded.

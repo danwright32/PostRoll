@@ -171,15 +171,14 @@ struct EventExporter {
                 // so both photographs would have been written to one file and
                 // one would simply be gone.
                 //
-                // So the exported name comes from the POSITION, which cannot
-                // collide, and the basename map is built from it for the draft
-                // alone. A colliding basename then renames both markers to the
-                // first photograph, which is the ambiguity the body already
-                // had: one name cannot pick between two files, and the blog
-                // checks report it rather than the export inventing an answer.
-                let exportedNames = event.blogPhotoPaths.enumerated().map {
-                    "photo_\(String(format: "%02d", $0 + 1)).\($1.pathExtension)"
-                }
+                // So each photograph keeps its own name and only a clash is
+                // made distinct (`exportNames`, #1477), and the basename map is
+                // built from that for the draft alone. A colliding basename then
+                // renames both markers to the first photograph, which is the
+                // ambiguity the body already had: one name cannot pick between
+                // two files, and the blog checks report it rather than the
+                // export inventing an answer.
+                let exportedNames = BlogDraftText.exportNames(for: event.blogPhotoPaths)
                 let namesForMarkers = Dictionary(
                     zip(event.blogPhotoPaths.map(\.lastPathComponent), exportedNames),
                     uniquingKeysWith: { first, _ in first })
@@ -201,7 +200,7 @@ struct EventExporter {
                            atomically: true, encoding: .utf8)
 
                 for (i, photo) in event.blogPhotoPaths.enumerated() {
-                    // By POSITION, the same list the draft's names came from,
+                    // By POSITION in the same list the draft's names came from,
                     // so every photograph gets its own file however the
                     // basenames collide.
                     copy(photo, to: blogDir.appendingPathComponent(exportedNames[i]),
