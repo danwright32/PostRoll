@@ -198,3 +198,88 @@ def test_the_issue_title_is_matched_exactly_not_searched(overdue):
     gh = FakeGitHub([{"number": 5, "title": OVERDUE_TITLE + " (notes)"}])
     keep_the_overdue_issue_current(overdue=overdue, said="x", run=gh)
     assert not gh.did("close") and not gh.did("comment")
+
+
+# ── when GitHub cannot be asked ───────────────────────────────────────────────
+
+
+def test_an_unreadable_history_raises_rather_than_reading_as_no_sweep(monkeypatch):
+    def broken(path):
+        raise history.HistoryUnreadable("gh api failed: HTTP 502")
+
+    monkeypatch.setattr(history, "_gh", broken)
+    with pytest.raises(history.HistoryUnreadable, match="502"):
+        history.newest_full_sweep(repo="o/r")
+
+
+def test_the_daily_run_maps_an_unreadable_history_to_its_own_answer(monkeypatch, capsys):
+    from tools import check_guard_sweep_due as due
+
+    def broken(*, repo=None):
+        raise history.HistoryUnreadable("rate limited")
+
+    monkeypatch.setattr(due, "newest_full_sweep", broken)
+    assert due._last_sweep("o/r") is LastSweepUnknown.UNREADABLE
+    assert "could not be read: rate limited" in capsys.readouterr().out
+
+
+class BrokenGitHub(FakeGitHub):
+    """A `gh` whose every call fails, as on a revoked token or an outage."""
+
+    def __call__(self, args):
+        self.calls.append(args)
+        return subprocess.CompletedProcess(args, 1, "", "HTTP 401: Bad credentials")
+
+
+@pytest.mark.parametrize("overdue", [True, False])
+def test_a_github_that_cannot_be_asked_is_refused_by_name(overdue):
+    from tools.say_when_the_sweep_is_overdue import CannotAsk
+    with pytest.raises(CannotAsk, match="Bad credentials"):
+        keep_the_overdue_issue_current(overdue=overdue, said="x",
+                                       run=BrokenGitHub())
+
+
+def test_a_nag_that_could_not_be_delivered_turns_the_step_red(monkeypatch, capsys):
+    from tools import say_when_the_sweep_is_overdue as nag
+    from tools.say_when_the_sweep_is_overdue import CannotAsk
+
+    def refuse(**_):
+        raise CannotAsk("gh issue list failed: HTTP 401")
+
+    monkeypatch.setattr(nag, "keep_the_overdue_issue_current", refuse)
+    assert nag.main(["--overdue", "true", "--said", "x"]) == 1
+    assert "::error::" in capsys.readouterr().out
+
+
+class VanishingGitHub(FakeGitHub):
+    """Creates the issue, then lists nothing: it is not where it was put."""
+
+    def __call__(self, args):
+        if args[2] == "list":
+            self.calls.append(args)
+            return subprocess.CompletedProcess(args, 0, "[]", "")
+        return super().__call__(args)
+
+
+def test_an_issue_missing_right_after_it_was_filed_is_refused():
+    from tools.say_when_the_sweep_is_overdue import CannotAsk
+    with pytest.raises(CannotAsk, match="not in the open list"):
+        keep_the_overdue_issue_current(overdue=True, said="x",
+                                       run=VanishingGitHub())
+
+
+class RacingGitHub(FakeGitHub):
+    """Two daily runs filing at the same moment: the create lands twice."""
+
+    def __call__(self, args):
+        result = super().__call__(args)
+        if args[2] == "create":
+            self.issues.append({"number": 999, "title": args[args.index("--title") + 1]})
+        return result
+
+
+def test_two_runs_filing_at_once_leave_one_issue():
+    gh = RacingGitHub()
+    did, keeper = keep_the_overdue_issue_current(overdue=True, said="x", run=gh)
+    assert did == "deduplicated"
+    assert [i["number"] for i in gh.issues] == [keeper]
