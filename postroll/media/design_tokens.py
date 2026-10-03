@@ -12,8 +12,8 @@ seam honest.
 
 Deliberately NOT here: per-template geometry. Logo width, title baselines and
 the row rhythm differ by template on purpose (the scroll reel's colophon logo
-is 800px because it sits under a full-width strip; the collage plate's is 240px
-because it sits in a 90px caption plate). Those stay in the generator that owns
+is 800px because it sits under a full-width strip; the collage plate's has
+to share a 90px caption plate with the event's title). Those stay in the generator that owns
 them. What belongs here is anything two templates are supposed to agree on.
 """
 
@@ -49,7 +49,10 @@ from PIL import ImageFont
 #: caption band. Measured on 2026-08-28 from real photographs: the worst
 #: arrangement the old pool offered hid 88.9% of its bottom row, three of seven
 #: photographs effectively absent, and the file on disk was perfectly correct.
-COLLAGE_DESIGN_VERSION = 2
+#:
+#: 3 is the wordmark on the caption plate drawn at 400 rather than 240
+#: (2026-10-03), after Dan found it unreadable on his phone.
+COLLAGE_DESIGN_VERSION = 3
 
 
 #: Which generation of each template's design this build renders (#286).
@@ -223,8 +226,7 @@ class DesignChange:
 #: Only templates whose version has actually been BUMPED appear here. A template
 #: still at its first version has no design change to be older than, only a date
 #: on which somebody first wrote a number down, and badging an asset older than
-#: that would be an accusation from the absence of evidence (L98). That is why
-#: `collage` is absent, and
+#: that would be an accusation from the absence of evidence (L98).
 #: `test_every_bumped_template_records_when_it_changed` holds the pair together
 #: in both directions.
 #:
@@ -246,7 +248,7 @@ class DesignChange:
 #: drifted by the next day, because a squash merge rewrites the hash the work
 #: was done under (measured 2026-08-21, three of the six named were wrong).
 MEDIA_DESIGN_CHANGED: dict[str, "DesignChange"] = {
-    "collage": DesignChange(version=2, day="2026-08-28"),
+    "collage": DesignChange(version=3, day="2026-10-03"),
     "story": DesignChange(version=2, day="2026-08-21"),
     "cover": DesignChange(version=2, day="2026-08-21"),
     "before_after": DesignChange(version=3, day="2026-10-03"),

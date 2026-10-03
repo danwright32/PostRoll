@@ -4,8 +4,8 @@
     "version": 3
   },
   "collage": {
-    "fingerprint": "3dceaaf0a8a41bc6c1e9bd91977c2e6143ad74c08a1e22fb36dfff362a3a9eb4",
-    "version": 2
+    "fingerprint": "76fdaed4d2915b9f7047cb20ad5c06c62a8bbfb010fe6ef1f5cc4fddcfc3ad0a",
+    "version": 3
   },
   "cover": {
     "fingerprint": "637f2a7200bf32f1fcc88485d367aea4f5a9248dde7d6682e16fd4e79b2f3fdf",
@@ -20,7 +20,7 @@
     "version": 4
   },
   "reel_preview": {
-    "fingerprint": "8eb61f3595e20bd0e736d168c5c7a5f6cbbd5618f7d7c211a8dae3737d7cab6f",
+    "fingerprint": "e2aa797784d4f0f7a2223214a4be52dbce164ed62a17c97c83d31e19eaba6c1f",
     "version": 4
   },
   "reel_screen": {
@@ -28,11 +28,11 @@
     "version": 2
   },
   "reel_scroll": {
-    "fingerprint": "8eb61f3595e20bd0e736d168c5c7a5f6cbbd5618f7d7c211a8dae3737d7cab6f",
+    "fingerprint": "e2aa797784d4f0f7a2223214a4be52dbce164ed62a17c97c83d31e19eaba6c1f",
     "version": 6
   },
   "reel_slider": {
-    "fingerprint": "1e4da0384027d9f53531a8e496631291cb31b3cc68fddad440262af02d3a783b",
+    "fingerprint": "45617f88482293fe3ac036428a77976f740071e5d22914a7607f56bafb478f28",
     "version": 5
   },
   "story": {
