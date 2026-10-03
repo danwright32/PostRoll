@@ -35,7 +35,7 @@ on:
 
 jobs:
   record:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # `workflow_run` fires for EVERY trigger of the upstream workflow, and the
     # sweep's `changed` job runs on every pull request. Recording from one of
     # those would price the whole registry from the handful of entries one diff
@@ -122,7 +122,7 @@ jobs:
       # re-run of the whole sweep (L277).
       - name: Keep the record this run computed
         if: always() && steps.moved.outputs.moved == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: guard-entry-costs
           path: tests/fixtures/guard_entry_costs.json
