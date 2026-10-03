@@ -890,6 +890,13 @@ def draw_branded_strip(
     # No rule lines: the plate is cream on a cream mat, so a rule would read as a
     # leftover divider from the old edge-to-edge strip.
 
+    # Refuses a mark that was asked for and is not on disk, rather than printing
+    # an unsigned plate and reporting success (#334). Before the fit, which
+    # reads the mark to know where its ink starts.
+    from .missing_media import require_present
+    from .wordmark import LABEL as _WORDMARK, load as _load_wordmark
+    logo_path = require_present(logo_path, _WORDMARK)
+
     detail = plate_detail_line(event_name, org, venue)
     fit = fit_plate(event_name, detail, logo_path)
     title_font = load_font(FONT_SCRIPT, fit.title_size)
@@ -904,9 +911,6 @@ def draw_branded_strip(
         bbox = draw.textbbox((0, 0), ch, font=detail_font)
         dx += (bbox[2] - bbox[0]) + fit.detail_spacing
 
-    # Refuses a mark that was asked for and is not on disk, rather than printing
-    # an unsigned plate and reporting success (#334).
-    from .wordmark import load as _load_wordmark
     logo = _load_wordmark(logo_path, fit.logo_width)
     if logo:
         lx = right - PLATE_PADDING - logo.width
