@@ -144,6 +144,7 @@
     "test_guard_mutation_registry.py": 5.549999999999999,
     "test_guard_sweep_due.py": 0.06,
     "test_guard_sweep_fits_its_deadline.py": 0.12000000000000001,
+    "test_guard_sweep_says_when_it_did_not_run.py": 0.0,
     "test_guard_work_line.py": 0.09000000000000001,
     "test_guards_read_code_not_prose.py": 0.84,
     "test_gui_launch_budget.py": 0.0,
@@ -872,6 +873,10 @@
     "test_guard_sweep_fits_its_deadline.py": {
       "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
+    },
+    "test_guard_sweep_says_when_it_did_not_run.py": {
+      "run": "partial-2026-10-03T17:00Z",
+      "scale": 0.947
     },
     "test_guard_work_line.py": {
       "run": "full-2026-09-05T02:25Z",
