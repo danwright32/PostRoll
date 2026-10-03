@@ -125,59 +125,85 @@ class NoSweepFound(Exception):
     nothing, which would read as a healthy record (L98)."""
 
 
-#: Which workflow, and which of its triggers, the readings come from.
+#: Which workflow the readings come from.
 #:
-#: Scheduled runs only. The per-pull-request `changed` job proves the entries
-#: one diff touched, and `--from` REPLACES the record, so folding a `changed`
-#: run in would price the whole registry from a handful of entries.
+#: Never the per-pull-request `changed` job, which proves only the entries one
+#: diff touched: the workflow admits scheduled and hand-started runs only, and
+#: which shards a run actually proved decides whether it replaces the record or
+#: is folded into it (#1467).
 SWEEP_WORKFLOW = "guards.yml"
-SWEEP_EVENT = "schedule"
 
 
-def _gh(args: list[str]) -> tuple[int, str]:
-    try:
-        done = subprocess.run(args, capture_output=True, text=True)
-    except FileNotFoundError as missing:
-        raise NoSweepFound(
-            "the gh CLI is not on PATH, so no run could be looked up"
-        ) from missing
-    return done.returncode, done.stdout + done.stderr
+def newest_sweep_run(find=None) -> str:
+    """The newest guards.yml run that actually swept, as a run id.
 
-
-def newest_sweep_run(run=None) -> str:
-    """The newest successful scheduled sweep, as a run id.
+    For the manual trigger. Read from the run history per event, scheduled and
+    hand-started, through the same helper the daily run uses, because since
+    #1428 only a hand-started run sweeps and "the newest successful scheduled
+    run" is one that swept nothing (#1467).
 
     Every way of not finding one is its own refusal rather than an empty
-    answer, because the caller acts on the answer: a job that reported "nothing
-    to record" on a broken token would say it every day and read as a record
-    that is up to date (L11, L98).
+    answer, because the caller acts on the answer (L11, L98).
     """
-    if run is None:
-        run = _gh
-    code, output = run([
-        "gh", "run", "list",
-        "--workflow", SWEEP_WORKFLOW,
-        "--event", SWEEP_EVENT,
-        "--status", "success",
-        "--limit", "1",
-        "--json", "databaseId,conclusion,createdAt",
-    ])
-    if code != 0:
-        raise NoSweepFound(
-            f"gh could not list the sweep's runs (exit {code}): "
-            f"{output.strip()[:200]}. That is not the same as there being none")
+    if find is None:
+        from tools.guard_sweep_history import newest_full_sweep
+
+        def find():
+            # Successful runs only, as the workflow follows: a failed run's
+            # readings stop wherever it died (L331).
+            return newest_full_sweep(require_success=True)
+    from tools.guard_sweep_history import HistoryUnreadable
     try:
-        runs = json.loads(output)
-    except ValueError as error:
+        sweep = find()
+    except HistoryUnreadable as exc:
         raise NoSweepFound(
-            f"gh printed something that is not JSON: {output.strip()[:200]}"
-        ) from error
-    if not runs:
+            f"the guard sweep's run history could not be read ({exc}). That is "
+            "not the same as there being no sweep") from exc
+    if sweep is None:
         raise NoSweepFound(
-            f"no successful scheduled run of {SWEEP_WORKFLOW} was found, so "
-            "there is nothing to record from. The sweep may have been failing, "
-            "or skipping because the tree was already proved")
-    return str(runs[0]["databaseId"])
+            f"no run of {SWEEP_WORKFLOW} in the recent scheduled or hand-started "
+            "history proved a shard, so there is nothing to record from. Start "
+            "a sweep with `gh workflow run guards.yml`")
+    return str(sweep.run_id)
+
+
+def record_from_run(run_id: str, record_path: Path, *, sweep_of=None,
+                    fetch=None) -> int:
+    """Record from the one run the workflow followed (#1467).
+
+    Three outcomes, said apart. A run that swept nothing has nothing to record,
+    and says so and exits 0: that is the ordinary daily run since #1428, and
+    it must not read as a failing workflow (L36). A run that proved every shard
+    replaces the record. A run that proved some shards, which #1344 made the
+    usual hand-started sweep, is folded into the record rather than replacing
+    it, since replacing would price the registry from a fraction of it. Any
+    failure to read or record a run that did sweep is raised, so the workflow
+    goes red rather than standing still in green (L289).
+    """
+    from tools.check_guard_sweep_due import SHARD_COUNT
+    from tools.guard_sweep_history import HistoryUnreadable
+    if sweep_of is None:
+        from tools.guard_sweep_history import sweep_of
+    if fetch is None:
+        fetch = fetch_run
+    try:
+        sweep = sweep_of(run_id)
+    except HistoryUnreadable as exc:
+        raise SystemExit(
+            f"which shards run {run_id} proved could not be read: {exc}. "
+            "Nothing was written.") from exc
+    if not sweep.passed_shards:
+        print(f"run {run_id} did not sweep, so there is nothing to record. "
+              "The full sweep runs only when started by hand.")
+        return 0
+    with tempfile.TemporaryDirectory() as scratch:
+        paths = fetch(run_id, Path(scratch))
+        if sweep.passed_shards >= frozenset(range(1, SHARD_COUNT + 1)):
+            return _whole(paths, record_path)
+        which = ", ".join(str(n) for n in sorted(sweep.passed_shards))
+        print(f"run {run_id} swept shard(s) {which} of {SHARD_COUNT}, so its "
+              "readings are folded into the record rather than replacing it")
+        return _add(paths, record_path)
 
 
 def fetch_run(run_id: str, into: Path) -> list[Path]:
@@ -361,6 +387,22 @@ def _whole(paths: list[Path], record_path: Path) -> int:
     return 0
 
 
+def describe(record_path: Path) -> str:
+    """When the record was last replaced, for the run's summary (#1467).
+
+    Said on every run, so a record that has stopped moving is visible rather
+    than inferred. Never raises: it runs in the step that reports what happened,
+    and a crash there would hide the report it exists to give.
+    """
+    try:
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        return f"The guard cost record could not be read: {error}"
+    return (f"The record was last replaced from a whole sweep on "
+            f"{record.get('measured_on')}, run {record.get('measured_from_run')}. "
+            "Partial sweeps since are folded in per entry.")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--from", dest="whole", nargs="+", type=Path,
@@ -372,25 +414,39 @@ def main(argv: list[str] | None = None) -> int:
                         help="a guards.yml run id, whose shard artifacts are "
                              "downloaded and then treated as --from")
     parser.add_argument("--from-newest-run", dest="newest", action="store_true",
-                        help="find the newest successful scheduled guards.yml "
-                             "run and treat it as --from-run")
+                        help="find the newest guards.yml run that actually "
+                             "swept and record from it")
+    parser.add_argument("--from-upstream-run", dest="upstream", default=None,
+                        help="the guards.yml run the workflow followed: record "
+                             "from it if it swept, say so if it did not")
+    parser.add_argument("--describe", action="store_true",
+                        help="say when the record was last replaced, and nothing else")
     parser.add_argument("--record", type=Path, default=RECORD)
     args = parser.parse_args(argv)
 
+    if args.describe:
+        print("\n" + describe(args.record))
+        return 0
+
     asked = [bool(args.whole), bool(args.add), bool(args.run_id),
-             bool(args.newest)]
+             bool(args.newest), bool(args.upstream)]
     if sum(asked) != 1:
         parser.error(
-            "say exactly one of --from, --add, --from-run or --from-newest-run")
+            "say exactly one of --from, --add, --from-run, --from-newest-run "
+            "or --from-upstream-run")
+
+    if args.upstream:
+        return record_from_run(args.upstream, args.record)
 
     if args.newest:
         try:
-            args.run_id = newest_sweep_run()
+            run_id = newest_sweep_run()
         except NoSweepFound as refusal:
             print(refusal)
             return 1
-        print(f"recording from run {args.run_id}, the newest successful "
-              f"scheduled {SWEEP_WORKFLOW} run")
+        print(f"recording from run {run_id}, the newest {SWEEP_WORKFLOW} run "
+              "that actually swept")
+        return record_from_run(run_id, args.record)
 
     if args.run_id:
         with tempfile.TemporaryDirectory() as scratch:
@@ -399,16 +455,21 @@ def main(argv: list[str] | None = None) -> int:
     if args.whole:
         return _whole(args.whole, args.record)
 
-    seconds, kinds, cold, run = readings_of(args.add)
-    existing = json.loads(args.record.read_text(encoding="utf-8")) \
-        if args.record.exists() else {"seconds": {}, "measured": {}}
+    return _add(args.add, args.record)
+
+
+def _add(paths: list[Path], record_path: Path) -> int:
+    """A later, partial run's readings, scaled onto the existing record."""
+    seconds, kinds, cold, run = readings_of(paths)
+    existing = json.loads(record_path.read_text(encoding="utf-8")) \
+        if record_path.exists() else {"seconds": {}, "measured": {}}
     record = added(existing, seconds, run, noun=NOUN)
     record["kinds"] = dict(sorted({**(existing.get("kinds") or {}), **kinds}.items()))
     record["cold"] = (existing.get("cold") or []) + cold
     for key in ("measured_on", "measured_from_run", "re_measure_with"):
         if key in existing:
             record[key] = existing[key]
-    write(record, args.record)
+    write(record, record_path)
     new = sorted(set(record["seconds"]) - set(existing.get("seconds") or {}))
     print(f"added {len(new)} entries from run {run}")
     for name in new:

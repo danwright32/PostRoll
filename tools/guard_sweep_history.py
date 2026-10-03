@@ -69,6 +69,8 @@ class Sweep:
     created_at: datetime | None
     #: Shards whose proof step executed and succeeded.
     passed_shards: frozenset[int]
+    #: The run's own conclusion, as GitHub reports it. None when not given.
+    conclusion: str | None = None
 
 
 def shard_of_job_name(name: str) -> int | None:
@@ -116,6 +118,7 @@ def sweeps_from_jobs(run: dict, jobs: list[dict]) -> Sweep:
         head_sha=str(run.get("head_sha") or ""),
         created_at=_stamp(run.get("created_at", "")),
         passed_shards=frozenset(passed),
+        conclusion=run.get("conclusion"),
     )
 
 
@@ -190,8 +193,8 @@ def recent_sweeps(*, repo: str | None = None, limit: int = 20,
 SWEEP_EVENTS = ("schedule", "workflow_dispatch")
 
 
-def newest_full_sweep(*, repo: str | None = None,
-                      limit: int = 20) -> Sweep | None:
+def newest_full_sweep(*, repo: str | None = None, limit: int = 20,
+                      require_success: bool = False) -> Sweep | None:
     """The newest run that actually proved a shard, or None.
 
     The whole run rather than its date, because the guard cost recorder needs
@@ -219,8 +222,23 @@ def newest_full_sweep(*, repo: str | None = None,
         runs.sort(key=lambda run: str(run.get("created_at") or ""), reverse=True)
         for run in runs:
             sweep = _summarise(name, [run], skip_run_id=None)[0]
+            if require_success and sweep.conclusion != "success":
+                # The recorder's rule (L331): a run that failed measured the
+                # entries it reached and nothing about the rest.
+                continue
             if sweep.passed_shards and sweep.created_at is not None:
                 if newest is None or sweep.created_at > newest.created_at:
                     newest = sweep
                 break
     return newest
+
+
+def sweep_of(run_id: int | str, *, repo: str | None = None) -> Sweep:
+    """One guard-workflow run, summarised by what its shards proved.
+
+    For the guard cost recorder, which follows the exact run that just
+    finished rather than the newest of some kind (#1467).
+    """
+    name = _repo(repo)
+    run = _gh(f"repos/{name}/actions/runs/{run_id}")
+    return _summarise(name, [run], skip_run_id=None)[0]
