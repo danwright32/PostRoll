@@ -322,6 +322,33 @@ enum PythonBridgeLog {
         try? kept.write(to: sharedLog, atomically: true, encoding: .utf8)
     }
 
+    /// How much of its time limit a successful run used (#1479, L743).
+    ///
+    /// A run that reaches its limit is reported as failed, so the limit has to
+    /// sit well past the slowest run that still passes, and that can only be
+    /// judged if every passing run says how close it came. Past half is called
+    /// out, so the line worth acting on can be found in the log.
+    static func headroomLine(elapsed: TimeInterval, limit: TimeInterval) -> String {
+        let used = Int(elapsed.rounded())
+        let line = "finished in \(used)s of its \(Int(limit))s limit"
+        return elapsed > limit / 2
+            ? line + ", more than half: the limit may be too close to the work"
+            : line
+    }
+
+    /// Append `headroomLine` to a run's own log, stamped like its other lines.
+    static func appendHeadroom(to runLog: URL, elapsed: TimeInterval, limit: TimeInterval) {
+        let stamp = DateFormatter()
+        stamp.locale = Locale(identifier: "en_US_POSIX")
+        stamp.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        let text = "[\(stamp.string(from: Date()))] "
+            + headroomLine(elapsed: elapsed, limit: limit) + "\n"
+        guard let handle = try? FileHandle(forWritingTo: runLog) else { return }
+        defer { try? handle.close() }
+        _ = try? handle.seekToEnd()
+        try? handle.write(contentsOf: Data(text.utf8))
+    }
+
     /// Append a finished run's output to the shared log and delete its file.
     ///
     /// One locked append of the whole run, so two runs finishing together
