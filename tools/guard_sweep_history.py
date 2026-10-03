@@ -191,8 +191,11 @@ SWEEP_EVENTS = ("schedule", "workflow_dispatch")
 
 
 def newest_full_sweep(*, repo: str | None = None,
-                      limit: int = 20) -> datetime | None:
-    """When the newest run that actually proved a shard started, or None.
+                      limit: int = 20) -> Sweep | None:
+    """The newest run that actually proved a shard, or None.
+
+    The whole run rather than its date, because the guard cost recorder needs
+    its id and which shards it proved (#1467) and the daily run needs its date.
 
     Asked per event rather than of the newest runs of any kind (#1466). Pull
     requests and the daily runs that sweep nothing fill a page of recent runs
@@ -204,13 +207,13 @@ def newest_full_sweep(*, repo: str | None = None,
     query is not evidence that nothing ran (L119).
     """
     name = _repo(repo)
-    newest: datetime | None = None
+    newest: Sweep | None = None
     for event in SWEEP_EVENTS:
         query = (f"repos/{name}/actions/workflows/{WORKFLOW_FILE}/runs"
                  f"?event={event}&status=completed&per_page={limit}")
         runs = list(_gh(query).get("workflow_runs") or [])
         for sweep in _summarise(name, runs, skip_run_id=None):
             if sweep.passed_shards and sweep.created_at is not None:
-                if newest is None or sweep.created_at > newest:
-                    newest = sweep.created_at
+                if newest is None or sweep.created_at > newest.created_at:
+                    newest = sweep
     return newest

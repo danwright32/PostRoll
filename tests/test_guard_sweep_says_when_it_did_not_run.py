@@ -133,7 +133,8 @@ def test_the_last_sweep_is_read_from_scheduled_and_requested_runs(monkeypatch):
     monkeypatch.setattr(history, "_gh", fake_gh)
     newest = history.newest_full_sweep(repo="o/r")
 
-    assert newest == datetime(2026, 9, 27, 7, 0, tzinfo=timezone.utc)
+    assert newest.created_at == datetime(2026, 9, 27, 7, 0, tzinfo=timezone.utc)
+    assert newest.run_id == 1 and newest.passed_shards == frozenset({1, 2, 3})
     assert any("event=schedule" in p for p in asked)
     assert any("event=workflow_dispatch" in p for p in asked)
 
