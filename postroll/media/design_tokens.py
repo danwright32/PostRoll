@@ -12,8 +12,8 @@ seam honest.
 
 Deliberately NOT here: per-template geometry. Logo width, title baselines and
 the row rhythm differ by template on purpose (the scroll reel's colophon logo
-is 800px because it sits under a full-width strip; the collage plate's is 240px
-because it sits in a 90px caption plate). Those stay in the generator that owns
+is 800px because it sits under a full-width strip; the collage plate's has
+to share a 90px caption plate with the event's title). Those stay in the generator that owns
 them. What belongs here is anything two templates are supposed to agree on.
 """
 
@@ -226,8 +226,7 @@ class DesignChange:
 #: Only templates whose version has actually been BUMPED appear here. A template
 #: still at its first version has no design change to be older than, only a date
 #: on which somebody first wrote a number down, and badging an asset older than
-#: that would be an accusation from the absence of evidence (L98). That is why
-#: `collage` is absent, and
+#: that would be an accusation from the absence of evidence (L98).
 #: `test_every_bumped_template_records_when_it_changed` holds the pair together
 #: in both directions.
 #:

@@ -20,6 +20,7 @@ import argparse
 import json
 import random
 import sys
+from dataclasses import dataclass, replace
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter
 
@@ -70,6 +71,29 @@ STRIP_H = 90
 #: transparent margin overhangs onto the photographs and draws nothing there.
 LOGO_WIDTH = 400
 PLATE_PADDING = 24  # inset of the plate's text and logo from its own edges
+
+# What gives way when the title and detail line are long (`fit_plate`).
+#
+# At 400 the text ran under the mark on 5 of the 22 events in Dan's library,
+# and at the old 240 Quarter Time's venue already touched it. Dan's call, from
+# a design round on 2026-10-03: split the squeeze evenly. The detail line
+# tightens to its floor first, then the mark takes whatever room is left.
+TITLE_SIZE = 42
+DETAIL_SIZE = 18
+DETAIL_SPACING = 4
+DETAIL_SPACING_FLOOR = 2
+DETAIL_SIZE_FLOOR = 16
+#: The mark never drops below the size it shipped at before the round.
+LOGO_MIN_WIDTH = 240
+#: Clear cream between the end of the text and the start of the mark's ink.
+TEXT_TO_MARK_GAP = 24
+#: Last resorts, for text longer than anything in the library: once the mark is
+#: at its floor, the detail line tightens further and then the title shrinks.
+#: Past even those, the detail line and then the title are cut short with an
+#: ellipsis, so no name can run under the mark however long it is.
+DETAIL_SPACING_LAST = 1
+DETAIL_SIZE_LAST = 12
+TITLE_SIZE_LAST = 28
 
 # Layout patterns: (top_half, bottom_half) — photos split around center strip
 # Top gets 5, bottom gets 5
@@ -728,6 +752,94 @@ def plate_detail_line(event_name: str, org: str, venue: str) -> str:
     return "  ·  ".join(detail_lines(event_name, org, venue))
 
 
+@dataclass(frozen=True)
+class PlateFit:
+    """How the caption plate is set for one event's text."""
+
+    title_size: int
+    detail_size: int
+    detail_spacing: int
+    logo_width: int
+    #: The text as drawn, which differs from what was asked for only when a
+    #: last resort cut it short.
+    title: str
+    detail: str
+
+
+def _tracked_width(draw: ImageDraw.ImageDraw, text: str, font, spacing: int) -> int:
+    """Width of `text` drawn a character at a time, as the plate draws it."""
+    if not text:
+        return 0
+    widths = [draw.textbbox((0, 0), ch, font=font)[2]
+              - draw.textbbox((0, 0), ch, font=font)[0] for ch in text]
+    return sum(widths) + spacing * (len(text) - 1)
+
+
+def _mark_ink_share() -> float:
+    """How far into the wordmark file its ink starts, as a share of its width.
+
+    Read from the file rather than written down, so a redrawn mark with
+    different padding moves the fit with it.
+    """
+    from .wordmark import BLACK
+    mark = Image.open(BLACK)
+    return mark.getchannel("A").getbbox()[0] / mark.width
+
+
+def fit_plate(event_name: str, detail: str) -> PlateFit:
+    """The sizes that keep the title and detail line clear of the mark.
+
+    Short text gets the full set: the 400 mark and the detail line as designed.
+    Long text tightens the detail line to its floor, then shrinks the mark into
+    the room that is left, down to LOGO_MIN_WIDTH. Past that, which nothing in
+    the library reaches, the detail line and then the title give way too.
+    """
+    draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    share = _mark_ink_share()
+    right = CANVAS_W - MAT - PLATE_PADDING
+    text_left = MAT + PLATE_PADDING
+
+    def ink_left(width: int) -> int:
+        return right - width + round(width * share)
+
+    def text_right(fit: PlateFit) -> int:
+        title_box = draw.textbbox((0, 0), fit.title,
+                                  font=load_font(FONT_SCRIPT, fit.title_size))
+        detail_font = load_font(FONT_DETAIL, fit.detail_size,
+                                index=PLATE_DETAIL_WEIGHT)
+        return text_left + max(title_box[2],
+                               _tracked_width(draw, fit.detail, detail_font,
+                                              fit.detail_spacing))
+
+    def clear(fit: PlateFit) -> bool:
+        return text_right(fit) + TEXT_TO_MARK_GAP <= ink_left(fit.logo_width)
+
+    def tighten(fit: PlateFit, spacing_floor: int, size_floor: int) -> PlateFit:
+        while not clear(fit):
+            if fit.detail_spacing > spacing_floor:
+                fit = replace(fit, detail_spacing=fit.detail_spacing - 1)
+            elif fit.detail_size > size_floor:
+                fit = replace(fit, detail_size=fit.detail_size - 1)
+            else:
+                break
+        return fit
+
+    fit = PlateFit(TITLE_SIZE, DETAIL_SIZE, DETAIL_SPACING, LOGO_WIDTH,
+                   event_name, detail)
+    fit = tighten(fit, DETAIL_SPACING_FLOOR, DETAIL_SIZE_FLOOR)
+    while not clear(fit) and fit.logo_width > LOGO_MIN_WIDTH:
+        fit = replace(fit, logo_width=fit.logo_width - 1)
+    fit = tighten(fit, DETAIL_SPACING_LAST, DETAIL_SIZE_LAST)
+    while not clear(fit) and fit.title_size > TITLE_SIZE_LAST:
+        fit = replace(fit, title_size=fit.title_size - 1)
+    for field in ("detail", "title"):
+        kept = getattr(fit, field)
+        while not clear(fit) and kept:
+            kept = kept[:-1].rstrip()
+            fit = replace(fit, **{field: kept + "\u2026" if kept else ""})
+    return fit
+
+
 def draw_branded_strip(
     canvas: Image.Image,
     y: int,
@@ -756,23 +868,24 @@ def draw_branded_strip(
     # No rule lines: the plate is cream on a cream mat, so a rule would read as a
     # leftover divider from the old edge-to-edge strip.
 
-    title_font = load_font(FONT_SCRIPT, 42)
-    detail_font = load_font(FONT_DETAIL, 18, index=PLATE_DETAIL_WEIGHT)
+    detail = plate_detail_line(event_name, org, venue)
+    fit = fit_plate(event_name, detail)
+    title_font = load_font(FONT_SCRIPT, fit.title_size)
+    detail_font = load_font(FONT_DETAIL, fit.detail_size, index=PLATE_DETAIL_WEIGHT)
 
     title_x = left + PLATE_PADDING
-    draw.text((title_x, y + 10), event_name, font=title_font, fill=TEXT_DARK)
+    draw.text((title_x, y + 10), fit.title, font=title_font, fill=TEXT_DARK)
 
-    detail = plate_detail_line(event_name, org, venue)
     dx = title_x
-    for ch in detail:
+    for ch in fit.detail:
         draw.text((dx, y + 58), ch, font=detail_font, fill=TEXT_DARK)
         bbox = draw.textbbox((0, 0), ch, font=detail_font)
-        dx += (bbox[2] - bbox[0]) + 4
+        dx += (bbox[2] - bbox[0]) + fit.detail_spacing
 
     # Refuses a mark that was asked for and is not on disk, rather than printing
     # an unsigned plate and reporting success (#334).
     from .wordmark import load as _load_wordmark
-    logo = _load_wordmark(logo_path, LOGO_WIDTH)
+    logo = _load_wordmark(logo_path, fit.logo_width)
     if logo:
         lx = right - PLATE_PADDING - logo.width
         ly = y + (STRIP_H - logo.height) // 2
