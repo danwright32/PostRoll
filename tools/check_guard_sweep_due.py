@@ -319,7 +319,7 @@ def _last_sweep(repo: str | None) -> datetime | LastSweepUnknown:
     except HistoryUnreadable as exc:
         print(f"when the last full sweep ran could not be read: {exc}")
         return LastSweepUnknown.UNREADABLE
-    return LastSweepUnknown.NONE_FOUND if newest is None else newest
+    return LastSweepUnknown.NONE_FOUND if newest is None else newest.created_at
 
 
 def main(argv: list[str] | None = None) -> int:
