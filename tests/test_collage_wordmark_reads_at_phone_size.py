@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from PIL import Image, ImageChops
 
 from postroll.media.generate_collage import generate_collage
@@ -75,6 +76,9 @@ BLUDLINE = ("BLUDLINE: A Hip-Hop Odyssey", "Fermin Suero, Jr. and Pete White",
             "Greenwich House Theater")
 #: Longer than anything in the library, so the last resorts are exercised
 #: rather than shipping as code nothing has ever run (L101).
+#: Columns of the mark's anti-aliased left edge that read as dark as text.
+MARK_FRINGE = 3
+
 ABSURD = ("An Evening of Songs from the Golden Age of the American Musical",
           "The Metropolitan Community Chorus and Friends of the Orchestra",
           "The Cathedral Church of Saint John the Divine, Morningside Heights")
@@ -100,19 +104,48 @@ def _ink_columns(plate: Image.Image, threshold: int) -> list[int]:
 def _text_right_and_mark_left(event) -> tuple[int, int]:
     """Right edge of the title and detail, and left edge of the mark's ink.
 
-    Two renders of one plate. The text is measured with no mark drawn, because
-    the mark's soft edge is as dark as the text's and would read as text
-    touching it. The fit depends only on the text, so both renders lay the text
-    out identically.
+    The mark is pure black and found first. The text is warm brown, which the
+    black-only threshold leaves out, so it is every darker column to the left
+    of the mark, less the few columns of the mark's own soft edge, which is as
+    dark as text. Text running into the mark still reads as touching it: its
+    columns then reach to within those few pixels.
     """
-    mark = _ink_columns(_plate(event, BLACK), 30)
+    plate = _plate(event, BLACK)
+    mark = _ink_columns(plate, 30)
     assert mark, f"no mark drawn on the plate for {event[0]!r}"
-    text = _ink_columns(_plate(event, None), 140)
+    text = [x for x in _ink_columns(plate, 140) if x < mark[0] - MARK_FRINGE]
     return (max(text) if text else 0), mark[0]
 
 
+def test_a_plate_with_no_mark_sets_its_text_as_designed():
+    fit = collage.fit_plate(QUARTER_TIME[0],
+                            collage.plate_detail_line(*QUARTER_TIME), None)
+    assert (fit.detail_size, fit.detail_spacing, fit.title_size) == (
+        collage.DETAIL_SIZE, collage.DETAIL_SPACING, collage.TITLE_SIZE)
+
+
+def test_the_fit_follows_the_mark_actually_drawn(tmp_path):
+    """A mark with more padding on its left leaves the text more room."""
+    with Image.open(BLACK) as mark:
+        padded = Image.new("RGBA", (mark.width * 2, mark.height), (0, 0, 0, 0))
+        padded.paste(mark.convert("RGBA"), (mark.width, 0))
+    path = tmp_path / "padded.png"
+    padded.save(path)
+    detail = collage.plate_detail_line(*QUARTER_TIME)
+    plain = collage.fit_plate(QUARTER_TIME[0], detail, BLACK)
+    roomy = collage.fit_plate(QUARTER_TIME[0], detail, path)
+    assert roomy.logo_width != plain.logo_width
+
+
+def test_a_mark_with_no_ink_is_refused_by_name(tmp_path):
+    path = tmp_path / "blank.png"
+    Image.new("RGBA", (100, 40), (0, 0, 0, 0)).save(path)
+    with pytest.raises(ValueError, match="blank.png has no visible ink"):
+        collage.fit_plate("Test", "Venue", path)
+
+
 def test_a_short_name_keeps_the_full_mark_and_the_full_detail_line():
-    fit = collage.fit_plate("Broadway Undressed", "54 Below")
+    fit = collage.fit_plate("Broadway Undressed", "54 Below", BLACK)
     assert (fit.logo_width, fit.detail_size, fit.detail_spacing, fit.title_size) == (
         collage.LOGO_WIDTH, collage.DETAIL_SIZE, collage.DETAIL_SPACING,
         collage.TITLE_SIZE)
@@ -120,7 +153,7 @@ def test_a_short_name_keeps_the_full_mark_and_the_full_detail_line():
 
 def test_the_longest_real_names_split_the_squeeze_evenly():
     for event in (QUARTER_TIME, BLUDLINE):
-        fit = collage.fit_plate(event[0], collage.plate_detail_line(*event))
+        fit = collage.fit_plate(event[0], collage.plate_detail_line(*event), BLACK)
         assert fit.detail_spacing >= collage.DETAIL_SPACING_FLOOR, event[0]
         assert fit.detail_size >= collage.DETAIL_SIZE_FLOOR, event[0]
         assert fit.title_size == collage.TITLE_SIZE, event[0]
@@ -139,7 +172,7 @@ def test_no_name_runs_under_the_mark():
 
 
 def test_the_mark_never_drops_below_its_floor():
-    fit = collage.fit_plate(ABSURD[0], collage.plate_detail_line(*ABSURD))
+    fit = collage.fit_plate(ABSURD[0], collage.plate_detail_line(*ABSURD), BLACK)
     assert fit.logo_width == collage.LOGO_MIN_WIDTH
     # The detail line is cut short before the title is touched.
     assert fit.detail.endswith("\u2026") and fit.title == ABSURD[0]

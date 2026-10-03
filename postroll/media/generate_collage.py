@@ -775,60 +775,82 @@ def _tracked_width(draw: ImageDraw.ImageDraw, text: str, font, spacing: int) -> 
     return sum(widths) + spacing * (len(text) - 1)
 
 
-def _mark_ink_share() -> float:
+def _mark_ink_share(mark_path: str | Path) -> float:
     """How far into the wordmark file its ink starts, as a share of its width.
 
-    Read from the file rather than written down, so a redrawn mark with
-    different padding moves the fit with it.
+    Read from the mark actually drawn rather than written down, so a redrawn
+    mark with different padding moves the fit with it.
     """
-    from .wordmark import BLACK
-    mark = Image.open(BLACK)
-    return mark.getchannel("A").getbbox()[0] / mark.width
+    with Image.open(mark_path) as mark:
+        ink = mark.convert("RGBA").getchannel("A").getbbox()
+        width = mark.width
+    if ink is None:
+        raise ValueError(f"{mark_path} has no visible ink to fit the plate around")
+    return ink[0] / width
 
 
-def fit_plate(event_name: str, detail: str) -> PlateFit:
+def fit_plate(event_name: str, detail: str, mark_path: str | Path | None) -> PlateFit:
     """The sizes that keep the title and detail line clear of the mark.
 
     Short text gets the full set: the 400 mark and the detail line as designed.
     Long text tightens the detail line to its floor, then shrinks the mark into
     the room that is left, down to LOGO_MIN_WIDTH. Past that, which nothing in
-    the library reaches, the detail line and then the title give way too.
+    the library reaches, the detail line and then the title give way too. With
+    no mark there is nothing to clear, so the text is set as designed.
     """
+    fit = PlateFit(TITLE_SIZE, DETAIL_SIZE, DETAIL_SPACING, LOGO_WIDTH,
+                   event_name, detail)
+    if mark_path is None:
+        return fit
     draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
-    share = _mark_ink_share()
+    share = _mark_ink_share(mark_path)
     right = CANVAS_W - MAT - PLATE_PADDING
     text_left = MAT + PLATE_PADDING
+    measured: dict[tuple, int] = {}
+
+    def title_w(text: str, size: int) -> int:
+        key = ("title", text, size)
+        if key not in measured:
+            measured[key] = draw.textbbox(
+                (0, 0), text, font=load_font(FONT_SCRIPT, size))[2]
+        return measured[key]
+
+    def detail_w(text: str, size: int, spacing: int) -> int:
+        key = ("detail", text, size, spacing)
+        if key not in measured:
+            font = load_font(FONT_DETAIL, size, index=PLATE_DETAIL_WEIGHT)
+            measured[key] = _tracked_width(draw, text, font, spacing)
+        return measured[key]
 
     def ink_left(width: int) -> int:
         return right - width + round(width * share)
 
-    def text_right(fit: PlateFit) -> int:
-        title_box = draw.textbbox((0, 0), fit.title,
-                                  font=load_font(FONT_SCRIPT, fit.title_size))
-        detail_font = load_font(FONT_DETAIL, fit.detail_size,
-                                index=PLATE_DETAIL_WEIGHT)
-        return text_left + max(title_box[2],
-                               _tracked_width(draw, fit.detail, detail_font,
-                                              fit.detail_spacing))
+    def text_right(f: PlateFit) -> int:
+        return text_left + max(title_w(f.title, f.title_size),
+                               detail_w(f.detail, f.detail_size, f.detail_spacing))
 
-    def clear(fit: PlateFit) -> bool:
-        return text_right(fit) + TEXT_TO_MARK_GAP <= ink_left(fit.logo_width)
+    def clear(f: PlateFit) -> bool:
+        return text_right(f) + TEXT_TO_MARK_GAP <= ink_left(f.logo_width)
 
-    def tighten(fit: PlateFit, spacing_floor: int, size_floor: int) -> PlateFit:
-        while not clear(fit):
-            if fit.detail_spacing > spacing_floor:
-                fit = replace(fit, detail_spacing=fit.detail_spacing - 1)
-            elif fit.detail_size > size_floor:
-                fit = replace(fit, detail_size=fit.detail_size - 1)
+    def tighten(f: PlateFit, spacing_floor: int, size_floor: int) -> PlateFit:
+        while not clear(f):
+            if f.detail_spacing > spacing_floor:
+                f = replace(f, detail_spacing=f.detail_spacing - 1)
+            elif f.detail_size > size_floor:
+                f = replace(f, detail_size=f.detail_size - 1)
             else:
                 break
-        return fit
+        return f
 
-    fit = PlateFit(TITLE_SIZE, DETAIL_SIZE, DETAIL_SPACING, LOGO_WIDTH,
-                   event_name, detail)
     fit = tighten(fit, DETAIL_SPACING_FLOOR, DETAIL_SIZE_FLOOR)
-    while not clear(fit) and fit.logo_width > LOGO_MIN_WIDTH:
-        fit = replace(fit, logo_width=fit.logo_width - 1)
+    if not clear(fit):
+        # Solved rather than stepped: the widest mark whose ink starts past the
+        # text, then a step or two down for the rounding in ink_left.
+        room = right - text_right(fit) - TEXT_TO_MARK_GAP
+        width = max(LOGO_MIN_WIDTH, min(LOGO_WIDTH, int(room / (1 - share))))
+        fit = replace(fit, logo_width=width)
+        while not clear(fit) and fit.logo_width > LOGO_MIN_WIDTH:
+            fit = replace(fit, logo_width=fit.logo_width - 1)
     fit = tighten(fit, DETAIL_SPACING_LAST, DETAIL_SIZE_LAST)
     while not clear(fit) and fit.title_size > TITLE_SIZE_LAST:
         fit = replace(fit, title_size=fit.title_size - 1)
@@ -869,7 +891,7 @@ def draw_branded_strip(
     # leftover divider from the old edge-to-edge strip.
 
     detail = plate_detail_line(event_name, org, venue)
-    fit = fit_plate(event_name, detail)
+    fit = fit_plate(event_name, detail, logo_path)
     title_font = load_font(FONT_SCRIPT, fit.title_size)
     detail_font = load_font(FONT_DETAIL, fit.detail_size, index=PLATE_DETAIL_WEIGHT)
 
