@@ -6,7 +6,7 @@ notify step or an issue-opening step returned nothing, so a red run sat in the
 Actions tab until somebody opened it.
 
 Most checks run on a pull request, where a failure blocks the merge and cannot
-be missed. Two do not:
+be missed. Three do not:
 
 - `guards.yml`'s `full` job, the full sweep, runs only when somebody starts it
   by hand (#1428), never on a pull request. It cannot gate anything: a failure

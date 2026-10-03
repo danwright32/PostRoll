@@ -212,8 +212,15 @@ def newest_full_sweep(*, repo: str | None = None,
         query = (f"repos/{name}/actions/workflows/{WORKFLOW_FILE}/runs"
                  f"?event={event}&status=completed&per_page={limit}")
         runs = list(_gh(query).get("workflow_runs") or [])
-        for sweep in _summarise(name, runs, skip_run_id=None):
+        # Newest first, as GitHub lists them, so the first run that proved a
+        # shard is this event's answer. Each run costs a jobs request, and the
+        # daily runs that swept nothing would otherwise cost one each, every
+        # day, for an answer already in hand.
+        runs.sort(key=lambda run: str(run.get("created_at") or ""), reverse=True)
+        for run in runs:
+            sweep = _summarise(name, [run], skip_run_id=None)[0]
             if sweep.passed_shards and sweep.created_at is not None:
                 if newest is None or sweep.created_at > newest.created_at:
                     newest = sweep
+                break
     return newest

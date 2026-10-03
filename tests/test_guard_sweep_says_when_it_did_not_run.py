@@ -31,6 +31,12 @@ NOW = datetime(2026, 10, 3, 7, 0, tzinfo=timezone.utc)
 TREE = "a" * 40
 
 
+def swept(at, shards=range(1, 8)) -> Sweep:
+    """The last sweep, as the history helper returns it."""
+    return Sweep(run_id=7, head_sha=TREE, created_at=at,
+                 passed_shards=frozenset(shards))
+
+
 def unproved():
     """A sweep decision with every shard due, the ordinary daily answer."""
     return decide_sweep(sha=TREE, shards=7, history=[], now=NOW)
@@ -40,7 +46,7 @@ def unproved():
 
 
 def test_a_scheduled_run_never_claims_the_sweep_runs():
-    said = unproved().say(event="schedule", last_sweep=NOW - timedelta(days=6),
+    said = unproved().say(event="schedule", last_sweep=swept(NOW - timedelta(days=6)),
                           now=NOW)
     assert "so the sweep runs" not in said
     assert "proved nothing" in said
@@ -49,9 +55,11 @@ def test_a_scheduled_run_never_claims_the_sweep_runs():
 
 def test_it_names_when_the_last_full_sweep_ran():
     said = unproved().say(event="schedule",
-                          last_sweep=datetime(2026, 9, 27, 9, 0, tzinfo=timezone.utc),
+                          last_sweep=swept(datetime(2026, 9, 27, 9, 0, tzinfo=timezone.utc),
+                                           shards=[1, 2, 3]),
                           now=NOW)
     assert "2026-09-27" in said and "5 days ago" in said, said
+    assert "proving 3 of 7 shards" in said, said
 
 
 def test_no_sweep_found_and_history_unreadable_say_different_things():
@@ -59,14 +67,14 @@ def test_no_sweep_found_and_history_unreadable_say_different_things():
                                 last_sweep=LastSweepUnknown.NONE_FOUND, now=NOW)
     unreadable = unproved().say(event="schedule",
                                 last_sweep=LastSweepUnknown.UNREADABLE, now=NOW)
-    assert "No full sweep was found" in none_found
+    assert "No sweep was found" in none_found
     assert "could not be read" in unreadable
     assert none_found != unreadable
 
 
 def test_a_requested_run_still_says_the_sweep_runs():
     said = unproved().say(event="workflow_dispatch",
-                          last_sweep=NOW - timedelta(days=6), now=NOW)
+                          last_sweep=swept(NOW - timedelta(days=6)), now=NOW)
     assert said.endswith("so the sweep runs.")
 
 
@@ -74,7 +82,7 @@ def test_a_quiet_tree_says_nothing_is_due_whatever_the_event():
     proved = [Sweep(run_id=1, head_sha=TREE, created_at=NOW - timedelta(days=1),
                     passed_shards=frozenset(range(1, 8)))]
     decision = decide_sweep(sha=TREE, shards=7, history=proved, now=NOW)
-    said = decision.say(event="schedule", last_sweep=NOW - timedelta(days=1),
+    said = decision.say(event="schedule", last_sweep=swept(NOW - timedelta(days=1)),
                         now=NOW)
     assert "starts no macOS runner" in said
 
@@ -83,11 +91,11 @@ def test_a_quiet_tree_says_nothing_is_due_whatever_the_event():
 
 
 def test_a_sweep_inside_the_window_is_not_overdue():
-    assert not is_overdue(NOW - OVERDUE_AFTER, now=NOW)
+    assert is_overdue(swept(NOW - OVERDUE_AFTER), now=NOW) is False
 
 
 def test_a_sweep_past_the_window_is_overdue():
-    assert is_overdue(NOW - OVERDUE_AFTER - timedelta(hours=1), now=NOW)
+    assert is_overdue(swept(NOW - OVERDUE_AFTER - timedelta(hours=1)), now=NOW) is True
 
 
 def test_no_sweep_found_at_all_is_overdue():
@@ -96,7 +104,8 @@ def test_no_sweep_found_at_all_is_overdue():
 
 def test_an_unreadable_history_accuses_nobody():
     # A query that failed is not evidence that nothing ran (L119).
-    assert not is_overdue(LastSweepUnknown.UNREADABLE, now=NOW)
+    # Neither overdue nor on time: None, which the nag step leaves alone.
+    assert is_overdue(LastSweepUnknown.UNREADABLE, now=NOW) is None
 
 
 # ── finding the last full sweep ───────────────────────────────────────────────
@@ -284,3 +293,61 @@ def test_two_runs_filing_at_once_leave_one_issue():
     did, keeper = keep_the_overdue_issue_current(overdue=True, said="x", run=gh)
     assert did == "deduplicated"
     assert [i["number"] for i in gh.issues] == [keeper]
+
+
+# ── review fixes ──────────────────────────────────────────────────────────────
+
+
+def test_an_unknown_answer_never_closes_the_overdue_issue():
+    """A failed read closing a real overdue issue with "the sweep has run
+    again" would be the worst wrong answer this has (L119)."""
+    gh = FakeGitHub([{"number": 5, "title": OVERDUE_TITLE}])
+    did, _ = keep_the_overdue_issue_current(overdue=None, said="x", run=gh)
+    assert "could not tell" in did
+    assert gh.calls == [], "it asked GitHub anything at all"
+
+
+def test_the_nag_step_accepts_unknown(monkeypatch):
+    from tools import say_when_the_sweep_is_overdue as nag
+    seen = []
+    monkeypatch.setattr(nag, "keep_the_overdue_issue_current",
+                        lambda **kw: seen.append(kw["overdue"]) or ("x", None))
+    assert nag.main(["--overdue", "unknown", "--said", "x"]) == 0
+    assert seen == [None]
+
+
+def test_the_title_quotes_no_threshold():
+    assert not any(ch.isdigit() for ch in OVERDUE_TITLE)
+    assert "week" not in OVERDUE_TITLE and "day" not in OVERDUE_TITLE
+
+
+def test_the_newest_sweep_stops_at_the_first_run_that_proved_a_shard(monkeypatch):
+    """Newest first: older runs are not asked about once one has proved."""
+    newest, older = _run(1, 27, [1, 2]), _run(2, 20, [1, 2, 3, 4, 5, 6, 7])
+    asked_jobs = []
+
+    def fake_gh(path):
+        if "/jobs" in path:
+            run_id = int(path.split("/runs/")[1].split("/")[0])
+            asked_jobs.append(run_id)
+            return {"jobs": {1: newest[1], 2: older[1]}[run_id]}
+        if "event=schedule" in path:
+            return {"workflow_runs": [older[0], newest[0]]}
+        return {"workflow_runs": []}
+
+    monkeypatch.setattr(history, "_gh", fake_gh)
+    assert history.newest_full_sweep(repo="o/r").run_id == 1
+    assert asked_jobs == [1]
+
+
+def test_the_message_is_written_so_a_newline_cannot_end_it(monkeypatch, tmp_path):
+    from tools import check_guard_sweep_due as due
+    monkeypatch.setattr(due, "_history", lambda *a: [])
+    monkeypatch.setattr(due, "_last_sweep",
+                        lambda repo: LastSweepUnknown.UNREADABLE)
+    out = tmp_path / "out"
+    due.main(["--shards", "--sha", TREE, "--event", "schedule",
+              "--output", str(out)])
+    text = out.read_text()
+    assert "overdue=unknown\n" in text
+    assert "said<<SAID_END\n" in text and text.count("SAID_END") == 2
