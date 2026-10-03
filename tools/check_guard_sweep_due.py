@@ -54,7 +54,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from tools.guard_sweep_history import (  # noqa: E402
-    HistoryUnreadable, Sweep, sweeps_at, recent_sweeps)
+    HistoryUnreadable, Sweep, newest_full_sweep, sweeps_at, recent_sweeps)
 
 #: How long a proof stands before a requested sweep runs whatever the tree says.
 #:
@@ -82,6 +82,50 @@ UNCONDITIONAL_AFTER = timedelta(days=30)
 #: instead: a shard that runs out of time reports its remaining entries as
 #: UNPROVEN while the workflow still goes green (L98, L315).
 SHARD_COUNT = 7
+
+
+#: How long the sweep may go unstarted before the daily run keeps an issue open
+#: about it (#1466). Dan's call on 2026-10-03: the sweep stays hand-started,
+#: and this is the nag that stops a manual-only sweep quietly lapsing for weeks,
+#: which it did from 2026-09-27 while every daily run read green.
+OVERDUE_AFTER = timedelta(days=14)
+
+
+class LastSweepUnknown(enum.Enum):
+    """Why there is no date for the last full sweep. Two different facts (L11).
+
+    NONE_FOUND: the histories were read and hold no run that proved a shard.
+    UNREADABLE: the histories could not be read, which says nothing either way.
+    """
+
+    NONE_FOUND = "none found"
+    UNREADABLE = "unreadable"
+
+
+def is_overdue(last_sweep: datetime | LastSweepUnknown, *, now: datetime,
+               after: timedelta = OVERDUE_AFTER) -> bool:
+    """Whether the sweep has gone unstarted long enough to keep an issue open.
+
+    No sweep found at all is overdue: the histories reach back further than
+    the window. An unreadable history accuses nobody (L119).
+    """
+    if last_sweep is LastSweepUnknown.UNREADABLE:
+        return False
+    if last_sweep is LastSweepUnknown.NONE_FOUND:
+        return True
+    return now - last_sweep > after
+
+
+def _last_sweep_sentence(last_sweep: datetime | LastSweepUnknown,
+                         now: datetime) -> str:
+    if last_sweep is LastSweepUnknown.UNREADABLE:
+        return "When the last full sweep ran could not be read."
+    if last_sweep is LastSweepUnknown.NONE_FOUND:
+        return ("No full sweep was found in the recent scheduled or "
+                "hand-started runs.")
+    days = int((now - last_sweep).total_seconds() // 86400)
+    ago = "today" if days == 0 else f"{days} day{'s' if days != 1 else ''} ago"
+    return f"The last full sweep ran on {last_sweep:%Y-%m-%d}, {ago}."
 
 
 class Due(enum.Enum):
@@ -199,6 +243,23 @@ class SweepDecision:
         return (f"Shard(s) {which} have something to prove ({'; '.join(reasons)}), "
                 f"so the sweep runs.")
 
+    def say(self, *, event: str, last_sweep: datetime | LastSweepUnknown,
+            now: datetime) -> str:
+        """What this run tells a reader, which depends on whether it sweeps.
+
+        Only a hand-started run sweeps (#1428). Any other run that finds work
+        due proved nothing, and saying "so the sweep runs" there is how a
+        lapsed sweep read as a running one for a week (#1466, L98).
+        """
+        if not self.due_shards or event == "workflow_dispatch":
+            return self.message
+        which = ", ".join(str(shard) for shard in self.due_shards)
+        reasons = sorted({d.due.value for d in self.decisions if d.run})
+        return (f"Shard(s) {which} have something to prove "
+                f"({'; '.join(reasons)}), but the full sweep runs only when "
+                "started by hand (`gh workflow run guards.yml`), so this run "
+                f"proved nothing. {_last_sweep_sentence(last_sweep, now)}")
+
 
 def decide_sweep(*, sha: str, shards: int, history: list[Sweep] | None,
                  now: datetime,
@@ -252,6 +313,15 @@ def _history(sha: str, repo: str | None, run_id: int | None,
     return list(seen.values())
 
 
+def _last_sweep(repo: str | None) -> datetime | LastSweepUnknown:
+    try:
+        newest = newest_full_sweep(repo=repo)
+    except HistoryUnreadable as exc:
+        print(f"when the last full sweep ran could not be read: {exc}")
+        return LastSweepUnknown.UNREADABLE
+    return LastSweepUnknown.NONE_FOUND if newest is None else newest
+
+
 def main(argv: list[str] | None = None) -> int:
     # `allow_abbrev=False` so the REMOVED spelling fails rather than being
     # reinterpreted. `--shard N` used to mean "shard number N"; with it gone,
@@ -277,6 +347,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo", default=None)
     parser.add_argument("--window-days", type=int,
                         default=UNCONDITIONAL_AFTER.days)
+    parser.add_argument("--event", default=os.environ.get("GITHUB_EVENT_NAME", ""),
+                        help="the event this run is for; only workflow_dispatch "
+                             "sweeps (#1428)")
     parser.add_argument("--output", default=os.environ.get("GITHUB_OUTPUT"),
                         help="where to write due=true|false for later steps")
     args = parser.parse_args(argv)
@@ -295,18 +368,25 @@ def _whole_sweep(args) -> int:
         run_id = int(os.environ.get("GITHUB_RUN_ID") or 0) or None
         history = _history(sha, args.repo, run_id, window)
 
+    now = datetime.now(timezone.utc)
     decision = decide_sweep(sha=sha or "unknown", shards=args.shards,
-                            history=history, now=datetime.now(timezone.utc),
+                            history=history, now=now,
                             unconditional_after=window)
+    last_sweep = _last_sweep(args.repo)
+    said = decision.say(event=args.event, last_sweep=last_sweep, now=now)
+    overdue = is_overdue(last_sweep, now=now)
 
-    print(decision.message)
+    print(said)
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary, "a", encoding="utf-8") as fh:
-            fh.write(f"### Guard sweep\n\n{decision.message}\n")
+            fh.write(f"### Guard sweep\n\n{said}\n")
     if args.output:
         with open(args.output, "a", encoding="utf-8") as fh:
             fh.write(f"due={'true' if decision.run else 'false'}\n")
+            # For the step that keeps the one overdue issue current (#1466).
+            fh.write(f"overdue={'true' if overdue else 'false'}\n")
+            fh.write(f"said={said}\n")
             # JSON, because the matrix reads it through `fromJson`, and the
             # shards to START rather than the shards that are due: those differ
             # only when nothing is due, and the difference is what keeps the

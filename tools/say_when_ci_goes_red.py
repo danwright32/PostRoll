@@ -8,12 +8,14 @@ Actions tab until somebody opened it.
 Most checks run on a pull request, where a failure blocks the merge and cannot
 be missed. Two do not:
 
-- `guards.yml`'s `full` job carries `if: github.event_name != 'pull_request'`,
-  so it runs on push to main, AFTER the merge has landed. It cannot gate
-  anything: a failure means a guard is already dead on main.
-- The weekly sweep exists precisely because the proofs depend on things no
-  commit touches, the runner image, the pinned Xcode and Homebrew packages.
-  There is no push and no PR behind it, so nobody has a reason to look.
+- `guards.yml`'s `full` job, the full sweep, runs only when somebody starts it
+  by hand (#1428), never on a pull request. It cannot gate anything: a failure
+  means a guard is already dead on main.
+- The sweep exists precisely because the proofs depend on things no commit
+  touches, the runner image, the pinned Xcode and Homebrew packages. There is
+  no pull request behind it, so nobody has a reason to look.
+- `guards.yml`'s `due` job runs on the daily schedule and decides whether the
+  sweep has anything to prove, with nobody watching it either.
 
 It has happened. On 2026-08-19 the sweep had been dying at 60 minutes for hours
 while the run list read as though somebody had superseded those runs, and every
@@ -37,10 +39,9 @@ there second converges on the same answer as the first.
 
 ## What it does not do
 
-The other half of #1011, noticing that a scheduled run has stopped happening at
-all, is not answered here. It was, for the guard sweep, by a freshness check that
-went with the sweep's schedule in #1428: the sweep runs only when somebody asks
-now, so there is no schedule for it to stop.
+The other half of #1011, noticing that the sweep has stopped happening at all,
+is `say_when_the_sweep_is_overdue.py` (#1466), which shares this file's one
+issue logic.
 """
 
 from __future__ import annotations
@@ -80,13 +81,22 @@ def _gh(args: list[str], run=None) -> str:
     return done.stdout
 
 
-def open_reports(workflow: str, run=None) -> list[int]:
-    """Every open issue this tool has filed for `workflow`, lowest first."""
+def open_titled(title: str, run=None) -> list[int]:
+    """Every open issue whose title is exactly `title`, lowest first.
+
+    Shared with `say_when_the_sweep_is_overdue.py`, which keeps its own one
+    issue the same way, so there is one implementation of "the one issue"
+    rather than two that can come to disagree (L41).
+    """
     raw = _gh(["issue", "list", "--state", "open", "--limit", "50",
                "--json", "number,title"], run=run)
-    wanted = TITLE.format(workflow=workflow)
     return sorted(issue["number"] for issue in json.loads(raw)
-                  if issue["title"] == wanted)
+                  if issue["title"] == title)
+
+
+def open_reports(workflow: str, run=None) -> list[int]:
+    """Every open issue this tool has filed for `workflow`, lowest first."""
+    return open_titled(TITLE.format(workflow=workflow), run=run)
 
 
 def body(workflow: str, job: str, url: str) -> str:
@@ -102,35 +112,39 @@ def body(workflow: str, job: str, url: str) -> str:
     )
 
 
-def report(workflow: str, job: str, url: str, run=None) -> tuple[str, int]:
-    """File or update the one report for `workflow`. Returns what it did."""
-    existing = open_reports(workflow, run=run)
+def file_once(title: str, text: str, labels=LABELS, run=None) -> tuple[str, int]:
+    """File the one open issue called `title`, or comment on it if it exists."""
+    existing = open_titled(title, run=run)
     if existing:
         keeper = existing[0]
-        _gh(["issue", "comment", str(keeper),
-             "--body", body(workflow, job, url)], run=run)
+        _gh(["issue", "comment", str(keeper), "--body", text], run=run)
         return ("commented", keeper)
 
-    _gh(["issue", "create", "--title", TITLE.format(workflow=workflow),
-         "--body", body(workflow, job, url),
-         "--label", ",".join(LABELS)], run=run)
+    _gh(["issue", "create", "--title", title, "--body", text,
+         "--label", ",".join(labels)], run=run)
 
     # Look again. Two shards failing at once can both have found nothing above
     # and both created, and a duplicate that nobody notices is how a list stops
     # being read (L33).
-    after = open_reports(workflow, run=run)
+    after = open_titled(title, run=run)
     if len(after) > 1:
         keeper, *duplicates = after
         for number in duplicates:
             _gh(["issue", "close", str(number), "--reason", "not planned",
-                 "--comment", f"Duplicate of #{keeper}, filed by another shard "
-                              f"of the same red run."], run=run)
+                 "--comment", f"Duplicate of #{keeper}, filed by another run "
+                              f"at the same moment."], run=run)
         return ("deduplicated", keeper)
     if not after:
         raise CannotAsk(
             "the issue was created and is not in the open list a moment later, "
-            "so nothing can be said about where this failure was recorded")
+            "so nothing can be said about where this was recorded")
     return ("filed", after[0])
+
+
+def report(workflow: str, job: str, url: str, run=None) -> tuple[str, int]:
+    """File or update the one report for `workflow`. Returns what it did."""
+    return file_once(TITLE.format(workflow=workflow), body(workflow, job, url),
+                     run=run)
 
 
 def main(argv: list[str] | None = None) -> int:
