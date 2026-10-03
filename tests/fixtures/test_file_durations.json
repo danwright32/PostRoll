@@ -237,6 +237,7 @@
     "test_repair_record_wording.py": 0.0,
     "test_resolve_reel_audio.py": 0.0,
     "test_revise_caption_backstops.py": 0.0,
+    "test_runners_and_actions_are_pinned.py": 0.0,
     "test_safe_area_tokens.py": 0.02,
     "test_same_measurement.py": 0.18,
     "test_say_when_ci_goes_red.py": 0.0,
@@ -1244,6 +1245,10 @@
     "test_revise_caption_backstops.py": {
       "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
+    },
+    "test_runners_and_actions_are_pinned.py": {
+      "run": "partial-2026-10-03T17:30Z",
+      "scale": 1.091
     },
     "test_safe_area_tokens.py": {
       "run": "full-2026-09-05T02:25Z",
