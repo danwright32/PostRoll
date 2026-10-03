@@ -360,7 +360,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="the event this run is for; only workflow_dispatch "
                              "sweeps (#1428)")
     parser.add_argument("--output", default=os.environ.get("GITHUB_OUTPUT"),
-                        help="where to write due=true|false for later steps")
+                        help="where to write the outputs later steps read: due, overdue "
+                             "(true|false|unknown), said, shards and count")
     args = parser.parse_args(argv)
 
     return _whole_sweep(args)
