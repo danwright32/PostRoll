@@ -53,3 +53,8 @@ def test_credentials_in_front_of_the_host_come_off_too():
 
 def test_an_ipv6_host_keeps_its_brackets():
     assert url_for_log("https://u:p@[::1]:8080/p?x=1") == "https://[::1]:8080/p"
+
+
+def test_credentials_come_off_even_when_the_url_cannot_be_parsed():
+    assert "tok" not in url_for_log("https://user:tok@[bad/p?x=1")
+    assert url_for_log("jane:s3cret@example.com/p?x=1") == "example.com/p"

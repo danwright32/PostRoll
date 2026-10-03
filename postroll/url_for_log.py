@@ -11,7 +11,18 @@ page it was.
 
 from __future__ import annotations
 
+import re
 from urllib.parse import urlsplit, urlunsplit
+
+#: Anything up to an @ in the authority: `user:token@`. Matched on the raw
+#: text, for the URLs the parser cannot read.
+_USERINFO = re.compile(r"^((?:[a-z][a-z0-9+.-]*:)?//)?[^/?#@]*@", re.I)
+
+
+def _cut(text: str) -> str:
+    """Query, fragment and credentials off text the parser could not read."""
+    text = text.split("?", 1)[0].split("#", 1)[0]
+    return _USERINFO.sub(lambda m: m.group(1) or "", text)
 
 
 def url_for_log(url: str | None) -> str:
@@ -23,9 +34,9 @@ def url_for_log(url: str | None) -> str:
     except ValueError:
         # Not parseable as a URL, so there is no query to find; but it may
         # still hold one after a "?", so cut there rather than pass it through.
-        return url.split("?", 1)[0].split("#", 1)[0]
-    if not parts.scheme and not parts.netloc:
-        return url.split("?", 1)[0].split("#", 1)[0]
+        return _cut(url)
+    if not parts.netloc:
+        return _cut(url)
     # The host and port only: a netloc can carry `user:token@` in front of
     # them, and that is a credential.
     try:
