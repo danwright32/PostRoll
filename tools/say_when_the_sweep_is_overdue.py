@@ -23,7 +23,13 @@ sys.path.insert(0, str(REPO_ROOT / "tools"))
 
 from say_when_ci_goes_red import CannotAsk, _gh, file_once, open_titled  # noqa: E402
 
-OVERDUE_TITLE = "The guard sweep has not run for two weeks"
+sys.path.insert(0, str(REPO_ROOT))
+from tools.check_guard_sweep_due import OVERDUE_AFTER  # noqa: E402
+
+#: No number in it. The threshold is OVERDUE_AFTER, and the issue is found by
+#: this exact title, so a title quoting the threshold would turn false when the
+#: constant moves, or orphan the open issue when it was corrected (L41).
+OVERDUE_TITLE = "The guard sweep is overdue"
 #: Labels the repository already has: a missing one makes `gh issue create`
 #: refuse, so the nag would never arrive.
 LABELS = ("ci", "priority-p2")
@@ -31,15 +37,22 @@ LABELS = ("ci", "priority-p2")
 
 def _body(said: str) -> str:
     return (f"{said}\n\n"
+            f"Overdue means no sweep for more than {OVERDUE_AFTER.days} days. "
             "The sweep re-proves every guard against things no commit here "
             "touches: the runner image, the pinned Xcode and Homebrew packages "
             "(#551). Start one with `gh workflow run guards.yml`. The next daily "
             "run after it closes this issue.")
 
 
-def keep_the_overdue_issue_current(*, overdue: bool, said: str,
+def keep_the_overdue_issue_current(*, overdue: bool | None, said: str,
                                    run=None) -> tuple[str, int | None]:
-    """File, comment on or close the one overdue issue. Returns what it did."""
+    """File, comment on or close the one overdue issue. Returns what it did.
+
+    `overdue` is None when the history could not be read, and then nothing is
+    touched: closing the issue would say the sweep ran when nobody knows (L119).
+    """
+    if overdue is None:
+        return ("could not tell, so left the issue as it is", None)
     if overdue:
         return file_once(OVERDUE_TITLE, _body(said), labels=LABELS, run=run)
     open_now = open_titled(OVERDUE_TITLE, run=run)
@@ -51,12 +64,14 @@ def keep_the_overdue_issue_current(*, overdue: bool, said: str,
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("--overdue", choices=("true", "false"), required=True)
+    parser.add_argument("--overdue", choices=("true", "false", "unknown"),
+                        required=True)
     parser.add_argument("--said", required=True)
     args = parser.parse_args(argv)
     try:
         did, number = keep_the_overdue_issue_current(
-            overdue=args.overdue == "true", said=args.said)
+            overdue={"true": True, "false": False, "unknown": None}[args.overdue],
+            said=args.said)
     except CannotAsk as refusal:
         # Red, not a warning: this job's whole purpose today is the nag, and a
         # nag that could not be delivered must not read as one that was (L98).

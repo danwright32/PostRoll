@@ -102,30 +102,35 @@ class LastSweepUnknown(enum.Enum):
     UNREADABLE = "unreadable"
 
 
-def is_overdue(last_sweep: datetime | LastSweepUnknown, *, now: datetime,
-               after: timedelta = OVERDUE_AFTER) -> bool:
+def is_overdue(last_sweep: Sweep | LastSweepUnknown, *, now: datetime,
+               after: timedelta = OVERDUE_AFTER) -> bool | None:
     """Whether the sweep has gone unstarted long enough to keep an issue open.
 
-    No sweep found at all is overdue: the histories reach back further than
-    the window. An unreadable history accuses nobody (L119).
+    None when that cannot be told: an unreadable history is neither overdue nor
+    on time, and reading it as on time would close a real overdue issue saying
+    the sweep had run (L119, L622). No sweep found at all is overdue: the
+    histories reach back further than the window.
     """
     if last_sweep is LastSweepUnknown.UNREADABLE:
-        return False
+        return None
     if last_sweep is LastSweepUnknown.NONE_FOUND:
         return True
-    return now - last_sweep > after
+    return now - last_sweep.created_at > after
 
 
-def _last_sweep_sentence(last_sweep: datetime | LastSweepUnknown,
+def _last_sweep_sentence(last_sweep: Sweep | LastSweepUnknown,
                          now: datetime) -> str:
     if last_sweep is LastSweepUnknown.UNREADABLE:
-        return "When the last full sweep ran could not be read."
+        return "When the last sweep ran could not be read."
     if last_sweep is LastSweepUnknown.NONE_FOUND:
-        return ("No full sweep was found in the recent scheduled or "
-                "hand-started runs.")
-    days = int((now - last_sweep).total_seconds() // 86400)
+        return ("No sweep was found in the recent scheduled or hand-started "
+                "runs.")
+    days = int((now - last_sweep.created_at).total_seconds() // 86400)
     ago = "today" if days == 0 else f"{days} day{'s' if days != 1 else ''} ago"
-    return f"The last full sweep ran on {last_sweep:%Y-%m-%d}, {ago}."
+    # How many shards it proved, because since #1344 a sweep runs only the
+    # shards with something to prove, and a rerun of one shard is a sweep too.
+    return (f"The last sweep ran on {last_sweep.created_at:%Y-%m-%d}, {ago}, "
+            f"proving {len(last_sweep.passed_shards)} of {SHARD_COUNT} shards.")
 
 
 class Due(enum.Enum):
@@ -243,7 +248,7 @@ class SweepDecision:
         return (f"Shard(s) {which} have something to prove ({'; '.join(reasons)}), "
                 f"so the sweep runs.")
 
-    def say(self, *, event: str, last_sweep: datetime | LastSweepUnknown,
+    def say(self, *, event: str, last_sweep: Sweep | LastSweepUnknown,
             now: datetime) -> str:
         """What this run tells a reader, which depends on whether it sweeps.
 
@@ -313,13 +318,13 @@ def _history(sha: str, repo: str | None, run_id: int | None,
     return list(seen.values())
 
 
-def _last_sweep(repo: str | None) -> datetime | LastSweepUnknown:
+def _last_sweep(repo: str | None) -> Sweep | LastSweepUnknown:
     try:
         newest = newest_full_sweep(repo=repo)
     except HistoryUnreadable as exc:
         print(f"when the last full sweep ran could not be read: {exc}")
         return LastSweepUnknown.UNREADABLE
-    return LastSweepUnknown.NONE_FOUND if newest is None else newest.created_at
+    return LastSweepUnknown.NONE_FOUND if newest is None else newest
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -385,8 +390,13 @@ def _whole_sweep(args) -> int:
         with open(args.output, "a", encoding="utf-8") as fh:
             fh.write(f"due={'true' if decision.run else 'false'}\n")
             # For the step that keeps the one overdue issue current (#1466).
-            fh.write(f"overdue={'true' if overdue else 'false'}\n")
-            fh.write(f"said={said}\n")
+            # Three values: `unknown` is a history that could not be read, which
+            # must neither file nor close anything (L622).
+            fh.write("overdue=" + {True: "true", False: "false",
+                                   None: "unknown"}[overdue] + "\n")
+            # The delimited form, so a newline in the message can never end the
+            # value early and turn the rest into outputs of its own.
+            fh.write(f"said<<SAID_END\n{said}\nSAID_END\n")
             # JSON, because the matrix reads it through `fromJson`, and the
             # shards to START rather than the shards that are due: those differ
             # only when nothing is due, and the difference is what keeps the
