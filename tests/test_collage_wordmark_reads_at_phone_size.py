@@ -131,9 +131,15 @@ def test_the_fit_follows_the_mark_actually_drawn(tmp_path):
         padded.paste(mark.convert("RGBA"), (mark.width, 0))
     path = tmp_path / "padded.png"
     padded.save(path)
-    detail = collage.plate_detail_line(*QUARTER_TIME)
-    plain = collage.fit_plate(QUARTER_TIME[0], detail, BLACK)
-    roomy = collage.fit_plate(QUARTER_TIME[0], detail, path)
+    # Grown until the plain mark is squeezed but not floored, on whatever font
+    # this machine has: CI's fallback font is narrower than Dan's, so a fixed
+    # real name can fit at full width there and compare 400 with 400.
+    detail = "Venue"
+    while collage.fit_plate("Test", detail, BLACK).logo_width == collage.LOGO_WIDTH:
+        detail += " Venue"
+    plain = collage.fit_plate("Test", detail, BLACK)
+    assert collage.LOGO_MIN_WIDTH < plain.logo_width < collage.LOGO_WIDTH
+    roomy = collage.fit_plate("Test", detail, path)
     assert roomy.logo_width != plain.logo_width
 
 
