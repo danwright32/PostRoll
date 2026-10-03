@@ -49,3 +49,7 @@ def test_a_dropped_suggestion_logs_its_profile_without_the_share_id(capsys):
 def test_credentials_in_front_of_the_host_come_off_too():
     logged = url_for_log("https://jane:s3cret@example.com:8443/p?x=1")
     assert logged == "https://example.com:8443/p"
+
+
+def test_an_ipv6_host_keeps_its_brackets():
+    assert url_for_log("https://u:p@[::1]:8080/p?x=1") == "https://[::1]:8080/p"

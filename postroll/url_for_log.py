@@ -33,5 +33,7 @@ def url_for_log(url: str | None) -> str:
         port = parts.port
     except ValueError:
         host, port = parts.netloc.rsplit("@", 1)[-1], None
+    if ":" in host:
+        host = f"[{host}]"  # an IPv6 address keeps the brackets that delimit it
     netloc = f"{host}:{port}" if port else host
     return urlunsplit((parts.scheme, netloc, parts.path, "", ""))
