@@ -67,7 +67,8 @@ final class EventFolderClaimTests: XCTestCase {
         var copy = try XCTUnwrap(state.events.first { $0.id == copyID })
         copy = NewEventForm.edited(copy, name: "Broadway Undressed Night Two",
                                    org: copy.org, venue: copy.venue,
-                                   venueContext: copy.venueContext)
+                                   venueContext: copy.venueContext,
+                                   orgOffGraphics: copy.orgOffGraphics)
         state.updateEvent(copy)
 
         let claimed = try XCTUnwrap(state.claimFolder(copyID))

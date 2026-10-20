@@ -16,6 +16,7 @@ struct NewEventSheet: View {
     @State private var org: String
     @State private var venue: String
     @State private var venueContext: String
+    @State private var orgOffGraphics = false
     @State private var date: Date
     /// Deliberately NOT prefilled. The link has no shoot type to give: Downbeat
     /// knows the genre, which is a different axis, and nothing over there
@@ -61,7 +62,8 @@ struct NewEventSheet: View {
                         VStack(alignment: .leading, spacing: Spacing.sm) {
                             BrandSectionLabel("Event Details")
                             EventDetailsFields(name: $name, org: $org, venue: $venue,
-                                               venueContext: $venueContext)
+                                               venueContext: $venueContext,
+                                               orgOffGraphics: $orgOffGraphics)
 
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("Date")
@@ -146,7 +148,8 @@ struct NewEventSheet: View {
             venueContext: venueContext,
             date: date,
             shootType: shootType,
-            bookingID: prefill?.bookingID
+            bookingID: prefill?.bookingID,
+            orgOffGraphics: orgOffGraphics
         )
         appState.addEvent(event)
         dismiss()
@@ -167,8 +170,9 @@ struct BrandSectionLabel: View {
     }
 }
 
-/// The four text fields an event is named by, shared by New Event and Edit
-/// Details (#1448) so the two forms cannot drift apart.
+/// The four text fields an event is named by, and the switch that keeps its
+/// organisation off the graphics, shared by New Event and Edit Details (#1448)
+/// so the two forms cannot drift apart.
 ///
 /// Each carries its label above the box rather than only as a placeholder: a
 /// placeholder disappears once the box holds a value, and in Edit Details every
@@ -178,11 +182,24 @@ struct EventDetailsFields: View {
     @Binding var org: String
     @Binding var venue: String
     @Binding var venueContext: String
+    @Binding var orgOffGraphics: Bool
+
+    private var hasOrg: Bool { !org.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Spacing.sm) {
             labelled("Event name", $name)
             labelled("Organization (optional)", $org)
+            // Still named and tagged in the captions and blog, so its handle
+            // row stays (#689 hides that row only for a blank organisation).
+            Toggle(isOn: $orgOffGraphics) {
+                Text("Leave off graphics")
+                    .font(.system(size: 11))
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
+            }
+            .toggleStyle(.checkbox)
+            .disabled(!hasOrg)
+            .opacity(hasOrg ? 1 : 0.5)
             labelled("Venue (optional)", $venue)
             labelled("Specific hall/room (optional, for blog context)", $venueContext)
         }

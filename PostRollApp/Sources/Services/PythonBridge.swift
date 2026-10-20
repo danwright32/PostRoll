@@ -343,6 +343,13 @@ actor PythonBridge {
         return Self.parseMediaOutput(json)
     }
 
+    /// The words a graphics script prints, as its arguments. The organisation
+    /// is `graphicsOrg`, so one kept off the graphics is sent blank, which every
+    /// template already reads as no organisation line.
+    nonisolated static func graphicsTextArgs(for event: Event) -> [String] {
+        ["--event", event.name, "--org", event.graphicsOrg, "--venue", event.venue]
+    }
+
     /// Render `count` candidate collage layouts for `day` (each a distinct seed)
     /// into a temp directory, for the in-app layout gallery. The caller stores
     /// the chosen candidate's `seed` as the day's collageSeed so the final
@@ -378,10 +385,7 @@ actor PythonBridge {
             "-m", "postroll.media.generate_collage",
             "--photos",
         ] + photos
-        args += [
-            "--event", event.name,
-            "--org", event.org,
-            "--venue", event.venue,
+        args += Self.graphicsTextArgs(for: event) + [
             "--candidates", String(count),
             "--candidates-out", outDir.path,
             "--candidates-json", jsonFile.path,
@@ -1155,7 +1159,7 @@ actor PythonBridge {
         }
         return [
             "event":      event.name,
-            "org":        event.org,
+            "org":        event.graphicsOrg,
             "venue":      event.venue,
             // The folder to render into, decided here rather than rebuilt in
             // Python from the fields above, which an edit can change (#1448).
@@ -1514,7 +1518,7 @@ actor PythonBridge {
         var manifest: [String: Any] = [
             "day":       day.rawValue,
             "event":     event.name,
-            "org":       event.org,
+            "org":       event.graphicsOrg,
             "venue":     event.venue,
             "day_info":  dayInfo,
             "output_path": coverPath,

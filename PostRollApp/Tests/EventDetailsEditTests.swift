@@ -24,7 +24,7 @@ final class EventDetailsEditTests: XCTestCase {
     private func edit(_ ev: Event, org: String = "Tom Guthrie",
                       name: String = "Broadway Undressed") -> Event {
         NewEventForm.edited(ev, name: name, org: org, venue: ev.venue,
-                            venueContext: ev.venueContext)
+                            venueContext: ev.venueContext, orgOffGraphics: ev.orgOffGraphics)
     }
 
     func testAnEditToARenderedEventKeepsTheFolderItWasRenderedUnder() {
@@ -72,7 +72,8 @@ final class EventDetailsEditTests: XCTestCase {
         before.mediaErrors = ["friday": "boom"]
 
         let after = NewEventForm.edited(before, name: "New Name", org: "New Org",
-                                        venue: "Joe's Pub", venueContext: "Upstairs")
+                                        venue: "Joe's Pub", venueContext: "Upstairs",
+                                        orgOffGraphics: false)
 
         XCTAssertEqual(after.id, before.id)
         XCTAssertEqual(after.date, before.date)
@@ -89,7 +90,8 @@ final class EventDetailsEditTests: XCTestCase {
         // the handle book's keys exactly as they did before.
         let after = NewEventForm.edited(broadwayUndressed(rendered: false),
                                         name: "Broadway\nUndressed", org: " Tom  Guthrie ",
-                                        venue: "54\nBelow", venueContext: "Main\nRoom")
+                                        venue: "54\nBelow", venueContext: "Main\nRoom",
+                                        orgOffGraphics: false)
 
         XCTAssertEqual([after.name, after.org, after.venue, after.venueContext],
                        ["Broadway Undressed", "Tom Guthrie", "54 Below", "Main Room"])
@@ -218,7 +220,8 @@ final class EventDetailsEditTests: XCTestCase {
         let ev = broadwayUndressed(rendered: true)
 
         let saved = EventDetailsSave(before: ev, after: NewEventForm.edited(
-            ev, name: ev.name, org: ev.org, venue: ev.venue, venueContext: "Main Room"))
+            ev, name: ev.name, org: ev.org, venue: ev.venue, venueContext: "Main Room",
+            orgOffGraphics: ev.orgOffGraphics))
 
         XCTAssertTrue(saved.changed)
         XCTAssertEqual(saved.refreshDays, [])

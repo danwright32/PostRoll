@@ -9,6 +9,16 @@ struct Event: Identifiable, Codable, Hashable {
     /// is "Carnegie Hall"). Used only by blog + captions for richer prose; graphics
     /// and reels always show the top-level `venue`.
     var venueContext: String = ""
+    /// Whether the organisation is left off the graphics while still named
+    /// and tagged in the captions and blog. Dan sometimes shoots for an
+    /// organisation he wants tagged but not printed on the plates, and leaving
+    /// `org` blank to get that also lost the Organization handle row, which is
+    /// keyed by the organisation's name (#689).
+    var orgOffGraphics: Bool = false
+
+    /// The organisation a graphic prints: blank when it is kept off them.
+    /// Every render reads this, never `org`.
+    var graphicsOrg: String { orgOffGraphics ? "" : org }
     var date: Date
     var shootType: ShootType
     var stage: EventStage = .created
@@ -187,6 +197,7 @@ extension Event {
         org          = try c.decode(String.self,    forKey: .org)
         venue        = try c.decode(String.self,    forKey: .venue)
         venueContext = try c.decodeIfPresent(String.self, forKey: .venueContext) ?? ""
+        orgOffGraphics = try c.decodeIfPresent(Bool.self, forKey: .orgOffGraphics) ?? false
         date         = try c.decode(Date.self,      forKey: .date)
         shootType    = try c.decode(ShootType.self, forKey: .shootType)
         stage             = try c.decodeIfPresent(EventStage.self,                 forKey: .stage)             ?? .created

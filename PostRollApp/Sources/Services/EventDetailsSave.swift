@@ -5,7 +5,8 @@ import Foundation
 /// Computed from the event before and after the save, never from the form, so
 /// a save that typed the same values back offers nothing to refresh.
 struct EventDetailsSave: Equatable {
-    /// Whether any of the four details is different.
+    /// Whether any of the four details, or the switch keeping the organisation
+    /// off the graphics, is different.
     let changed: Bool
 
     /// The days whose graphics print the old details, in the week's order.
@@ -21,10 +22,12 @@ struct EventDetailsSave: Equatable {
     let exportIsStale: Bool
 
     init(before: Event, after: Event) {
-        // The hall or room reaches only the blog and captions, never a graphic.
-        let printed = before.name != after.name || before.org != after.org
+        // The hall or room reaches only the blog and captions, never a graphic,
+        // and so does an organisation kept off the graphics.
+        let printed = before.name != after.name || before.graphicsOrg != after.graphicsOrg
             || before.venue != after.venue
         changed = printed || before.venueContext != after.venueContext
+            || before.org != after.org || before.orgOffGraphics != after.orgOffGraphics
         let rendered = Set(after.previewMediaPaths.filter { !$0.value.isEmpty }.keys)
         refreshDays = printed ? DayName.allCases.filter { rendered.contains($0.rawValue) } : []
         exportIsStale = printed && after.isExported
