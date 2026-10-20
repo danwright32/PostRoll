@@ -1,11 +1,13 @@
 import SwiftUI
 
-/// An existing event's name, organisation, venue and hall (#1448), and whether
-/// the organisation is left off the graphics.
+/// An existing event's name, organisation, venue and hall (#1448), whether
+/// the organisation is left off the graphics, and its shoot type until photos
+/// are assigned.
 ///
 /// Opened from the event list's Edit Details item, which replaced an inline
-/// Rename that could change the name only. Date and shoot type are not here:
-/// they decide which week the posts belong to and which templates apply.
+/// Rename that could change the name only. Date is not here: it decides which
+/// week the posts belong to. Shoot type decides which templates apply, so it
+/// is shown but fixed once anything has been chosen or made for it.
 ///
 /// After a save that changed what the graphics print, the sheet stays up and
 /// offers Refresh text, which redraws the rendered days from the saved layout
@@ -22,7 +24,11 @@ struct EditEventDetailsSheet: View {
     @State private var venue = ""
     @State private var venueContext = ""
     @State private var orgOffGraphics = false
+    @State private var shootType = ShootType.fullShow
     @State private var loaded = false
+    /// Why the last Save was refused, when photos were assigned while the
+    /// sheet was open and the type it asked for can no longer be set.
+    @State private var saveRefusal: String?
 
     /// Set once Save has written, which turns the form into its outcome.
     @State private var saved: EventDetailsSave?
@@ -82,9 +88,14 @@ struct EditEventDetailsSheet: View {
                                venueContext: $venueContext,
                                orgOffGraphics: $orgOffGraphics)
 
+            ShootTypeChoice(
+                shootType: $shootType,
+                fixedReason: event?.shootTypeIsFixed == true
+                    ? NewEventForm.shootTypeFixedReason : nil)
+
             VStack(alignment: .trailing, spacing: Spacing.sm) {
-                if let refusal {
-                    RefusalNote(message: refusal)
+                if let message = refusal ?? saveRefusal {
+                    RefusalNote(message: message)
                 }
                 HStack {
                     Button("Cancel") { dismiss() }
@@ -110,6 +121,7 @@ struct EditEventDetailsSheet: View {
         venue = event.venue
         venueContext = event.venueContext
         orgOffGraphics = event.orgOffGraphics
+        shootType = event.shootType
         loaded = true
     }
 
@@ -117,9 +129,20 @@ struct EditEventDetailsSheet: View {
         // Live read (#103): the sheet may have been open while a render landed,
         // and saving a copy from when it opened would put the old media back.
         guard refusal == nil, let before = event else { return }
+        saveRefusal = nil
+        // The greyed buttons already carry the rule, so this says what happened
+        // to the save instead of repeating it.
+        if NewEventForm.shootTypeRefusal(before: before, asked: shootType) != nil {
+            shootType = before.shootType
+            saveRefusal = "Not saved. Photos or other work were added to this show while "
+                + "this was open, so the shoot type went back to \(before.shootType.rawValue). "
+                + "Save again to keep your other changes."
+            return
+        }
         let after = NewEventForm.edited(before, name: name, org: org, venue: venue,
                                         venueContext: venueContext,
-                                        orgOffGraphics: orgOffGraphics)
+                                        orgOffGraphics: orgOffGraphics,
+                                        shootType: shootType)
         let outcome = EventDetailsSave(before: before, after: after)
         guard outcome.changed else {
             dismiss()

@@ -116,7 +116,7 @@ final class OrgOffGraphicsTests: XCTestCase {
         let before = pianoPiano(offGraphics: false, rendered: true)
         let after = NewEventForm.edited(before, name: before.name, org: before.org,
                                         venue: before.venue, venueContext: before.venueContext,
-                                        orgOffGraphics: true)
+                                        orgOffGraphics: true, shootType: before.shootType)
 
         let saved = EventDetailsSave(before: before, after: after)
 
@@ -130,7 +130,7 @@ final class OrgOffGraphicsTests: XCTestCase {
         let before = pianoPiano(offGraphics: true, rendered: true)
         let after = NewEventForm.edited(before, name: before.name, org: "Lyric Collective NYC",
                                         venue: before.venue, venueContext: before.venueContext,
-                                        orgOffGraphics: true)
+                                        orgOffGraphics: true, shootType: before.shootType)
 
         let saved = EventDetailsSave(before: before, after: after)
 
@@ -144,7 +144,7 @@ final class OrgOffGraphicsTests: XCTestCase {
         let before = pianoPiano(offGraphics: true, rendered: true)
         let cleared = NewEventForm.edited(before, name: before.name, org: "  ",
                                           venue: before.venue, venueContext: before.venueContext,
-                                          orgOffGraphics: true)
+                                          orgOffGraphics: true, shootType: before.shootType)
         let created = NewEventForm.event(name: "Spring Recital", org: "", venue: "", venueContext: "",
                                          date: Date(timeIntervalSince1970: 0), shootType: .fullShow,
                                          bookingID: nil, orgOffGraphics: true)

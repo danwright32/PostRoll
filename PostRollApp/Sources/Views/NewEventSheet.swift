@@ -75,19 +75,7 @@ struct NewEventSheet: View {
                             }
                         }
 
-                        // Shoot type
-                        VStack(alignment: .leading, spacing: Spacing.sm) {
-                            BrandSectionLabel("Shoot Type")
-                            VStack(alignment: .leading, spacing: 8) {
-                                ForEach(ShootType.allCases, id: \.self) { type in
-                                    ShootTypeOption(
-                                        type: type,
-                                        isSelected: shootType == type,
-                                        onSelect: { shootType = type }
-                                    )
-                                }
-                            }
-                        }
+                        ShootTypeChoice(shootType: $shootType)
 
                         // Actions
                         VStack(alignment: .trailing, spacing: Spacing.sm) {
@@ -251,6 +239,39 @@ struct BrandTextField: View {
                     )
             )
             .animation(.easeOut(duration: 0.15), value: focused)
+    }
+}
+
+/// The shoot type buttons, shared by New Event and Edit Details so the two
+/// cannot drift apart.
+///
+/// `fixedReason` greys them out and says why, for a show whose type can no
+/// longer change (`Event.shootTypeIsFixed`). Shown rather than hidden, because
+/// the type still says which templates the show's posts use.
+struct ShootTypeChoice: View {
+    @Binding var shootType: ShootType
+    var fixedReason: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.sm) {
+            BrandSectionLabel("Shoot Type")
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(ShootType.allCases, id: \.self) { type in
+                    ShootTypeOption(
+                        type: type,
+                        isSelected: shootType == type,
+                        onSelect: { shootType = type }
+                    )
+                }
+            }
+            .disabled(fixedReason != nil)
+            if let fixedReason {
+                Text(fixedReason)
+                    .font(.light(11))
+                    .foregroundStyle(PaintedSurfaces.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 
