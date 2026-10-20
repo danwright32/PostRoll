@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// An existing event's name, organisation, venue and hall (#1448).
+/// An existing event's name, organisation, venue and hall (#1448), and whether
+/// the organisation is left off the graphics.
 ///
 /// Opened from the event list's Edit Details item, which replaced an inline
 /// Rename that could change the name only. Date and shoot type are not here:
@@ -20,6 +21,7 @@ struct EditEventDetailsSheet: View {
     @State private var org = ""
     @State private var venue = ""
     @State private var venueContext = ""
+    @State private var orgOffGraphics = false
     @State private var loaded = false
 
     /// Set once Save has written, which turns the form into its outcome.
@@ -77,7 +79,8 @@ struct EditEventDetailsSheet: View {
     private var form: some View {
         VStack(alignment: .leading, spacing: Spacing.xl) {
             EventDetailsFields(name: $name, org: $org, venue: $venue,
-                               venueContext: $venueContext)
+                               venueContext: $venueContext,
+                               orgOffGraphics: $orgOffGraphics)
 
             VStack(alignment: .trailing, spacing: Spacing.sm) {
                 if let refusal {
@@ -106,6 +109,7 @@ struct EditEventDetailsSheet: View {
         org = event.org
         venue = event.venue
         venueContext = event.venueContext
+        orgOffGraphics = event.orgOffGraphics
         loaded = true
     }
 
@@ -114,7 +118,8 @@ struct EditEventDetailsSheet: View {
         // and saving a copy from when it opened would put the old media back.
         guard refusal == nil, let before = event else { return }
         let after = NewEventForm.edited(before, name: name, org: org, venue: venue,
-                                        venueContext: venueContext)
+                                        venueContext: venueContext,
+                                        orgOffGraphics: orgOffGraphics)
         let outcome = EventDetailsSave(before: before, after: after)
         guard outcome.changed else {
             dismiss()

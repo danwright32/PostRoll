@@ -14,7 +14,8 @@ final class NewEventFormTests: XCTestCase {
         // Without it, the next click on the same link makes a second event.
         let made = NewEventForm.event(name: "Brahms Requiem", org: "", venue: "",
                                       venueContext: "", date: Date(timeIntervalSince1970: 0),
-                                      shootType: .fullShow, bookingID: booking)
+                                      shootType: .fullShow, bookingID: booking,
+                                      orgOffGraphics: false)
 
         XCTAssertEqual(made.downbeatBookingID, booking)
     }
@@ -22,7 +23,8 @@ final class NewEventFormTests: XCTestCase {
     func testAnEventTypedByHandCarriesNoBookingId() {
         let made = NewEventForm.event(name: "Typed by hand", org: "", venue: "",
                                       venueContext: "", date: Date(timeIntervalSince1970: 0),
-                                      shootType: .fullShow, bookingID: nil)
+                                      shootType: .fullShow, bookingID: nil,
+                                      orgOffGraphics: false)
 
         XCTAssertNil(made.downbeatBookingID)
     }
@@ -34,7 +36,8 @@ final class NewEventFormTests: XCTestCase {
         let made = NewEventForm.event(name: "Symphony\nNo. 5", org: " Oratorio  Society ",
                                       venue: "Carnegie\nHall", venueContext: "Stern\nAuditorium",
                                       date: Date(timeIntervalSince1970: 0),
-                                      shootType: .fullShow, bookingID: nil)
+                                      shootType: .fullShow, bookingID: nil,
+                                      orgOffGraphics: false)
 
         XCTAssertEqual(made.name, "Symphony No. 5")
         XCTAssertEqual(made.org, "Oratorio Society")
@@ -45,7 +48,8 @@ final class NewEventFormTests: XCTestCase {
     func testTheDateAndShootTypeAreKeptAsGiven() {
         let when = Date(timeIntervalSince1970: 1_777_000_000)
         let made = NewEventForm.event(name: "Show", org: "", venue: "", venueContext: "",
-                                      date: when, shootType: .photoCall, bookingID: nil)
+                                      date: when, shootType: .photoCall, bookingID: nil,
+                                      orgOffGraphics: false)
 
         XCTAssertEqual(made.date, when)
         XCTAssertEqual(made.shootType, .photoCall)

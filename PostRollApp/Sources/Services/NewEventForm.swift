@@ -28,12 +28,14 @@ enum NewEventForm {
                       venueContext: String,
                       date: Date,
                       shootType: ShootType,
-                      bookingID: UUID?) -> Event {
+                      bookingID: UUID?,
+                      orgOffGraphics: Bool) -> Event {
         Event(
             name: FieldText.singleLine(name),
             org: FieldText.singleLine(org),
             venue: FieldText.singleLine(venue),
             venueContext: FieldText.singleLine(venueContext),
+            orgOffGraphics: keepsOff(org: org, asked: orgOffGraphics),
             date: date,
             shootType: shootType,
             downbeatBookingID: bookingID
@@ -41,7 +43,8 @@ enum NewEventForm {
     }
 
     /// The event Edit Details saves (#1448): the four text fields replaced and
-    /// folded the way Create folds them, everything else left as it was.
+    /// folded the way Create folds them, and whether the organisation is kept
+    /// off the graphics, everything else left as it was.
     ///
     /// An event with anything on disk keeps the folder it was written under,
     /// pinned here before the fields that name it change. One with nothing
@@ -51,7 +54,8 @@ enum NewEventForm {
                        name: String,
                        org: String,
                        venue: String,
-                       venueContext: String) -> Event {
+                       venueContext: String,
+                       orgOffGraphics: Bool) -> Event {
         var edited = event
         if edited.folderName == nil && event.hasFilesOnDisk {
             edited.folderName = EventFolder.name(for: event)
@@ -60,7 +64,15 @@ enum NewEventForm {
         edited.org = FieldText.singleLine(org)
         edited.venue = FieldText.singleLine(venue)
         edited.venueContext = FieldText.singleLine(venueContext)
+        edited.orgOffGraphics = keepsOff(org: org, asked: orgOffGraphics)
         return edited
+    }
+
+    /// The switch is stored on only while there is an organisation to keep off.
+    /// Left on under a cleared name, it would quietly keep the next
+    /// organisation typed in off the graphics.
+    private static func keepsOff(org: String, asked: Bool) -> Bool {
+        asked && !FieldText.singleLine(org).isEmpty
     }
 }
 
