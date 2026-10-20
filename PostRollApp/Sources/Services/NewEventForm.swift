@@ -43,8 +43,9 @@ enum NewEventForm {
     }
 
     /// The event Edit Details saves (#1448): the four text fields replaced and
-    /// folded the way Create folds them, and whether the organisation is kept
-    /// off the graphics, everything else left as it was.
+    /// folded the way Create folds them, whether the organisation is kept off
+    /// the graphics, and the shoot type while it is not yet fixed, everything
+    /// else left as it was.
     ///
     /// An event with anything on disk keeps the folder it was written under,
     /// pinned here before the fields that name it change. One with nothing
@@ -55,7 +56,8 @@ enum NewEventForm {
                        org: String,
                        venue: String,
                        venueContext: String,
-                       orgOffGraphics: Bool) -> Event {
+                       orgOffGraphics: Bool,
+                       shootType: ShootType) -> Event {
         var edited = event
         if edited.folderName == nil && event.hasFilesOnDisk {
             edited.folderName = EventFolder.name(for: event)
@@ -65,6 +67,7 @@ enum NewEventForm {
         edited.venue = FieldText.singleLine(venue)
         edited.venueContext = FieldText.singleLine(venueContext)
         edited.orgOffGraphics = keepsOff(org: org, asked: orgOffGraphics)
+        if !event.shootTypeIsFixed { edited.shootType = shootType }
         return edited
     }
 
@@ -76,7 +79,32 @@ enum NewEventForm {
     }
 }
 
+extension NewEventForm {
+    /// What Edit Details says beside a shoot type it will not change.
+    static let shootTypeFixedReason = "Shoot type is fixed once photos are assigned."
+
+    /// Why a save asking for `asked` cannot change the type, judged against the
+    /// event as it is now: photos assigned while the sheet was open fix it, and
+    /// a save must say so rather than quietly keep the old type.
+    static func shootTypeRefusal(before: Event, asked: ShootType) -> String? {
+        before.shootTypeIsFixed && asked != before.shootType ? shootTypeFixedReason : nil
+    }
+}
+
 extension Event {
+    /// Whether shoot type can no longer change (Dan, 2026-10-20).
+    ///
+    /// Shoot type is read only when the captions, blog and graphics are made,
+    /// so until any photo or clip is chosen for a day or the blog, and nothing
+    /// has been made, there is nothing built for the old type. #1448 kept it out
+    /// of Edit Details entirely; this is the part of that rule's reason that
+    /// still holds.
+    var shootTypeIsFixed: Bool {
+        hasFilesOnDisk || !blogPhotoPaths.isEmpty || days.values.contains { day in
+            !day.photoPaths.isEmpty || MediaSlot.allCases.contains { day[$0] != nil }
+        }
+    }
+
     /// Whether a folder named after this event may exist: previews rendered,
     /// a week generated (the step that renders them), or an export run.
     var hasFilesOnDisk: Bool {
