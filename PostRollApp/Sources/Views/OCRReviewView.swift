@@ -417,7 +417,11 @@ struct OCRReviewView: View {
                                        eventName: event.name, appState: appState)
                 },
                 onStopFetchNotes: { notesManager.stop(eventID: event.id) },
-                isStoppingFetchNotes: notesManager.isStopping(event.id)
+                isStoppingFetchNotes: notesManager.isStopping(event.id),
+                onMoved: { from, to in
+                    flags = OCRFlagEdits.flags(flags, afterMoving: from, to: to,
+                                               in: [.key("pieces")])
+                }
             ) { piece, idx in
                 let settled = moveFlags(afterRemoving: idx, from: "pieces")
                 scheduleUndo(message: "Work removed") {
@@ -425,7 +429,11 @@ struct OCRReviewView: View {
                     moveFlags(afterInserting: idx, into: "pieces", reopening: settled)
                 }
             }
-        case .scenes:     ScenesEditor(scenes: $ocr.scenes)
+        case .scenes:
+            // Scene deletes have no undo, so the flags they settle stay settled.
+            ScenesEditor(scenes: $ocr.scenes) { idx in
+                _ = moveFlags(afterRemoving: idx, from: "scenes")
+            }
         case .notes:      NotesEditor(ocr: $ocr)
         }
     }
@@ -1100,6 +1108,8 @@ private struct PiecesEditor: View {
     /// this view goes away whenever another section is opened.
     let onStopFetchNotes: () -> Void
     let isStoppingFetchNotes: Bool
+    /// A work dragged from one index to its final index, so flags can follow.
+    let onMoved: (Int, Int) -> Void
     let onDeleted: (Piece, Int) -> Void
 
     @State private var reorderTargetID: UUID?
@@ -1139,12 +1149,11 @@ private struct PiecesEditor: View {
                           let srcIdx = pieces.firstIndex(where: { $0.id == srcID }),
                           let dstIdx = pieces.firstIndex(where: { $0.id == pieceID })
                     else { return false }
+                    let offset = srcIdx < dstIdx ? dstIdx + 1 : dstIdx
                     withAnimation(.easeOut(duration: 0.2)) {
-                        pieces.move(
-                            fromOffsets: IndexSet(integer: srcIdx),
-                            toOffset: srcIdx < dstIdx ? dstIdx + 1 : dstIdx
-                        )
+                        pieces.move(fromOffsets: IndexSet(integer: srcIdx), toOffset: offset)
                     }
+                    onMoved(srcIdx, OCRFlagEdits.finalIndex(movingFrom: srcIdx, toOffset: offset))
                     return true
                 } isTargeted: { targeted in
                     reorderTargetID = targeted ? pieceID : (reorderTargetID == pieceID ? nil : reorderTargetID)
@@ -1228,6 +1237,8 @@ private struct PieceRow: View {
 
 private struct ScenesEditor: View {
     @Binding var scenes: [ProgramScene]
+    /// The index of a scene just deleted, so flags can follow (#1573).
+    let onDeleted: (Int) -> Void
 
     private func sceneBinding(id: UUID, fallback: ProgramScene) -> Binding<ProgramScene> {
         Binding(
@@ -1251,7 +1262,10 @@ private struct ScenesEditor: View {
                 ForEach(scenes) { scene in
                     let sceneID = scene.id
                     SceneRow(scene: sceneBinding(id: sceneID, fallback: scene)) {
-                        scenes.removeAll { $0.id == sceneID }
+                        if let idx = scenes.firstIndex(where: { $0.id == sceneID }) {
+                            scenes.remove(at: idx)
+                            onDeleted(idx)
+                        }
                     }
                 }
                 BrandAddButton(label: "Add Scene") { scenes.append(ProgramScene()) }

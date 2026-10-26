@@ -195,6 +195,36 @@ final class OCRFlagEditsTests: XCTestCase {
         XCTAssertEqual(afterUndo, flags)
     }
 
+    /// Dragging a work to a new place in the Program list moves the flags with
+    /// the works, in both directions, so each flag still names its own work.
+    func testReorderingAListMovesEachFlagWithItsEntry() {
+        func pieceFlag(_ id: String, _ i: Int) -> OCRFlag {
+            OCRFlag(id: id, fieldPath: [.key("pieces"), .index(i), .key("title")], currentValue: id)
+        }
+        func positions(_ flags: [OCRFlag]) -> [String: Int] {
+            Dictionary(uniqueKeysWithValues: flags.compactMap { f in
+                OCRFlagEdits.entry(of: f.fieldPath).map { (f.id, $0.index) }
+            })
+        }
+        // Works a b c d e at 0...4, one flag each.
+        let flags = ["a", "b", "c", "d", "e"].enumerated().map { pieceFlag($1, $0) }
+
+        // b dragged down to sit after d: a c d b e.
+        let down = OCRFlagEdits.flags(flags, afterMoving: 1, to: 3, in: [.key("pieces")])
+        XCTAssertEqual(positions(down), ["a": 0, "c": 1, "d": 2, "b": 3, "e": 4])
+
+        // d dragged up to the top: d a b c e.
+        let up = OCRFlagEdits.flags(flags, afterMoving: 3, to: 0, in: [.key("pieces")])
+        XCTAssertEqual(positions(up), ["d": 0, "a": 1, "b": 2, "c": 3, "e": 4])
+    }
+
+    /// The final index a drag lands on, from SwiftUI's `move(toOffset:)`,
+    /// which counts the gap before the dragged item is taken out.
+    func testTheDropOffsetBecomesTheFinalIndex() {
+        XCTAssertEqual(OCRFlagEdits.finalIndex(movingFrom: 1, toOffset: 4), 3)
+        XCTAssertEqual(OCRFlagEdits.finalIndex(movingFrom: 3, toOffset: 0), 0)
+    }
+
     // MARK: - Saving a correction
 
     func testSavingIsRefusedWhenTheFieldNoLongerHoldsTheFlaggedValue() {

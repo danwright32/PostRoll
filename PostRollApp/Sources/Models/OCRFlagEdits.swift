@@ -130,6 +130,32 @@ enum OCRFlagEdits {
                            reopening: removal.resolvedIDs)
     }
 
+    /// The flags after the element at `from` was moved to final index `to` of
+    /// the list at `listPath` (a drag reorder): each open flag follows its entry.
+    static func flags(_ flags: [OCRFlag], afterMoving from: Int, to: Int,
+                      in listPath: [FlagPathSegment]) -> [OCRFlag] {
+        flags.map { flag in
+            guard !flag.resolved, let i = position(of: flag, in: listPath) else { return flag }
+            let landed: Int
+            if i == from {
+                landed = to
+            } else {
+                // Taken out of the list, then put back at `to`.
+                let closed = i > from ? i - 1 : i
+                landed = closed >= to ? closed + 1 : closed
+            }
+            var moved = flag
+            moved.fieldPath[listPath.count] = .index(landed)
+            return moved
+        }
+    }
+
+    /// Where an element ends up after `move(fromOffsets: [from], toOffset:)`,
+    /// whose offset counts the gap before the moved element is taken out.
+    static func finalIndex(movingFrom from: Int, toOffset offset: Int) -> Int {
+        offset > from ? offset - 1 : offset
+    }
+
     /// The flags open in `before` and resolved in `after`: what a removal
     /// settled, so its undo can reopen exactly those.
     static func newlyResolved(from before: [OCRFlag], to after: [OCRFlag]) -> Set<OCRFlag.ID> {
