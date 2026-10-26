@@ -77,6 +77,12 @@ struct OCRReviewView: View {
 
     private var unresolvedFlags: [OCRFlag] { flags.filter { !$0.resolved } }
 
+    /// The result as stored, watched so a write made underneath this screen
+    /// reaches the draft it shows.
+    private var storedResult: OCRResult? {
+        appState.events.first(where: { $0.id == event.id })?.ocrResult
+    }
+
     /// Read the live event from AppState so a re-run that updates the error
     /// state reflects immediately. Falls back to the captured event.
     private var liveFlagsError: String? {
@@ -240,6 +246,14 @@ struct OCRReviewView: View {
         // that most often lands after Dan has been to another event and back,
         // since it is a pair of model calls (#718).
         .onChange(of: reflowManager.isRunning(event.id)) { adoptStoredResultIfNeeded() }
+        // And any other write to the stored result, which is how the performer
+        // lookups land since #707: an applied suggestion, the handle book's
+        // pass, a page fetch and its undo. None of them flips a run on and
+        // off around the write, so the three above never saw them, and an
+        // applied handle left its suggestion and never reached its field.
+        // Ordinary edits fire this too, harmlessly: the draft was just
+        // persisted, so the two agree and nothing is adopted.
+        .onChange(of: storedResult) { adoptStoredResultIfNeeded() }
         .onChange(of: orgHandles) {
             book.record(org: event.org, handles: orgHandles)
         }
@@ -283,7 +297,12 @@ struct OCRReviewView: View {
                     || notesManager.isRunning(event.id)
                     || reflowManager.isRunning(event.id))
         else { return }
-        ocr = live.ocrResult ?? ocr
+        var adopted = live.ocrResult ?? ocr
+        // Filled from the book again, as `init` fills it, because those
+        // guesses live only in the draft until the first edit persists them,
+        // and adopting the store without them would blank every one.
+        bookSupplied.merge(book.autoFill(performers: &adopted.performers)) { $1 }
+        ocr = adopted
         flags = live.pendingFlags
     }
 
