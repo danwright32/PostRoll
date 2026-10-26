@@ -69,6 +69,14 @@ enum OCRFlagEdits {
         return "value"
     }
 
+    /// Whether `draft` is a correction to `current`: something typed that
+    /// differs from it once surrounding space is set aside. Save correction
+    /// is offered only then (#1578); a case fix counts.
+    static func isCorrection(_ draft: String, of current: String) -> Bool {
+        let typed = draft.trimmingCharacters(in: .whitespaces)
+        return !typed.isEmpty && typed != current.trimmingCharacters(in: .whitespaces)
+    }
+
     /// Nil when the flag's position still holds the value it shows, else why not.
     ///
     /// Only a text field can be checked: a flag on a whole entry carries it as

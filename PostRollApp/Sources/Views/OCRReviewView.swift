@@ -1650,9 +1650,9 @@ private struct FlagRow: View {
     }
 
     /// True when the user has changed the draft away from the current OCR value.
-    /// Save is only enabled when there's an actual change to save.
+    /// Save correction is shown only then (#1578).
     private var draftIsChange: Bool {
-        !trimmedDraft.isEmpty && trimmedDraft != flag.currentValue.trimmingCharacters(in: .whitespaces)
+        OCRFlagEdits.isCorrection(draftValue, of: flag.currentValue)
     }
 
     @ViewBuilder
@@ -1856,18 +1856,18 @@ private struct FlagRow: View {
                                     .overlay(RoundedRectangle(cornerRadius: Radius.xs)
                                         .strokeBorder(PaintedSurfaces.edgeRule, lineWidth: 1))
                             )
-                        Button("Save correction") {
-                            guard draftIsChange else { return }
-                            applyError = onApply(trimmedDraft)
+                        // Absent rather than greyed until the box holds
+                        // something new: a switched-off Save over the OCR
+                        // text read as broken (#1578).
+                        if draftIsChange {
+                            Button("Save correction") {
+                                applyError = onApply(trimmedDraft)
+                            }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(PaintedSurfaces.pageAccentText)
+                            .help("Replace the \(fieldName) value with what you typed.")
                         }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(draftIsChange ? PaintedSurfaces.pageAccentText
-                                         : PaintedSurfaces.disabledControlLabel)
-                        .disabled(!draftIsChange)
-                        .help(draftIsChange
-                              ? "Replace the \(fieldName) value with what you typed."
-                              : "Type a different \(fieldName) to save a correction.")
 
                         removeButton
 

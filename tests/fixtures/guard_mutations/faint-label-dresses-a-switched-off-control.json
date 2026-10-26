@@ -1,7 +1,7 @@
 {
   "name": "faint-label-dresses-a-switched-off-control",
   "file": "PostRollApp/Sources/Views/OCRReviewView.swift",
-  "find": "                        .disabled(!draftIsChange)",
+  "find": "                            .disabled(nothingTyped || busyElsewhere)",
   "replace": "                        .opacity(1)",
   "test": "tests/test_screens_draw_from_named_colours.py::test_every_faint_label_dresses_a_control_that_is_switched_off",
   "breaks": "a live control wears the one tone allowed under the contrast floor, so 2.43:1 type ships as ordinary words under an exemption written for inactive components (#611)"

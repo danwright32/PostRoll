@@ -227,6 +227,17 @@ final class OCRFlagEditsTests: XCTestCase {
 
     // MARK: - Saving a correction
 
+    /// Save correction is offered only once the box holds something new
+    /// (#1578): a greyed button over the OCR text read as broken, twice.
+    func testSaveIsOfferedOnlyForAChangedValue() {
+        XCTAssertFalse(OCRFlagEdits.isCorrection("Angel", of: "Angel"))
+        XCTAssertFalse(OCRFlagEdits.isCorrection("  Angel ", of: "Angel"))
+        XCTAssertFalse(OCRFlagEdits.isCorrection("   ", of: "Angel"))
+        XCTAssertTrue(OCRFlagEdits.isCorrection("Angela", of: "Angel"))
+        // A case fix is a real correction.
+        XCTAssertTrue(OCRFlagEdits.isCorrection("angel", of: "Angel"))
+    }
+
     func testSavingIsRefusedWhenTheFieldNoLongerHoldsTheFlaggedValue() {
         let result = ocr(["Ana", "Joe"])
         XCTAssertEqual(OCRFlagEdits.stillHolds(nameFlag("jack", 1, "Jack"), in: result),
