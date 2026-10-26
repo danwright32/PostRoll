@@ -176,6 +176,7 @@ struct OCRReviewView: View {
                                 Self.pathIsStringLeaf(flag.fieldPath, in: ocr)
                             },
                             onApply: { flag, newValue in applyFlag(flag, newValue: newValue) },
+                            onRemove: { flag in removeFlaggedEntry(flag) },
                             onDismiss: { flag in dismissFlag(flag) },
                             eventID: event.id
                         )
@@ -376,8 +377,12 @@ struct OCRReviewView: View {
                     lookupManager.dropAllSuggestions(for: event.id)
                 },
                 onDeleted: { performer, idx in
+                    // Flags name performers by position, so they move with the
+                    // list or they name somebody else (#1573).
+                    let settled = moveFlags(afterRemoving: idx, from: "performers")
                     scheduleUndo(message: "Performer removed") {
                         ocr.performers.insert(performer, at: min(idx, ocr.performers.count))
+                        moveFlags(afterInserting: idx, into: "performers", reopening: settled)
                     }
                 },
                 // The list it replaced lives on the run, so the undo survives
@@ -412,13 +417,23 @@ struct OCRReviewView: View {
                                        eventName: event.name, appState: appState)
                 },
                 onStopFetchNotes: { notesManager.stop(eventID: event.id) },
-                isStoppingFetchNotes: notesManager.isStopping(event.id)
+                isStoppingFetchNotes: notesManager.isStopping(event.id),
+                onMoved: { from, to in
+                    flags = OCRFlagEdits.flags(flags, afterMoving: from, to: to,
+                                               in: [.key("pieces")])
+                }
             ) { piece, idx in
+                let settled = moveFlags(afterRemoving: idx, from: "pieces")
                 scheduleUndo(message: "Work removed") {
                     ocr.pieces.insert(piece, at: min(idx, ocr.pieces.count))
+                    moveFlags(afterInserting: idx, into: "pieces", reopening: settled)
                 }
             }
-        case .scenes:     ScenesEditor(scenes: $ocr.scenes)
+        case .scenes:
+            // Scene deletes have no undo, so the flags they settle stay settled.
+            ScenesEditor(scenes: $ocr.scenes) { idx in
+                _ = moveFlags(afterRemoving: idx, from: "scenes")
+            }
         case .notes:      NotesEditor(ocr: $ocr)
         }
     }
@@ -435,12 +450,45 @@ struct OCRReviewView: View {
                                        hasDetectedIssues: detectedIssues != nil)
     }
 
-    private func applyFlag(_ flag: OCRFlag, newValue: String) -> Bool {
+    /// Nil when the correction was saved, else what to tell Dan.
+    private func applyFlag(_ flag: OCRFlag, newValue: String) -> String? {
+        // A stale position would overwrite somebody else's name (#1573).
+        if let refusal = OCRFlagEdits.stillHolds(flag, in: ocr) {
+            return refusal.message(field: OCRFlagEdits.fieldName(of: flag.fieldPath))
+        }
         if applyValue(newValue, atPath: flag.fieldPath, to: &ocr) {
             markResolved(flag)
-            return true
+            return nil
         }
-        return false
+        return "Couldn't apply that change here. Use Describe the correction below so Claude can patch the right spot."
+    }
+
+    /// Nil when the entry was removed, else what to tell Dan (#1573).
+    private func removeFlaggedEntry(_ flag: OCRFlag) -> String? {
+        switch OCRFlagEdits.removeEntry(for: flag, ocr: &ocr, flags: &flags) {
+        case .failure(let refusal):
+            return refusal.message(field: OCRFlagEdits.fieldName(of: flag.fieldPath))
+        case .success(let removal):
+            let noun = OCRFlagEdits.entryNoun(for: flag.fieldPath) ?? "entry"
+            scheduleUndo(message: "\(noun.capitalized) removed") {
+                OCRFlagEdits.restore(removal, ocr: &ocr, flags: &flags)
+            }
+            return nil
+        }
+    }
+
+    /// Move the flags on a top level list after a row was deleted by hand, and
+    /// return the ones that deletion settled, for its undo to reopen.
+    private func moveFlags(afterRemoving index: Int, from list: String) -> Set<OCRFlag.ID> {
+        let before = flags
+        flags = OCRFlagEdits.flags(flags, afterRemoving: index, from: [.key(list)])
+        return OCRFlagEdits.newlyResolved(from: before, to: flags)
+    }
+
+    private func moveFlags(afterInserting index: Int, into list: String,
+                           reopening settled: Set<OCRFlag.ID>) {
+        flags = OCRFlagEdits.flags(flags, afterInserting: index, into: [.key(list)],
+                                   reopening: settled)
     }
 
     private func dismissFlag(_ flag: OCRFlag) {
@@ -476,20 +524,9 @@ struct OCRReviewView: View {
     /// the simple "Save correction" text-field path makes sense for a given flag.
     static func pathIsStringLeaf(_ path: [FlagPathSegment], in ocr: OCRResult) -> Bool {
         guard !path.isEmpty,
-              let data = try? JSONEncoder().encode(ocr),
-              let tree = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else {
+              let tree = OCRFlagEdits.tree(of: ocr),
+              let node = OCRFlagEdits.node(at: path, in: tree) else {
             return false
-        }
-        var node: Any = tree
-        for seg in path {
-            switch seg {
-            case .key(let k):
-                guard let dict = node as? [String: Any], let next = dict[k] else { return false }
-                node = next
-            case .index(let i):
-                guard let arr = node as? [Any], i >= 0, i < arr.count else { return false }
-                node = arr[i]
-            }
         }
         // Arrays and dicts are not string-replaceable; null is treated as missing.
         if node is [Any] || node is [String: Any] || node is NSNull { return false }
@@ -1071,6 +1108,8 @@ private struct PiecesEditor: View {
     /// this view goes away whenever another section is opened.
     let onStopFetchNotes: () -> Void
     let isStoppingFetchNotes: Bool
+    /// A work dragged from one index to its final index, so flags can follow.
+    let onMoved: (Int, Int) -> Void
     let onDeleted: (Piece, Int) -> Void
 
     @State private var reorderTargetID: UUID?
@@ -1110,12 +1149,11 @@ private struct PiecesEditor: View {
                           let srcIdx = pieces.firstIndex(where: { $0.id == srcID }),
                           let dstIdx = pieces.firstIndex(where: { $0.id == pieceID })
                     else { return false }
+                    let offset = srcIdx < dstIdx ? dstIdx + 1 : dstIdx
                     withAnimation(.easeOut(duration: 0.2)) {
-                        pieces.move(
-                            fromOffsets: IndexSet(integer: srcIdx),
-                            toOffset: srcIdx < dstIdx ? dstIdx + 1 : dstIdx
-                        )
+                        pieces.move(fromOffsets: IndexSet(integer: srcIdx), toOffset: offset)
                     }
+                    onMoved(srcIdx, OCRFlagEdits.finalIndex(movingFrom: srcIdx, toOffset: offset))
                     return true
                 } isTargeted: { targeted in
                     reorderTargetID = targeted ? pieceID : (reorderTargetID == pieceID ? nil : reorderTargetID)
@@ -1199,6 +1237,8 @@ private struct PieceRow: View {
 
 private struct ScenesEditor: View {
     @Binding var scenes: [ProgramScene]
+    /// The index of a scene just deleted, so flags can follow (#1573).
+    let onDeleted: (Int) -> Void
 
     private func sceneBinding(id: UUID, fallback: ProgramScene) -> Binding<ProgramScene> {
         Binding(
@@ -1222,7 +1262,10 @@ private struct ScenesEditor: View {
                 ForEach(scenes) { scene in
                     let sceneID = scene.id
                     SceneRow(scene: sceneBinding(id: sceneID, fallback: scene)) {
-                        scenes.removeAll { $0.id == sceneID }
+                        if let idx = scenes.firstIndex(where: { $0.id == sceneID }) {
+                            scenes.remove(at: idx)
+                            onDeleted(idx)
+                        }
                     }
                 }
                 BrandAddButton(label: "Add Scene") { scenes.append(ProgramScene()) }
@@ -1487,7 +1530,9 @@ private struct HandleRow: View {
 private struct FlagReviewSection: View {
     @Binding var flags: [OCRFlag]
     let isStringLeaf: (OCRFlag) -> Bool
-    let onApply: (OCRFlag, String) -> Bool
+    /// Each returns nil on success, else the sentence to show on the row.
+    let onApply: (OCRFlag, String) -> String?
+    let onRemove: (OCRFlag) -> String?
     let onDismiss: (OCRFlag) -> Void
     /// Which programme these concerns are about, so each row can find its own
     /// correction on the owner rather than being handed a closure that dies
@@ -1519,6 +1564,7 @@ private struct FlagReviewSection: View {
                         flag: $flag,
                         isStringLeaf: isStringLeaf(flag),
                         onApply:   { newValue in onApply(flag, newValue) },
+                        onRemove:  { onRemove(flag) },
                         onDismiss: { onDismiss(flag) },
                         eventID: eventID
                     )
@@ -1538,7 +1584,8 @@ private struct FlagReviewSection: View {
 private struct FlagRow: View {
     @Binding var flag: OCRFlag
     let isStringLeaf: Bool
-    let onApply: (String) -> Bool
+    let onApply: (String) -> String?
+    let onRemove: () -> String?
     let onDismiss: () -> Void
     let eventID: Event.ID
 
@@ -1571,11 +1618,23 @@ private struct FlagRow: View {
 
     /// Last `key` segment of the field path, e.g. "name" or "composer".
     /// Used in the "Replace [field] with:" label.
-    private var fieldName: String {
-        for seg in flag.fieldPath.reversed() {
-            if case .key(let s) = seg { return s }
+    private var fieldName: String { OCRFlagEdits.fieldName(of: flag.fieldPath) }
+
+    /// "Remove performer" and the like, or nil when the flag is on a field
+    /// outside any list (#1573).
+    private var removeLabel: String? { OCRFlagEdits.removeLabel(for: flag.fieldPath) }
+
+    /// Remove beside Keep OCR Text, for a flag whose remedy is that the entry
+    /// should not exist at all.
+    @ViewBuilder
+    private var removeButton: some View {
+        if let removeLabel {
+            Button(removeLabel) {
+                applyError = onRemove()
+            }
+            .help("Take this \(OCRFlagEdits.entryNoun(for: flag.fieldPath) ?? "entry") out of the program data. You can undo it for a few seconds.")
+            .buttonStyle(BrandOutlineButtonStyle())
         }
-        return "value"
     }
 
     /// True only when Claude actually proposed a different value (not when
@@ -1768,7 +1827,9 @@ private struct FlagRow: View {
                                 .truncationMode(.tail)
                         }
                     } else {
-                        Text("Claude flagged this but didn't propose a replacement. Edit the value below if you can correct it, or click Keep OCR Text.")
+                        Text(removeLabel == nil
+                             ? "Claude flagged this but didn't propose a replacement. Edit the value below if you can correct it, or click Keep OCR Text."
+                             : "Claude flagged this but didn't propose a replacement. Edit the value below, remove the \(OCRFlagEdits.entryNoun(for: flag.fieldPath) ?? "entry") if it shouldn't be listed, or click Keep OCR Text.")
                             .font(.light(10))
                             .foregroundStyle(PaintedSurfaces.tertiaryText)
                             .fixedSize(horizontal: false, vertical: true)
@@ -1797,28 +1858,22 @@ private struct FlagRow: View {
                             )
                         Button("Save correction") {
                             guard draftIsChange else { return }
-                            applyError = nil
-                            if !onApply(trimmedDraft) {
-                                applyError = "Couldn't apply that change here. Use Describe the correction below so Claude can patch the right spot."
-                            }
+                            applyError = onApply(trimmedDraft)
                         }
                         .buttonStyle(.plain)
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(draftIsChange ? PaintedSurfaces.pageAccentText
                                          : PaintedSurfaces.disabledControlLabel)
                         .disabled(!draftIsChange)
-                        .help("Replace the \(fieldName) value with what you typed.")
+                        .help(draftIsChange
+                              ? "Replace the \(fieldName) value with what you typed."
+                              : "Type a different \(fieldName) to save a correction.")
+
+                        removeButton
 
                         Button("Keep OCR Text", action: onDismiss)
                             .help("The OCR text was correct. Mark this flag reviewed and leave the value alone.")
                             .buttonStyle(BrandOutlineButtonStyle())
-                    }
-
-                    if let err = applyError {
-                        Text(err)
-                            .font(.light(10))
-                            .foregroundStyle(PaintedSurfaces.pageAccentText)
-                            .fixedSize(horizontal: false, vertical: true)
                     }
                 } else {
                     Text("This fix changes the \(fieldName) list, so it can't be made in a single field. Use Describe the correction (Claude's suggestion is pre-filled) or Keep OCR Text.")
@@ -1828,10 +1883,19 @@ private struct FlagRow: View {
                         .padding(.top, 4)
 
                     HStack(spacing: 6) {
+                        removeButton
                         Button("Keep OCR Text", action: onDismiss)
                             .help("The OCR data was correct. Mark this flag reviewed and leave it alone.")
                             .buttonStyle(BrandOutlineButtonStyle())
                     }
+                }
+
+                // Under either branch: a refused Remove is possible on both.
+                if let err = applyError {
+                    Text(err)
+                        .font(.light(10))
+                        .foregroundStyle(PaintedSurfaces.pageAccentText)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 reflowSection
