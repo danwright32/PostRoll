@@ -5,9 +5,11 @@ OCR text" as Claude having proposed something. That left no way to recommend
 taking an entry out, which is the whole remedy for a duplicate, so the model
 copied the OCR text into the suggestion and the row offered nothing to press.
 
-The recommendation is decided here, in code, from the two values the app will
-act on. What the model says it recommends is only consulted for a removal,
-which the values cannot express.
+`recommendation_for` decides it in code, from the two values the app will act
+on. What the model says it recommends is only consulted for a removal, which
+the values cannot express. Two outcomes are settled by the flag pass
+(`flag_issues.py`) around that call, because they need more than the values: a
+flag the model withdraws, and a replacement the program's text does not print.
 """
 
 from __future__ import annotations
