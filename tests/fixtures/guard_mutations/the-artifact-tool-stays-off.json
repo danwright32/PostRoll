@@ -1,0 +1,8 @@
+{
+  "name": "the-artifact-tool-stays-off",
+  "file": ".claude/settings.json",
+  "find": "\"enableArtifact\": false",
+  "replace": "\"enableArtifact\": true",
+  "test": "tests/test_project_plugin_settings.py::test_the_artifact_tool_is_off_for_this_repo",
+  "breaks": "the Artifact tool's definition is sent with every interactive request here again, about 13,500 tokens for a tool no PostRoll session has called (#1528)"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "account-connectors-stay-off",
+  "file": ".claude/settings.json",
+  "find": "\"disableClaudeAiConnectors\": true",
+  "replace": "\"disableClaudeAiConnectors\": false",
+  "test": "tests/test_project_plugin_settings.py::test_account_connectors_are_off_for_this_repo",
+  "breaks": "the account's connectors load in this repo again, so every request of every session re-reads about 12,700 tokens of tool names and instructions no PostRoll session has used (#1528)"
+}
