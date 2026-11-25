@@ -1,4 +1,9 @@
-"""Four user-scope plugins stay disabled for this repo (#499).
+"""What this repo's tracked Claude Code settings switch off, and why.
+
+Four user-scope plugins stay disabled here (#499). So do the account's
+connectors and the Artifact tool (#1528): those two have a test each at the end
+of this file, with the measurement behind it in the test's own docstring. The
+rest of this header is about the plugins.
 
 TWO DIFFERENT REASONS, kept apart on purpose. Vercel was measured doing
 something; the other three were not, and a docstring implying otherwise would
