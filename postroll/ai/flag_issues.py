@@ -28,12 +28,63 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from .vision_cross_check import VisionTextUnavailable, cross_check_against_vision
+from .vision_cross_check import (
+    VisionTextUnavailable, cross_check_against_vision, words_not_printed,
+)
 from .claude_client import run_json_prompt, ClaudeError
+from .flag_recommendation import (
+    NONE, REMOVE, REPLACE, UNPRINTED, WITHDRAW, recommendation_for,
+)
 from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
+#: The fields that are copied off the page, so a suggested value for one can be
+#: held to the program's own text. A role or an instrument is the model's
+#: description and is printed nowhere in those words.
+COPIED_FROM_THE_PAGE = frozenset({"name", "title", "composer"})
 
-PROMPT_TEMPLATE = """\
+
+def _field(field_path: list[Any]) -> str:
+    """The last key of a path, e.g. "composer"."""
+    return next((seg for seg in reversed(field_path) if isinstance(seg, str)), "")
+
+
+# The flags the prompt shows the model, one per recommendation. Kept as data so
+# a test can put each through `recommendation_for`: an example that broke the
+# rule beside it would teach the model the opposite, with more weight than the
+# rule itself (#1653).
+#
+# The key order is the order the model writes in, and it cannot go back. What
+# the page shows and why it looks wrong come first, the recommendation after,
+# because asked the other way round it recommended removing a performer and
+# then explained that both entries were valid.
+EXAMPLE_FLAGS: list[dict[str, Any]] = [
+    {
+        "id": "gonzalez_missing_letter",
+        "field_path": ["performers", 12, "name"],
+        "current_value": "Maria Gonzlez",
+        "program_context": "Page 1 (image 000), cast list, third name in the left column, printed 'Maria Gonzalez'.",
+        "concern": "The printed name has an 'a' the OCR dropped.",
+        "recommendation": REPLACE,
+        "suggested_value": "Maria Gonzalez",
+    },
+    {
+        "id": "riverside_quartet_listed_twice",
+        "field_path": ["performers", 31, "name"],
+        "current_value": "Riverside Quartet",
+        "program_context": "Page 2 (image 001), guest ensembles, printed once under 'With thanks to'.",
+        "concern": "Riverside Quartet is already performers[14], and the program prints it once, so this second entry should go.",
+        "recommendation": REMOVE,
+        "suggested_value": "",
+    },
+]
+
+_EXAMPLES_JSON = (
+    json.dumps(EXAMPLE_FLAGS, indent=2, ensure_ascii=False)
+    .replace("{", "{{").replace("}", "}}")
+)
+
+
+_PROMPT_HEAD = """\
 You are reviewing structured data extracted by OCR from photos of a
 classical music event program. Your job is to identify ONLY items that
 look suspicious — likely misreads, implausible values, ambiguous
@@ -85,39 +136,60 @@ Original program images (read them to compare against the OCR data):
 
 Read the images so you can check what the OCR extracted against what's
 actually printed. Return JSON ONLY (no markdown fences, no commentary)
-as an array of flag objects:
+as an array of flag objects, shaped like these two:
 
-[
-  {{
-    "id": "short_stable_slug_like_this",
-    "field_path": ["pieces", 5, "composer"],
-    "current_value": "whatever is currently in the OCR data at that path",
-    "suggested_value": "your best guess at what this field should actually be, based on the printed image",
-    "concern": "One sentence explaining why this looks wrong.",
-    "program_context": "Short description of where this appeared in the program — which page/section, what surrounding text, what the printed characters actually look like."
-  }},
-  ...
-]
+"""
+
+_PROMPT_TAIL = """
 
 Rules:
 - field_path is a JSON path as a list of string keys and integer
   indices, e.g. ["pieces", 5, "composer"] or ["performers", 12, "name"]
   or ["other"] or ["organization_notes"].
-- id is a short unique slug (lowercase, underscores). Stable within one
-  flag run — doesn't need to match future runs.
-- suggested_value MUST be your best guess at the correct value, read
-  directly off the printed program image. This pre-fills the
-  correction box for Dan, so it should be the value he'd most likely
-  accept. If the field should be empty (e.g. a hallucinated entry that
-  isn't in the program), use an empty string. Do not echo
-  current_value back as the suggestion — that defeats the purpose.
-- program_context should give Dan enough to find it on the physical
-  page without re-reading the whole program. Mention which image and
-  roughly where on the page.
+- id is a short unique slug (lowercase, underscores). It is stable
+  within one flag run and need not match future runs.
+- current_value is whatever is in the OCR data at that path now.
+- Write the fields in the order shown. program_context is a short
+  description of where this appeared in the program: which page and
+  section, what surrounding text, what the printed characters actually
+  look like. It should give Dan enough to find it on the physical page
+  without re-reading the whole program. Mention which image and roughly
+  where on the page.
+- concern is one sentence explaining why this looks wrong.
+- recommendation comes after those two, and follows from them. It is
+  what Dan should do about it, and he accepts it with one click. It is
+  "replace" or "remove", or "withdraw" for a flag you find you should
+  not have started (explained below):
+  - "replace": the field holds text the program does not print there.
+    suggested_value is the text the program DOES print, copied
+    character for character off the image. It pre-fills the correction
+    box and Dan saves it with one click, so it MUST differ from
+    current_value and it must be findable on the page.
+  - "remove": the entry the path is in (the performer, piece, scene or
+    movement) should not be in the data at all, because the program
+    does not print it or because it repeats another entry.
+    suggested_value is "", and the concern names the entry that stays
+    by its index.
+- Never copy current_value into suggested_value. That leaves Dan a row
+  with nothing to accept. A concern that an entry is a duplicate or was
+  invented is a "remove", not a replacement.
+- The printed program is the authority, because Dan's captions follow
+  it. When the data already says what the page prints, there is nothing
+  to flag, however unusual the spelling or the credit looks. Never
+  invent a different spelling to have something to suggest, and never
+  replace what is printed with a more usual spelling or with a name you
+  know from elsewhere (a songwriter, a standard romanization).
+- Check each suspicion against the image BEFORE you start writing its
+  flag, and leave out anything that turns out to match. If you only
+  find that out partway through a flag, set its recommendation to
+  "withdraw" and it will be discarded. Never recommend a replacement or
+  a removal for data you have just concluded is right.
 - If NOTHING is suspicious, return an empty array: []
 - Flag at most 10 issues. Prioritize the most likely errors.
 - Return ONLY the JSON array. No explanation before or after.
 """
+
+PROMPT_TEMPLATE = _PROMPT_HEAD + _EXAMPLES_JSON + _PROMPT_TAIL
 
 
 def vision_flags_or_reason(
@@ -199,21 +271,73 @@ def flag_issues(
     if not isinstance(data, list):
         raise ClaudeError(f"Expected JSON array of flags, got {type(data).__name__}")
 
-    # Normalize — fill defaults if model omitted any field
+    # The program's text judges a suggestion only where it judged the names:
+    # given, and not stood down as too thin to be an authority.
+    text_is_authority = vision_text is not None and not vision_stood_down
+
     flags: list[dict[str, Any]] = list(vision_flags)
+    withdrawn: list[str] = []
+    unprinted: list[str] = []
+    # Normalize: fill defaults where the model omitted a field.
     for i, raw in enumerate(data):
         if not isinstance(raw, dict):
             continue
+        flag_id = raw.get("id") or f"flag_{i}"
+        if raw.get("recommendation") == WITHDRAW:
+            # The model's own verdict that the data is right. Showing Dan a
+            # row whose note ends "no error, withdrawing" is the defect. Its
+            # note is kept, because nothing else records why it was dropped.
+            withdrawn.append(f"{flag_id}: {raw.get('concern', '')}")
+            continue
+        field_path = raw.get("field_path") or []
+        current = raw.get("current_value", "")
+        suggested = raw.get("suggested_value", "")
+        # Decided here from the values, not taken from the model: the prompt's
+        # rule that every flag proposes something was being broken on five
+        # flags in eight with nothing to show it (#1653).
+        recommendation = recommendation_for(
+            field_path, current, suggested, asked=raw.get("recommendation"))
+        if (recommendation == REPLACE and text_is_authority
+                and _field(field_path) in COPIED_FROM_THE_PAGE
+                and isinstance(suggested, str)):
+            missing = words_not_printed(
+                suggested, current if isinstance(current, str) else "", vision_text)
+            if missing:
+                # Still shown, with the suggestion, but not filled into the box
+                # where one click would save it (Dan, 2026-11-25, #1653).
+                recommendation = UNPRINTED
+                unprinted.append(f"{flag_id} ({', '.join(missing)})")
         flags.append(
             {
-                "id": raw.get("id") or f"flag_{i}",
-                "field_path": raw.get("field_path") or [],
-                "current_value": raw.get("current_value", ""),
-                "suggested_value": raw.get("suggested_value", ""),
+                "id": flag_id,
+                "field_path": field_path,
+                "current_value": current,
+                "suggested_value": suggested,
+                "recommendation": recommendation,
                 "concern": raw.get("concern", ""),
                 "program_context": raw.get("program_context", ""),
             }
         )
+
+    # Only the model's flags: a spelling flag with nothing close to suggest is
+    # an honest answer, while a model flag with nothing is a broken instruction.
+    from_model = flags[len(vision_flags):]
+    if withdrawn:
+        # Said, so a pass that withdraws everything is not read as a clean one.
+        print(f"note: the model withdrew {len(withdrawn)} of "
+              f"{len(from_model) + len(withdrawn)} review flags after checking the "
+              f"image, and they were discarded:\n  " + "\n  ".join(withdrawn),
+              file=sys.stderr, flush=True)
+    if unprinted:
+        print(f"warning: {len(unprinted)} of {len(from_model)} review flags suggest "
+              f"words the program does not print, so they are shown without being "
+              f"filled in: {', '.join(unprinted)}",
+              file=sys.stderr, flush=True)
+    empty = [f["id"] for f in from_model if f["recommendation"] == NONE]
+    if empty:
+        print(f"warning: {len(empty)} of {len(from_model)} review flags recommend "
+              f"nothing, so their rows offer no fix to accept: {', '.join(empty)}",
+              file=sys.stderr, flush=True)
     return flags
 
 

@@ -1,0 +1,8 @@
+{
+  "name": "an-unprinted-suggestion-is-not-a-replacement",
+  "file": "postroll/ai/flag_issues.py",
+  "find": "            if missing:",
+  "replace": "            if False:",
+  "test": "tests/test_flag_recommendation.py::test_unprinted_suggestions_are_counted_out_loud",
+  "breaks": "a suggested name, title or composer using a word printed nowhere in the program is filled into the correction box with Save one click away (#1653: four of seven suggestions on real programs)"
+}

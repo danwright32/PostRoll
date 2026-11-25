@@ -1,0 +1,8 @@
+{
+  "name": "a-removal-needs-an-entry-to-remove",
+  "file": "postroll/ai/flag_recommendation.py",
+  "find": "        return REMOVE if _in_a_list(field_path) else NONE",
+  "replace": "        return REMOVE",
+  "test": "tests/test_flag_recommendation.py::test_a_removal_outside_any_list_recommends_nothing",
+  "breaks": "a flag on a field outside any list is recorded as recommending a removal the app has no button for, so it is counted as actionable when its row offers nothing (#1653)"
+}

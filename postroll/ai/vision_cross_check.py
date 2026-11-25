@@ -24,6 +24,8 @@ import re
 import unicodedata
 from typing import Any
 
+from .flag_recommendation import recommendation_for
+
 
 class VisionTextUnavailable(Exception):
     """The text layer is missing, empty, or too thin to be an authority.
@@ -70,6 +72,27 @@ def _normalise(text: str) -> str:
 
 def _words(text: str) -> set[str]:
     return {_normalise(w) for w in _WORD.findall(text)}
+
+
+def words_not_printed(suggested: str, current: str, vision_text: str) -> list[str]:
+    """The words `suggested` adds to `current` that the program's text lacks.
+
+    For a replacement the review pass proposes (#1653). Measured on real
+    programs, four in seven used a word printed nowhere: a more usual spelling,
+    a songwriter from general knowledge, a hyphen added to a name. Only the
+    words the suggestion CHANGES are judged, because this text is machine read
+    too and a word it missed that the data already had is not the suggestion's.
+
+    The caller decides whether the text is an authority at all; this assumes
+    it is, exactly as the name check below does once past its own guards.
+    """
+    printed = _words(vision_text)
+    kept = _words(current)
+    return [
+        word for word in dict.fromkeys(_normalise(t) for t in _WORD.findall(suggested)
+                                       if len(t) >= MIN_TOKEN_LENGTH)
+        if word not in kept and word not in printed
+    ]
 
 
 def _handles(text: str) -> set[str]:
@@ -141,6 +164,7 @@ def cross_check_against_vision(
             "field_path": field_path,
             "current_value": current,
             "suggested_value": suggestion,
+            "recommendation": recommendation_for(field_path, current, suggestion),
             "concern": concern,
             "program_context": context,
         })

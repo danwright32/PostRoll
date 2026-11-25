@@ -261,4 +261,123 @@ final class OCRFlagEditsTests: XCTestCase {
                        "Remove scene")
         XCTAssertNil(OCRFlagEdits.removeLabel(for: [.key("program_notes")]))
     }
+
+    // MARK: - What Claude recommends (#1653)
+    //
+    // Five flags in eight on a real program arrived with the OCR text as their
+    // "suggestion". Three were duplicate entries, whose remedy is a removal no
+    // text value can say, so their rows offered nothing to accept.
+
+    private func flag(_ current: String, suggests suggested: String = "",
+                      _ recommendation: OCRFlag.Recommendation? = nil,
+                      path: [FlagPathSegment] = [.key("performers"), .index(3), .key("name")]) -> OCRFlag {
+        OCRFlag(id: "f", fieldPath: path, currentValue: current, suggestedValue: suggested,
+                recommendation: recommendation, concern: "c")
+    }
+
+    func testADifferentValueIsARecommendedReplacement() {
+        XCTAssertEqual(OCRFlagEdits.recommended(for: flag("Jon Smth", suggests: " Jon Smith ")),
+                       .replace("Jon Smith"))
+    }
+
+    func testTheOCRTextHandedBackRecommendsNothing() {
+        XCTAssertEqual(OCRFlagEdits.recommended(for: flag("Jon Smth", suggests: "Jon Smth")), .nothing)
+        XCTAssertEqual(OCRFlagEdits.recommended(for: flag("Jon Smth")), .nothing)
+        // The label is Claude's; the two values are what Save would act on.
+        XCTAssertEqual(OCRFlagEdits.recommended(for: flag("Same", suggests: "Same", .replace)), .nothing)
+    }
+
+    func testARecommendedRemovalNamesTheEntry() {
+        XCTAssertEqual(OCRFlagEdits.recommended(for: flag("Dup", suggests: "Dup", .remove)),
+                       .remove(noun: "performer"))
+        XCTAssertEqual(OCRFlagEdits.recommended(for: flag(
+            "Dup", .remove, path: [.key("pieces"), .index(2), .key("title")])), .remove(noun: "work"))
+    }
+
+    func testARemovalOutsideAnyListRecommendsNothing() {
+        // There is no Remove button there, so the row must not promise one.
+        XCTAssertEqual(OCRFlagEdits.recommended(for: flag("x", .remove, path: [.key("venue_notes")])),
+                       .nothing)
+    }
+
+    func testTheBoxStartsWithTheRecommendedValue() {
+        XCTAssertEqual(OCRFlagEdits.startingDraft(for: flag("Jon Smth", suggests: "Jon Smith")), "Jon Smith")
+        XCTAssertEqual(OCRFlagEdits.startingDraft(for: flag("Dup", suggests: "", .remove)), "Dup")
+        XCTAssertEqual(OCRFlagEdits.startingDraft(for: flag("Jon Smth")), "Jon Smth")
+    }
+
+    func testARecommendedReplacementIsSavableWithoutTyping() {
+        let suggested = flag("Jon Smth", suggests: "Jon Smith")
+        XCTAssertEqual(OCRFlagEdits.leadButton(
+            draft: OCRFlagEdits.startingDraft(for: suggested), flag: suggested), .save)
+    }
+
+    func testTheLeadButtonIsTheRecommendedAction() {
+        let duplicate = flag("Dup", suggests: "Dup", .remove)
+        XCTAssertEqual(OCRFlagEdits.leadButton(
+            draft: OCRFlagEdits.startingDraft(for: duplicate), flag: duplicate), .remove)
+        // Typing a correction instead is Dan overruling the recommendation.
+        XCTAssertEqual(OCRFlagEdits.leadButton(draft: "Duplicate Name", flag: duplicate), .save)
+        let nothing = flag("Jon Smth")
+        XCTAssertNil(OCRFlagEdits.leadButton(draft: "Jon Smth", flag: nothing))
+        XCTAssertEqual(OCRFlagEdits.leadButton(draft: "Jon Smith", flag: nothing), .save)
+    }
+
+    // A suggestion using a word the program does not print (#1653). Measured
+    // on real programs it was four in seven, each one click from being saved.
+
+    func testASuggestionTheProgramDoesNotPrintIsShownButNotFilledIn() {
+        let unprinted = flag("Hannukah, Oh Hannukah", suggests: "Hanukkah, Oh Hanukkah", .unprinted,
+                             path: [.key("pieces"), .index(11), .key("title")])
+        XCTAssertEqual(OCRFlagEdits.recommended(for: unprinted),
+                       .unprinted("Hanukkah, Oh Hanukkah"))
+        XCTAssertEqual(OCRFlagEdits.startingDraft(for: unprinted), "Hannukah, Oh Hannukah")
+        // Nothing to accept at rest, so no button is the filled one.
+        XCTAssertNil(OCRFlagEdits.leadButton(
+            draft: OCRFlagEdits.startingDraft(for: unprinted), flag: unprinted))
+        // Typing it in is Dan's own decision, and saves like any correction.
+        XCTAssertEqual(OCRFlagEdits.leadButton(draft: "Hanukkah, Oh Hanukkah", flag: unprinted), .save)
+    }
+
+    func testAnUnprintedSuggestionThatIsTheOCRTextSuggestsNothing() {
+        XCTAssertEqual(OCRFlagEdits.recommended(for: flag("Same", suggests: "Same", .unprinted)), .nothing)
+    }
+
+    func testAnUnprintedSuggestionSurvivesDecoding() throws {
+        let sent = #"{"id":"a","field_path":["pieces",11,"title"],"current_value":"Hannukah","suggested_value":"Hanukkah","recommendation":"unprinted","concern":"c","program_context":"p"}"#
+        XCTAssertEqual(try JSONDecoder().decode(OCRFlag.self, from: Data(sent.utf8)).recommendation,
+                       .unprinted)
+    }
+
+    func testTheWholeEntryHintOnlyPromisesAPrefillThatWillHappen() {
+        // Describe the correction starts with Claude's value only for a
+        // recommended replacement. The line used to promise it every time.
+        let whole: [FlagPathSegment] = [.key("pieces"), .index(2)]
+        let suggested = flag("{old}", suggests: "{new}", path: whole)
+        XCTAssertTrue(OCRFlagEdits.wholeEntryHint(for: suggested).contains("pre-filled"))
+
+        for nothingToFill in [flag("{old}", path: whole),
+                              flag("{old}", suggests: "{new}", .unprinted, path: whole)] {
+            let hint = OCRFlagEdits.wholeEntryHint(for: nothingToFill)
+            XCTAssertFalse(hint.contains("pre-filled"), hint)
+            XCTAssertTrue(hint.contains("Describe the correction"), hint)
+            XCTAssertTrue(hint.contains("pieces list"), hint)
+        }
+    }
+
+    func testAFlagStoredBeforeRecommendationsExistedIsReadFromItsValues() throws {
+        let stored = #"{"id":"a","field_path":["performers",3,"name"],"current_value":"Jon Smth","suggested_value":"Jon Smith","concern":"c","program_context":"p"}"#
+        XCTAssertEqual(try JSONDecoder().decode(OCRFlag.self, from: Data(stored.utf8)).recommendation,
+                       .replace)
+        let echoed = stored.replacingOccurrences(of: "Jon Smith", with: "Jon Smth")
+        XCTAssertEqual(try JSONDecoder().decode(OCRFlag.self, from: Data(echoed.utf8)).recommendation,
+                       .nothing)
+    }
+
+    func testARecommendedRemovalSurvivesDecoding() throws {
+        let sent = #"{"id":"a","field_path":["performers",3,"name"],"current_value":"Dup","suggested_value":"","recommendation":"remove","concern":"c","program_context":"p"}"#
+        let decoded = try JSONDecoder().decode(OCRFlag.self, from: Data(sent.utf8))
+        XCTAssertEqual(decoded.recommendation, .remove)
+        XCTAssertEqual(OCRFlagEdits.recommended(for: decoded), .remove(noun: "performer"))
+    }
 }

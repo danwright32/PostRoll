@@ -1,0 +1,8 @@
+{
+  "name": "a-value-in-the-box-leads-with-save",
+  "file": "PostRollApp/Sources/Models/OCRFlagEdits.swift",
+  "find": "        if isCorrection(draft, of: flag.currentValue) { return .save }",
+  "replace": "        if isCorrection(draft, of: flag.suggestedValue) { return .save }",
+  "test": "PostRollTests/OCRFlagEditsTests/testARecommendedReplacementIsSavableWithoutTyping",
+  "breaks": "a row whose box already holds Claude's replacement has no lead button, so the one click fix the flag carries is not the thing that stands out (#1653)"
+}

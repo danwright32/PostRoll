@@ -1,0 +1,8 @@
+{
+  "name": "flags-recommending-nothing-are-reported",
+  "file": "postroll/ai/flag_issues.py",
+  "find": "    if empty:",
+  "replace": "    if False:",
+  "test": "tests/test_flag_recommendation.py::test_flags_recommending_nothing_are_counted_out_loud",
+  "breaks": "the model breaking the rule that every flag proposes a fix leaves no trace in the run log, which is how it went unnoticed on five flags in eight (#1653)"
+}

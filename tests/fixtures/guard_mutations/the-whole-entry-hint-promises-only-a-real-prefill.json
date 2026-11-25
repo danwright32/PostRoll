@@ -1,0 +1,8 @@
+{
+  "name": "the-whole-entry-hint-promises-only-a-real-prefill",
+  "file": "PostRollApp/Sources/Models/OCRFlagEdits.swift",
+  "find": "        if case .replace = recommended(for: flag) {",
+  "replace": "        if case .nothing = recommended(for: flag) {",
+  "test": "PostRollTests/OCRFlagEditsTests/testTheWholeEntryHintOnlyPromisesAPrefillThatWillHappen",
+  "breaks": "the line under a flag on a whole entry says Claude's suggestion is pre-filled in Describe the correction when nothing is, and omits it when something is (#1653)"
+}

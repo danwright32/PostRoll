@@ -1,0 +1,8 @@
+{
+  "name": "a-withdrawn-flag-is-discarded",
+  "file": "postroll/ai/flag_issues.py",
+  "find": "        if raw.get(\"recommendation\") == WITHDRAW:",
+  "replace": "        if raw.get(\"recommendation\") == \"never\":",
+  "test": "tests/test_flag_recommendation.py::test_a_flag_the_model_withdrew_never_reaches_the_review",
+  "breaks": "a flag the model itself withdrew, its note ending \"no error, withdrawing\", is shown to Dan as a row to settle (#1653: four of twelve flags on a real program)"
+}

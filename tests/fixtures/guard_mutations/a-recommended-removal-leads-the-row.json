@@ -1,0 +1,8 @@
+{
+  "name": "a-recommended-removal-leads-the-row",
+  "file": "PostRollApp/Sources/Models/OCRFlagEdits.swift",
+  "find": "        if flag.recommendation == .remove {",
+  "replace": "        if flag.recommendation == .replace {",
+  "test": "PostRollTests/OCRFlagEditsTests/testARecommendedRemovalNamesTheEntry",
+  "breaks": "a duplicate entry's flag reads \"Claude flagged this but didn't propose a replacement\" with no lead button, so the row offers nothing to accept in one click (#1653: three flags in eight)"
+}

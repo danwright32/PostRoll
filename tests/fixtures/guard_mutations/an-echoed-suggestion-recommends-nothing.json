@@ -1,0 +1,8 @@
+{
+  "name": "an-echoed-suggestion-recommends-nothing",
+  "file": "postroll/ai/flag_recommendation.py",
+  "find": "    return REPLACE if suggested != _settled(current_value) else NONE",
+  "replace": "    return REPLACE",
+  "test": "tests/test_flag_recommendation.py::test_a_claimed_replacement_is_judged_by_the_values_not_the_claim",
+  "breaks": "a flag whose suggestion is the OCR text again is recorded as a replacement, so the count of flags recommending nothing reads zero while their rows still offer nothing to accept (#1653: five flags in eight)"
+}

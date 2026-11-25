@@ -77,6 +77,63 @@ enum OCRFlagEdits {
         return !typed.isEmpty && typed != current.trimmingCharacters(in: .whitespaces)
     }
 
+    /// What a flag's row offers to accept in one click (#1653).
+    enum Recommended: Equatable {
+        /// Put this value in the field. The box starts with it.
+        case replace(String)
+        /// Take the entry out. `noun` is what it is called, e.g. "performer".
+        case remove(noun: String)
+        /// Claude proposed this value, but the program does not print it, so
+        /// the row shows it and leaves the box alone.
+        case unprinted(String)
+        case nothing
+    }
+
+    /// What Claude recommends for `flag`, checked against what the row can do.
+    ///
+    /// `flag.recommendation` is written by a model, so it is not taken on its
+    /// word (L161): a replacement counts only when the value really differs,
+    /// by the same test that shows Save correction, and a removal only where
+    /// there is an entry and so a Remove button.
+    static func recommended(for flag: OCRFlag) -> Recommended {
+        if flag.recommendation == .remove {
+            return entryNoun(for: flag.fieldPath).map { .remove(noun: $0) } ?? .nothing
+        }
+        guard isCorrection(flag.suggestedValue, of: flag.currentValue) else { return .nothing }
+        let value = flag.suggestedValue.trimmingCharacters(in: .whitespaces)
+        return flag.recommendation == .unprinted ? .unprinted(value) : .replace(value)
+    }
+
+    /// What the correction box holds before Dan types: the recommended value,
+    /// or the OCR text so there is something to edit.
+    static func startingDraft(for flag: OCRFlag) -> String {
+        if case .replace(let value) = recommended(for: flag) { return value }
+        return flag.currentValue
+    }
+
+    /// The line under a flag on a whole entry, which no single field can fix.
+    ///
+    /// It mentions the pre-fill only when Describe the correction will start
+    /// with a recommended value, the one case in which it does.
+    static func wholeEntryHint(for flag: OCRFlag) -> String {
+        let opening = "This fix changes the \(fieldName(of: flag.fieldPath)) list, so it can't be made in a single field."
+        if case .replace = recommended(for: flag) {
+            return "\(opening) Use Describe the correction (Claude's suggestion is pre-filled) or Keep OCR Text."
+        }
+        return "\(opening) Use Describe the correction or Keep OCR Text."
+    }
+
+    /// The button a row draws as its main action.
+    enum LeadButton: Equatable { case save, remove }
+
+    /// A typed or recommended value leads with Save, since that is what the box
+    /// now says; otherwise a recommended removal leads with Remove.
+    static func leadButton(draft: String, flag: OCRFlag) -> LeadButton? {
+        if isCorrection(draft, of: flag.currentValue) { return .save }
+        if case .remove = recommended(for: flag) { return .remove }
+        return nil
+    }
+
     /// Nil when the flag's position still holds the value it shows, else why not.
     ///
     /// Only a text field can be checked: a flag on a whole entry carries it as
