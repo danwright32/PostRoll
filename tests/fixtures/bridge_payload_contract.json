@@ -348,6 +348,7 @@
       "field_path": "swift",
       "current_value": "swift",
       "suggested_value": "swift",
+      "recommendation": "swift",
       "concern": "swift",
       "program_context": "swift"
     }

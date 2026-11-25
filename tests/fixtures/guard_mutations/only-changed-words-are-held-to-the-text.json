@@ -1,0 +1,8 @@
+{
+  "name": "only-changed-words-are-held-to-the-text",
+  "file": "postroll/ai/vision_cross_check.py",
+  "find": "        if word not in kept and word not in printed",
+  "replace": "        if word not in printed",
+  "test": "tests/test_flag_recommendation.py::test_only_the_words_a_suggestion_changes_are_held_to_the_text",
+  "breaks": "a correct suggestion is held back whenever the machine read text layer missed a word the data already had, so the fix for a real misread is no longer one click (#1653)"
+}

@@ -231,23 +231,50 @@ struct OCRFlag: Identifiable, Codable, Hashable, Sendable {
     var fieldPath: [FlagPathSegment]
     var currentValue: String      // Stringified for display; complex values become JSON text
     var suggestedValue: String    // Claude's best guess at the corrected value
+    /// What Claude would do about it, decided in
+    /// `postroll/ai/flag_recommendation.py`. The row reads it through
+    /// `OCRFlagEdits.recommended(for:)`, which checks it against the values.
+    var recommendation: Recommendation
     var concern: String
     var programContext: String
     var resolved: Bool = false
 
+    /// The raw values are the ones `flag_recommendation.py` writes (#1653).
+    enum Recommendation: String, Codable, Sendable {
+        /// `suggestedValue` is a different value for the field.
+        case replace
+        /// The entry the path lands in should not be in the program data.
+        case remove
+        /// `suggestedValue` differs, but uses a word the program's own text
+        /// does not contain, so it is shown without being filled in.
+        case unprinted
+        /// Nothing to accept: the suggestion is empty or is the OCR text again.
+        case nothing = "none"
+
+        /// What the two values alone say. A removal cannot be read from them,
+        /// which is why the key exists.
+        static func implied(current: String, suggested: String) -> Recommendation {
+            OCRFlagEdits.isCorrection(suggested, of: current) ? .replace : .nothing
+        }
+    }
+
     enum CodingKeys: String, CodingKey {
-        case id, concern, resolved
+        case id, concern, resolved, recommendation
         case fieldPath      = "field_path"
         case currentValue   = "current_value"
         case suggestedValue = "suggested_value"
         case programContext = "program_context"
     }
 
+    /// - Parameter recommendation: nil reads it from the two values.
     init(id: String = "", fieldPath: [FlagPathSegment] = [], currentValue: String = "",
-         suggestedValue: String = "", concern: String = "", programContext: String = "",
+         suggestedValue: String = "", recommendation: Recommendation? = nil,
+         concern: String = "", programContext: String = "",
          resolved: Bool = false) {
         self.id = id; self.fieldPath = fieldPath; self.currentValue = currentValue
         self.suggestedValue = suggestedValue
+        self.recommendation = recommendation
+            ?? .implied(current: currentValue, suggested: suggestedValue)
         self.concern = concern; self.programContext = programContext; self.resolved = resolved
     }
 
@@ -271,7 +298,11 @@ struct OCRFlag: Identifiable, Codable, Hashable, Sendable {
         } else {
             suggestedValue = ""
         }
-        concern         = (try? c.decode(String.self,                forKey: .concern))         ?? ""
+        // Absent on every flag stored before #1653, which could only ever
+        // propose a value, so those are read from the values as they were.
+        recommendation = (try? c.decode(Recommendation.self, forKey: .recommendation))
+            ?? .implied(current: currentValue, suggested: suggestedValue)
+        concern        = (try? c.decode(String.self,                forKey: .concern))         ?? ""
         programContext  = (try? c.decode(String.self,                forKey: .programContext))  ?? ""
         resolved        = (try? c.decode(Bool.self,                  forKey: .resolved))        ?? false
     }

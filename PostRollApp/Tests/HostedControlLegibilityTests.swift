@@ -1618,8 +1618,36 @@ extension HostedControlLegibilityTests {
         result.performers = [
             Performer(name: "Jordan Langworthy", role: "Choreographer"),
             Performer(name: "Sarah Chen", role: "Dancer"),
+            Performer(name: "Marcus Oyelwo", role: "Dancer"),
+            Performer(name: "Sarah Chen", role: "Dancer"),
+            Performer(name: "The Wagner Park Players", role: "Ensemble"),
         ]
+        result.pieces = [Piece(composer: "Traditional", title: "Hannukah, Oh Hannukah")]
         event.ocrResult = result
+        // One flag of each kind the row can lead with (#1653): a value to
+        // save, an entry to remove, a suggestion the program does not print,
+        // and one Claude proposed nothing for. The filled button moves
+        // between them, which only a render shows.
+        event.pendingFlags = [
+            OCRFlag(id: "replace", fieldPath: [.key("performers"), .index(2), .key("name")],
+                    currentValue: "Marcus Oyelwo", suggestedValue: "Marcus Oyelowo",
+                    concern: "The printed name has an 'o' the OCR dropped.",
+                    programContext: "Page 1, cast list, third name in the left column."),
+            OCRFlag(id: "remove", fieldPath: [.key("performers"), .index(3), .key("name")],
+                    currentValue: "Sarah Chen", recommendation: .remove,
+                    concern: "Sarah Chen is already performers[1], and the program prints her once, so this second entry should go.",
+                    programContext: "Page 1, cast list, printed once in the right column."),
+            OCRFlag(id: "unprinted", fieldPath: [.key("pieces"), .index(0), .key("title")],
+                    currentValue: "Hannukah, Oh Hannukah",
+                    suggestedValue: "Hanukkah, Oh Hanukkah", recommendation: .unprinted,
+                    concern: "The usual spelling of this title is 'Hanukkah', though the program prints 'Hannukah'.",
+                    programContext: "Page 2, second half, fourth title."),
+            OCRFlag(id: "nothing", fieldPath: [.key("performers"), .index(4), .key("name")],
+                    currentValue: "The Wagner Park Players",
+                    suggestedValue: "The Wagner Park Players",
+                    concern: "A long ensemble name that could be two entries run together.",
+                    programContext: "Page 2, under 'With thanks to'."),
+        ]
 
         let book = HandleBook(defaults: Self.scratchDefaults())
         book.setEntry(name: "Jordan Langworthy", value: "@jordanlangworthy",

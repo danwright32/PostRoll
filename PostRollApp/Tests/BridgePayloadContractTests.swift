@@ -440,6 +440,9 @@ final class BridgePayloadContractTests: XCTestCase {
         var flag = OCRFlag(id: "flag_0", fieldPath: [], currentValue: "Smth",
                            concern: "looks misread")
         flag.suggestedValue = "Smith"
+        // Not what the two values imply, so the round trip below proves the
+        // key is read and not rederived from them.
+        flag.recommendation = .remove
         flag.programContext = "cast list, page 2"
 
         // `resolved` is this side's own bookkeeping (whether Dan has dealt with

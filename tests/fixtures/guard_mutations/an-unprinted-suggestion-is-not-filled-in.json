@@ -1,0 +1,8 @@
+{
+  "name": "an-unprinted-suggestion-is-not-filled-in",
+  "file": "PostRollApp/Sources/Models/OCRFlagEdits.swift",
+  "find": "        return flag.recommendation == .unprinted ? .unprinted(value) : .replace(value)",
+  "replace": "        return .replace(value)",
+  "test": "PostRollTests/OCRFlagEditsTests/testASuggestionTheProgramDoesNotPrintIsShownButNotFilledIn",
+  "breaks": "a suggestion the program does not print starts in the correction box with Save correction as the filled button, so one click saves a spelling the program does not use (#1653)"
+}

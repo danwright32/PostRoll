@@ -1,0 +1,8 @@
+{
+  "name": "a-removal-recommendation-is-decoded",
+  "file": "PostRollApp/Sources/Models/OCRResult.swift",
+  "find": "        recommendation = (try? c.decode(Recommendation.self, forKey: .recommendation))",
+  "replace": "        recommendation = (nil as Recommendation?)",
+  "test": "PostRollTests/OCRFlagEditsTests/testARecommendedRemovalSurvivesDecoding",
+  "breaks": "the recommendation Python writes is dropped on the way into the app and rederived from the two values, which cannot say remove, so every duplicate's flag arrives recommending nothing (#1653)"
+}

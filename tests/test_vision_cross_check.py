@@ -155,7 +155,7 @@ def test_flags_carry_the_fields_the_review_loop_reads():
     flags = cross_check_against_vision(_ocr("5afa"), BLUDLINE_VISION_TEXT)
     assert set(flags[0]) == {
         "id", "field_path", "current_value", "suggested_value",
-        "concern", "program_context",
+        "recommendation", "concern", "program_context",
     }
 
 

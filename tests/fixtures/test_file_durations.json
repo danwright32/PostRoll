@@ -123,6 +123,7 @@
     "test_fast_subset_stays_honest.py": 0.43000000000000005,
     "test_ffmpeg_prerequisite.py": 0.16000000000000003,
     "test_figures_say_their_sample.py": 0.11000000000000001,
+    "test_flag_recommendation.py": 0.29,
     "test_font_loading.py": 0.0,
     "test_frame_legibility.py": 107.68000000000002,
     "test_frame_names_its_show.py": 18.13,
@@ -792,6 +793,10 @@
     "test_figures_say_their_sample.py": {
       "run": "full-2026-09-05T02:25Z",
       "scale": 1.0
+    },
+    "test_flag_recommendation.py": {
+      "run": "partial-2026-11-25T16:16Z",
+      "scale": 0.4
     },
     "test_font_loading.py": {
       "run": "full-2026-09-05T02:25Z",

@@ -1648,20 +1648,81 @@ private struct FlagRow: View {
     @ViewBuilder
     private var removeButton: some View {
         if let removeLabel {
-            Button(removeLabel) {
+            let button = Button(removeLabel) {
                 applyError = onRemove()
             }
             .help("Take this \(OCRFlagEdits.entryNoun(for: flag.fieldPath) ?? "entry") out of the program data. You can undo it for a few seconds.")
-            .buttonStyle(BrandOutlineButtonStyle())
+            // Filled when removing is what Claude recommends, so the row's
+            // one click answer is the button that stands out (#1653).
+            if leadButton == .remove {
+                button.buttonStyle(BrandButtonStyle())
+            } else {
+                button.buttonStyle(BrandOutlineButtonStyle())
+            }
         }
     }
 
-    /// True only when Claude actually proposed a different value (not when
-    /// it just flagged the OCR text without a replacement).
-    private var hasRealSuggestion: Bool {
-        !flag.suggestedValue.isEmpty
-            && flag.suggestedValue.trimmingCharacters(in: .whitespaces)
-                != flag.currentValue.trimmingCharacters(in: .whitespaces)
+    /// What Claude recommends: a value for the box, removing the entry, or
+    /// nothing (#1653).
+    private var recommended: OCRFlagEdits.Recommended { OCRFlagEdits.recommended(for: flag) }
+
+    private var leadButton: OCRFlagEdits.LeadButton? {
+        OCRFlagEdits.leadButton(draft: draftValue, flag: flag)
+    }
+
+    /// The OCR text is struck through only when accepting the recommendation
+    /// would take it away. A suggestion that is merely shown leaves it standing.
+    private var replacesOCRText: Bool {
+        switch recommended {
+        case .replace, .remove: return true
+        case .unprinted, .nothing: return false
+        }
+    }
+
+    /// The recommended value, when the recommendation is one. It also starts
+    /// the Describe the correction box.
+    private var recommendedValue: String? {
+        if case .replace(let value) = recommended { return value }
+        return nil
+    }
+
+    /// "Claude suggests:" and what, or the line saying it proposed nothing.
+    @ViewBuilder
+    private var recommendationLine: some View {
+        switch recommended {
+        case .replace(let value):
+            suggestsLine(value)
+        case .remove(let noun):
+            suggestsLine("remove this \(noun)")
+        case .unprinted(let value):
+            suggestsLine(value)
+            // Why the box below still holds the OCR text: one click would
+            // otherwise save a spelling the program does not use (#1653).
+            Text("That isn't in the program's text, so it isn't filled in. Type it below if it is right, or click Keep OCR Text.")
+                .font(.light(10))
+                .foregroundStyle(PaintedSurfaces.tertiaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        case .nothing:
+            Text(removeLabel == nil
+                 ? "Claude flagged this but didn't propose a replacement. Edit the value below if you can correct it, or click Keep OCR Text."
+                 : "Claude flagged this but didn't propose a replacement. Edit the value below, remove the \(OCRFlagEdits.entryNoun(for: flag.fieldPath) ?? "entry") if it shouldn't be listed, or click Keep OCR Text.")
+                .font(.light(10))
+                .foregroundStyle(PaintedSurfaces.tertiaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func suggestsLine(_ what: String) -> some View {
+        HStack(spacing: 4) {
+            Text("Claude suggests:")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(PaintedSurfaces.pageAccentText)
+            Text(what)
+                .font(.system(size: 10))
+                .foregroundStyle(PaintedSurfaces.bodyText)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
     }
 
     private var trimmedDraft: String {
@@ -1753,8 +1814,8 @@ private struct FlagRow: View {
                     // this row's own state.
                     reflowManager.clearOutcome(for: eventID)
                     if reflowText.trimmingCharacters(in: .whitespaces).isEmpty,
-                       hasRealSuggestion {
-                        reflowText = flag.suggestedValue
+                       let recommendedValue {
+                        reflowText = recommendedValue
                     }
                 } label: {
                     HStack(spacing: 4) {
@@ -1829,30 +1890,12 @@ private struct FlagRow: View {
                         Text(flag.currentValue)
                             .font(.system(size: 10))
                             .foregroundStyle(PaintedSurfaces.secondaryText)
-                            .strikethrough(hasRealSuggestion)
+                            .strikethrough(replacesOCRText)
                             .lineLimit(1)
                             .truncationMode(.tail)
                     }
 
-                    if hasRealSuggestion {
-                        HStack(spacing: 4) {
-                            Text("Claude suggests:")
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(PaintedSurfaces.pageAccentText)
-                            Text(flag.suggestedValue)
-                                .font(.system(size: 10))
-                                .foregroundStyle(PaintedSurfaces.bodyText)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                        }
-                    } else {
-                        Text(removeLabel == nil
-                             ? "Claude flagged this but didn't propose a replacement. Edit the value below if you can correct it, or click Keep OCR Text."
-                             : "Claude flagged this but didn't propose a replacement. Edit the value below, remove the \(OCRFlagEdits.entryNoun(for: flag.fieldPath) ?? "entry") if it shouldn't be listed, or click Keep OCR Text.")
-                            .font(.light(10))
-                            .foregroundStyle(PaintedSurfaces.tertiaryText)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                    recommendationLine
                 }
                 .padding(.top, 2)
 
@@ -1882,10 +1925,10 @@ private struct FlagRow: View {
                             Button("Save correction") {
                                 applyError = onApply(trimmedDraft)
                             }
-                            .buttonStyle(.plain)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(PaintedSurfaces.pageAccentText)
-                            .help("Replace the \(fieldName) value with what you typed.")
+                            // The row's main action whenever it shows: the box
+                            // holds a value to save, Claude's or Dan's (#1653).
+                            .buttonStyle(BrandButtonStyle())
+                            .help("Replace the \(fieldName) value with what is in the box.")
                         }
 
                         removeButton
@@ -1895,11 +1938,15 @@ private struct FlagRow: View {
                             .buttonStyle(BrandOutlineButtonStyle())
                     }
                 } else {
-                    Text("This fix changes the \(fieldName) list, so it can't be made in a single field. Use Describe the correction (Claude's suggestion is pre-filled) or Keep OCR Text.")
-                        .font(.light(10))
-                        .foregroundStyle(PaintedSurfaces.tertiaryText)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 4)
+                    // A recommended removal is made with the Remove button
+                    // below, so there is nothing to send to Describe.
+                    if leadButton != .remove {
+                        Text("This fix changes the \(fieldName) list, so it can't be made in a single field. Use Describe the correction (Claude's suggestion is pre-filled) or Keep OCR Text.")
+                            .font(.light(10))
+                            .foregroundStyle(PaintedSurfaces.tertiaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, 4)
+                    }
 
                     HStack(spacing: 6) {
                         removeButton
@@ -1926,10 +1973,7 @@ private struct FlagRow: View {
         .opacity(flag.resolved ? 0.6 : 1.0)
         .onAppear {
             if !didInitDraft {
-                // Pre-fill with Claude's proposed correction when there is one;
-                // otherwise fall back to the OCR text so the user has something
-                // to edit instead of an empty box.
-                draftValue = hasRealSuggestion ? flag.suggestedValue : flag.currentValue
+                draftValue = OCRFlagEdits.startingDraft(for: flag)
                 didInitDraft = true
             }
         }
