@@ -230,7 +230,7 @@ struct OCRFlag: Identifiable, Codable, Hashable, Sendable {
     var id: String
     var fieldPath: [FlagPathSegment]
     var currentValue: String      // Stringified for display; complex values become JSON text
-    var suggestedValue: String    // Claude's best guess at the corrected value
+    var suggestedValue: String    // The value Claude proposes, when it proposes one
     /// What Claude would do about it, decided in
     /// `postroll/ai/flag_recommendation.py`. The row reads it through
     /// `OCRFlagEdits.recommended(for:)`, which checks it against the values.

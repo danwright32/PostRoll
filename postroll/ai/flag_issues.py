@@ -35,6 +35,7 @@ from .claude_client import run_json_prompt, ClaudeError
 from .flag_recommendation import (
     NONE, REMOVE, REPLACE, UNPRINTED, WITHDRAW, recommendation_for,
 )
+from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
 #: The fields that are copied off the page, so a suggested value for one can be
 #: held to the program's own text. A role or an instrument is the model's
@@ -45,7 +46,6 @@ COPIED_FROM_THE_PAGE = frozenset({"name", "title", "composer"})
 def _field(field_path: list[Any]) -> str:
     """The last key of a path, e.g. "composer"."""
     return next((seg for seg in reversed(field_path) if isinstance(seg, str)), "")
-from .ocr_program import HEIC_SUFFIXES, _convert_heic_to_jpeg
 
 
 # The flags the prompt shows the model, one per recommendation. Kept as data so
@@ -157,8 +157,9 @@ Rules:
   where on the page.
 - concern is one sentence explaining why this looks wrong.
 - recommendation comes after those two, and follows from them. It is
-  what Dan should do about it, and he accepts it with one click, so it
-  is one of these two:
+  what Dan should do about it, and he accepts it with one click. It is
+  "replace" or "remove", or "withdraw" for a flag you find you should
+  not have started (explained below):
   - "replace": the field holds text the program does not print there.
     suggested_value is the text the program DOES print, copied
     character for character off the image. It pre-fills the correction
@@ -270,7 +271,6 @@ def flag_issues(
     if not isinstance(data, list):
         raise ClaudeError(f"Expected JSON array of flags, got {type(data).__name__}")
 
-    # Normalize — fill defaults if model omitted any field
     # The program's text judges a suggestion only where it judged the names:
     # given, and not stood down as too thin to be an authority.
     text_is_authority = vision_text is not None and not vision_stood_down
@@ -278,6 +278,7 @@ def flag_issues(
     flags: list[dict[str, Any]] = list(vision_flags)
     withdrawn: list[str] = []
     unprinted: list[str] = []
+    # Normalize: fill defaults where the model omitted a field.
     for i, raw in enumerate(data):
         if not isinstance(raw, dict):
             continue
