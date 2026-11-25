@@ -1,4 +1,9 @@
-"""Four user-scope plugins stay disabled for this repo (#499).
+"""What this repo's tracked Claude Code settings switch off, and why.
+
+Four user-scope plugins stay disabled here (#499). So do the account's
+connectors and the Artifact tool (#1528): those two have a test each at the end
+of this file, with the measurement behind it in the test's own docstring. The
+rest of this header is about the plugins.
 
 TWO DIFFERENT REASONS, kept apart on purpose. Vercel was measured doing
 something; the other three were not, and a docstring implying otherwise would
@@ -184,3 +189,40 @@ def test_the_repo_hook_survives_alongside_the_plugin_entry(tracked: dict):
     ]
     assert any("remind-check-guards.py" in command for command in commands), (
         "the check-guards push reminder is gone from .claude/settings.json")
+
+
+def test_account_connectors_are_off_for_this_repo(tracked: dict):
+    """The connectors on Dan's claude.ai account (#1528) serve other projects.
+    Every session here was sent their tool names and instructions and re-read
+    them on every request, and across all 33 PostRoll transcripts on 2026-11-25
+    no session had called one.
+
+    Measured that day with one small headless session from a worktree, before
+    and after this key: the first request went from 87,032 tokens to 74,297.
+    The connector tool names offered fell from 298 to 0 (419 names to 121 in
+    all) and the connector instruction blocks from 8 to 0.
+
+    `is True`, not truthy: `true` in any settings source wins for this key, and
+    the JSON boolean is the value Claude Code acts on. A key it does not
+    recognise is accepted in silence, so the spelling here is the one the
+    measurement above was taken with."""
+    assert tracked.get("disableClaudeAiConnectors") is True, (
+        "disableClaudeAiConnectors is not true in .claude/settings.json, so "
+        "every session here is sent the account's connector tool names and "
+        "instructions again, about 12,700 tokens on every request (#1528)")
+
+
+def test_the_artifact_tool_is_off_for_this_repo(tracked: dict):
+    """The Artifact tool publishes pages to claude.ai. No PostRoll session has
+    called it, and its definition was 37,443 characters of the 89,612 an
+    interactive session here sent as tool definitions on every request
+    (measured 2026-11-25, #1528). A headless session is never given the tool,
+    so this one cannot be measured the way the connectors were: the proof is an
+    interactive session whose tool list no longer names it.
+
+    The key is honoured in a project's settings file from Claude Code 2.1.242.
+    `is False`, not falsy, for the same reason as the plugin entries."""
+    assert tracked.get("enableArtifact") is False, (
+        "enableArtifact is not false in .claude/settings.json, so every "
+        "interactive session here carries the Artifact tool's definition, "
+        "about 13,500 tokens on every request (#1528)")

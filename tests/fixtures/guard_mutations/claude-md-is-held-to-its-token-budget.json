@@ -1,0 +1,8 @@
+{
+  "name": "claude-md-is-held-to-its-token-budget",
+  "file": "tests/test_rule_file_budget.py",
+  "find": "BUDGET_TOKENS = 1_500",
+  "replace": "BUDGET_TOKENS = 500",
+  "test": "tests/test_rule_file_budget.py::test_claude_md_stays_inside_its_token_budget",
+  "breaks": "with the budget set under the file's size the check must refuse it; if it passes, CLAUDE.md can grow without limit and every request of every session pays for it (#1528)"
+}

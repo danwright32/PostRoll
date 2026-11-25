@@ -1,0 +1,8 @@
+{
+  "name": "a-rule-file-import-counts-toward-the-budget",
+  "file": "tests/test_rule_file_budget.py",
+  "find": "            parts.append(loaded_text(target, depth + 1, seen))",
+  "replace": "            pass",
+  "test": "tests/test_rule_file_budget.py::test_an_imported_file_counts_toward_the_budget",
+  "breaks": "a rule file that imports another is counted at its own size only, so the budget passes while the imported text loads into every session (#1528)"
+}

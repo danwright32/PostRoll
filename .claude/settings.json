@@ -12,6 +12,8 @@
       }
     ]
   },
+  "enableArtifact": false,
+  "disableClaudeAiConnectors": true,
   "enabledPlugins": {
     "cloudflare@cloudflare": false,
     "figma@claude-plugins-official": false,
