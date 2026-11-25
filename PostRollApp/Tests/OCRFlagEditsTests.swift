@@ -349,6 +349,22 @@ final class OCRFlagEditsTests: XCTestCase {
                        .unprinted)
     }
 
+    func testTheWholeEntryHintOnlyPromisesAPrefillThatWillHappen() {
+        // Describe the correction starts with Claude's value only for a
+        // recommended replacement. The line used to promise it every time.
+        let whole: [FlagPathSegment] = [.key("pieces"), .index(2)]
+        let suggested = flag("{old}", suggests: "{new}", path: whole)
+        XCTAssertTrue(OCRFlagEdits.wholeEntryHint(for: suggested).contains("pre-filled"))
+
+        for nothingToFill in [flag("{old}", path: whole),
+                              flag("{old}", suggests: "{new}", .unprinted, path: whole)] {
+            let hint = OCRFlagEdits.wholeEntryHint(for: nothingToFill)
+            XCTAssertFalse(hint.contains("pre-filled"), hint)
+            XCTAssertTrue(hint.contains("Describe the correction"), hint)
+            XCTAssertTrue(hint.contains("pieces list"), hint)
+        }
+    }
+
     func testAFlagStoredBeforeRecommendationsExistedIsReadFromItsValues() throws {
         let stored = #"{"id":"a","field_path":["performers",3,"name"],"current_value":"Jon Smth","suggested_value":"Jon Smith","concern":"c","program_context":"p"}"#
         XCTAssertEqual(try JSONDecoder().decode(OCRFlag.self, from: Data(stored.utf8)).recommendation,

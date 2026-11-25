@@ -1941,11 +1941,7 @@ private struct FlagRow: View {
                     // A recommended removal is made with the Remove button
                     // below, so there is nothing to send to Describe.
                     if leadButton != .remove {
-                        // Describe starts with Claude's value only when
-                        // there is a recommended one to start it with.
-                        Text(recommendedValue == nil
-                             ? "This fix changes the \(fieldName) list, so it can't be made in a single field. Use Describe the correction or Keep OCR Text."
-                             : "This fix changes the \(fieldName) list, so it can't be made in a single field. Use Describe the correction (Claude's suggestion is pre-filled) or Keep OCR Text.")
+                        Text(OCRFlagEdits.wholeEntryHint(for: flag))
                             .font(.light(10))
                             .foregroundStyle(PaintedSurfaces.tertiaryText)
                             .fixedSize(horizontal: false, vertical: true)

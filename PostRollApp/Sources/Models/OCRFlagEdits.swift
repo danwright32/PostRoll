@@ -111,6 +111,18 @@ enum OCRFlagEdits {
         return flag.currentValue
     }
 
+    /// The line under a flag on a whole entry, which no single field can fix.
+    ///
+    /// It mentions the pre-fill only when Describe the correction will start
+    /// with a recommended value, the one case in which it does.
+    static func wholeEntryHint(for flag: OCRFlag) -> String {
+        let opening = "This fix changes the \(fieldName(of: flag.fieldPath)) list, so it can't be made in a single field."
+        if case .replace = recommended(for: flag) {
+            return "\(opening) Use Describe the correction (Claude's suggestion is pre-filled) or Keep OCR Text."
+        }
+        return "\(opening) Use Describe the correction or Keep OCR Text."
+    }
+
     /// The button a row draws as its main action.
     enum LeadButton: Equatable { case save, remove }
 

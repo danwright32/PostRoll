@@ -231,15 +231,16 @@ struct OCRFlag: Identifiable, Codable, Hashable, Sendable {
     var fieldPath: [FlagPathSegment]
     var currentValue: String      // Stringified for display; complex values become JSON text
     var suggestedValue: String    // The value Claude proposes, when it proposes one
-    /// What Claude would do about it, decided in
-    /// `postroll/ai/flag_recommendation.py`. The row reads it through
-    /// `OCRFlagEdits.recommended(for:)`, which checks it against the values.
+    /// What Claude would do about it, decided by the flag pass
+    /// (`postroll/ai/flag_issues.py`, from the values and the program's own
+    /// text). The row reads it through `OCRFlagEdits.recommended(for:)`,
+    /// which checks it against the values.
     var recommendation: Recommendation
     var concern: String
     var programContext: String
     var resolved: Bool = false
 
-    /// The raw values are the ones `flag_recommendation.py` writes (#1653).
+    /// The raw values are the constants in `flag_recommendation.py` (#1653).
     enum Recommendation: String, Codable, Sendable {
         /// `suggestedValue` is a different value for the field.
         case replace
