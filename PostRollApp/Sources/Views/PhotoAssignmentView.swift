@@ -1311,7 +1311,7 @@ private struct PhotoTagEditor: View {
 
             // The measuring and the fade live in FadingScrollView now, one
             // implementation rather than a copy per site (#468).
-            FadingScrollView {
+            FadingScrollView(fadeDepth: TagChipMetrics.fadeDepth) {
                 VStack(alignment: .leading, spacing: Spacing.sm) {
                     if !tags.isEmpty {
                         Text(tagsHeading)
@@ -1324,7 +1324,7 @@ private struct PhotoTagEditor: View {
                                     Text(tag)
                                         .font(.system(size: 10))
                                         .foregroundStyle(PaintedSurfaces.bodyText)
-                                        .lineLimit(1)
+                                        .tagChipLabel()
                                     Button { tags.removeAll { $0 == tag } } label: {
                                         Image(systemName: "xmark")
                                             .font(.system(size: 7, weight: .bold))
@@ -1333,22 +1333,14 @@ private struct PhotoTagEditor: View {
                                     .buttonStyle(.plain)
                                     .accessibilityLabel("Remove \(tag)")
                                 }
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3)
-                                .background(Capsule().fill(PaintedSurfaces.tagChipFill))
+                                .tagChipBody(fill: PaintedSurfaces.tagChipFill)
                             }
                         }
                     }
 
-                    if !available.isEmpty {
-                        Text("FROM THIS EVENT")
-                            .font(.system(size: 8, weight: .medium))
-                            .tracking(0.8)
-                            .foregroundStyle(PaintedSurfaces.secondaryText)
-                        TagSuggestionFlow(suggestions: available) { picked in
-                            addToken(picked.token)
-                        }
-                    }
+                    let offers = PhotoTagSuggestionList.grouped(available)
+                    suggestionGroup("FROM THIS EVENT", offers.accounts)
+                    suggestionGroup("CREDITED BY NAME", offers.named)
                     // Under the offers rather than above them, because it is
                     // about the list that is right there to be counted.
                     if let missingPeopleNote {
@@ -1362,6 +1354,19 @@ private struct PhotoTagEditor: View {
             }
         }
         .onAppear { if autoFocus { focused = true } }
+    }
+
+    @ViewBuilder
+    private func suggestionGroup(_ heading: String, _ offers: [PhotoTagSuggestion]) -> some View {
+        if !offers.isEmpty {
+            Text(heading)
+                .font(.system(size: 8, weight: .medium))
+                .tracking(0.8)
+                .foregroundStyle(PaintedSurfaces.secondaryText)
+            TagSuggestionFlow(suggestions: offers) { picked in
+                addToken(picked.token)
+            }
+        }
     }
 
     /// Splits free text on commas and adds each token.
@@ -1496,7 +1501,7 @@ private struct PhotoTaggingSheet: View {
                         }
                     }
                 }
-                .frame(width: 260)
+                .frame(width: TagChipMetrics.sheetColumnWidth)
             }
             .padding(Spacing.lg)
 
@@ -1660,77 +1665,6 @@ private struct PhotoTaggingSheet: View {
         let load = await ImageLoad.read(url, fitting: 460)
         image = load.image
         loadFailed = load.isMissing
-    }
-}
-
-/// Minimal wrapping layout: places subviews left to right, wrapping to the
-/// next line when the current one runs out of width.
-private struct FlowLayout: Layout {
-    var spacing: CGFloat = 4
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? .infinity
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var lineHeight: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > 0, x + size.width > maxWidth {
-                x = 0
-                y += lineHeight + spacing
-                lineHeight = 0
-            }
-            x += size.width + spacing
-            lineHeight = max(lineHeight, size.height)
-        }
-        return CGSize(width: maxWidth == .infinity ? x : maxWidth, height: y + lineHeight)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let maxWidth = bounds.width
-        var x: CGFloat = bounds.minX
-        var y: CGFloat = bounds.minY
-        var lineHeight: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > bounds.minX, x + size.width > bounds.minX + maxWidth {
-                x = bounds.minX
-                y += lineHeight + spacing
-                lineHeight = 0
-            }
-            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-            x += size.width + spacing
-            lineHeight = max(lineHeight, size.height)
-        }
-    }
-}
-
-/// Wrapping row of tappable performer suggestion chips.
-private struct TagSuggestionFlow: View {
-    let suggestions: [PhotoTagSuggestion]
-    let onPick: (PhotoTagSuggestion) -> Void
-
-    var body: some View {
-        FlowLayout(spacing: 4) {
-            ForEach(suggestions) { suggestion in
-                Button {
-                    onPick(suggestion)
-                } label: {
-                    Text(suggestion.display)
-                        .font(.system(size: 10))
-                        .foregroundStyle(PaintedSurfaces.pageAccentText)
-                        .lineLimit(1)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(
-                            Capsule().fill(PaintedSurfaces.suggestionChipFill)
-                                .overlay(Capsule().strokeBorder(PaintedSurfaces.accentBorder.opacity(0.3), lineWidth: 0.5))
-                        )
-                }
-                .buttonStyle(.plain)
-                .help(suggestion.display)
-            }
-        }
     }
 }
 
