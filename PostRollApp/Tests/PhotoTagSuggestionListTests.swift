@@ -96,6 +96,78 @@ final class PhotoTagSuggestionListTests: XCTestCase {
         XCTAssertEqual(list.map(\.token), ["@c", "@a", "@b"])
     }
 
+    // MARK: - Accounts apart from people with none
+
+    func testPeopleWithNoAccountAreOfferedInAGroupOfTheirOwn() {
+        let list = PhotoTagSuggestionList.build(
+            eventHandles: "dciny",
+            performers: [performer("Ada Example", handle: "@adaexample"),
+                         performer("The Example Waiters", instrument: "ensemble"),
+                         performer("Ben Sample", handle: "bensample"),
+                         performer("Sample Street Singers")],
+            appearingIn: [])
+
+        let groups = PhotoTagSuggestionList.grouped(list)
+
+        XCTAssertEqual(groups.accounts.map(\.token), ["@dciny", "@adaexample", "@bensample"])
+        XCTAssertEqual(groups.named.map(\.token), ["The Example Waiters", "Sample Street Singers"])
+    }
+
+    func testEveryOfferIsInExactlyOneGroup() {
+        let list = PhotoTagSuggestionList.build(
+            eventHandles: "dciny",
+            performers: [performer("Ada Example", handle: "@adaexample"),
+                         performer("The Example Waiters")],
+            appearingIn: [])
+
+        let groups = PhotoTagSuggestionList.grouped(list)
+
+        XCTAssertEqual(Set(groups.accounts + groups.named), Set(list))
+        XCTAssertEqual(groups.accounts.count + groups.named.count, list.count)
+    }
+
+    func testTheGroupsAreSplitByWhatTheCaptionDoesWithTheTag() {
+        // The second group is headed as a credit by name, so membership is the
+        // caption's own reading of the tag rather than a second opinion about
+        // who has an account.
+        let list = PhotoTagSuggestionList.build(
+            eventHandles: "dciny",
+            performers: [performer("Ada Example", handle: "@adaexample"),
+                         performer("The Example Waiters"),
+                         performer("Examplaholics")],
+            appearingIn: [])
+
+        let groups = PhotoTagSuggestionList.grouped(list)
+
+        XCTAssertFalse(groups.named.isEmpty)
+        for offer in groups.named {
+            guard case .name = TypedCredit.read(offer.token) else {
+                return XCTFail("\(offer.token) is offered as a credit by name, and the caption "
+                               + "reads it as something else")
+            }
+        }
+        for offer in groups.accounts {
+            guard case .mention = TypedCredit.read(offer.token) else {
+                return XCTFail("\(offer.token) is offered as an account, and the caption does "
+                               + "not mention it as one")
+            }
+        }
+    }
+
+    func testAOneWordNameTheCaptionWouldMentionIsNotPromisedACreditByName() {
+        // A tag is stored as plain text, and one bare word is read as a handle
+        // typed without its @. So a performer with no account and a one word
+        // name is mentioned as an account when picked, and the group that
+        // promises a credit by name must not hold them.
+        let list = PhotoTagSuggestionList.build(
+            eventHandles: "", performers: [performer("Examplaholics")], appearingIn: [])
+
+        let groups = PhotoTagSuggestionList.grouped(list)
+
+        XCTAssertEqual(groups.named.map(\.token), [])
+        XCTAssertEqual(groups.accounts.map(\.token), ["Examplaholics"])
+    }
+
     func testAPerformerWithNeitherNameNorHandleIsNotOffered() {
         let list = PhotoTagSuggestionList.build(eventHandles: "",
                                                 performers: [performer("", handle: "")],

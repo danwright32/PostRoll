@@ -104,6 +104,30 @@ enum PhotoTagSuggestionList {
                                                   dropped: dropped))
     }
 
+    /// The offers as the sheet lays them out: accounts, then the people a
+    /// caption credits by name. Each keeps the order it was offered in.
+    struct Groups: Equatable {
+        var accounts: [PhotoTagSuggestion] = []
+        var named: [PhotoTagSuggestion] = []
+    }
+
+    /// Split by `TypedCredit`, the reading the caption makes of a stored tag,
+    /// so the second group holds exactly what will be credited by name. A tag
+    /// is stored as plain text and one bare word reads as a handle typed
+    /// without its @, so a one word name stays in the first group whether or
+    /// not the performer has an account.
+    static func grouped(_ suggestions: [PhotoTagSuggestion]) -> Groups {
+        var groups = Groups()
+        for suggestion in suggestions {
+            if case .name = TypedCredit.read(suggestion.token) {
+                groups.named.append(suggestion)
+            } else {
+                groups.accounts.append(suggestion)
+            }
+        }
+        return groups
+    }
+
     /// The chips alone, for a caller that has no use for the sentence.
     static func build(eventHandles: String,
                       performers: [Performer],
